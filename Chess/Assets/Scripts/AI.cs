@@ -533,10 +533,7 @@ public class AI : MonoBehaviour
     public static int Search(int depth, int plyFromRoot, int alpha, int beta, int extensions, EvaluationData evaluationData, out Line pvLine, bool useNullMovePruning = true, int nullMoveSearchPlyFromRoot = 0, ulong previousCapture = 0, bool useMultiCut = true)
     {
         pvLine = null;
-
         if (AbortSearch) return 0;
-        //Instance._currentSearchNodes++;
-        //Instance._nodeCount++;
 
         // Detect draws by repetition.
         Board.DetectDrawByRepetitionTimer.Start();
@@ -549,6 +546,11 @@ public class AI : MonoBehaviour
             }
         }
         Board.DetectDrawByRepetitionTimer.Stop();
+
+        if (depth <= 0)
+        {
+            return QuiescenceSearch(alpha, beta, plyFromRoot, evaluationData, out pvLine);
+        }
 
         // Mate distance pruning.
         if (plyFromRoot > 0)
@@ -574,15 +576,53 @@ public class AI : MonoBehaviour
             return ttVal;
         }
 
-        if (depth <= 0)
-        {
-            return QuiescenceSearch(alpha, beta, plyFromRoot, evaluationData, out pvLine);
-        }
-
         pvLine = new();
 
 
         bool inCheck = Board.IsKingInCheck[Board.CurrentTurn];
+        int staticEvaluation = Evaluation.Evaluate(out int gamePhase, evaluationData);
+
+        // Razoring.
+        // Inspired by Strelka: https://www.chessprogramming.org/Razoring#Strelka.
+        // As implemented in Wukong JS: https://github.com/maksimKorzh/wukongJS/blob/main/wukong.js#L1575-L1591.
+        if (plyFromRoot > 0)
+        {
+            int score = staticEvaluation + 
+                (inCheck ? 600 : // Larger margin if we are in check.
+                Evaluation.StaticPieceValues[Piece.Pawn].Interpolate(Evaluation.OpeningPhaseScore + 1));
+
+            if (score < beta)
+            {
+                if (depth == 1)
+                {
+                    int newScore = QuiescenceSearch(alpha, beta, plyFromRoot, evaluationData, out Line _);
+                    return Mathf.Max(newScore, score);
+                }
+
+                score +=
+                    inCheck ? 600 : // Larger margin if we are in check.
+                    Evaluation.StaticPieceValues[Piece.Pawn].Interpolate(Evaluation.OpeningPhaseScore + 1);
+
+                if (score < beta && depth <= 3)
+                {
+                    int newScore = QuiescenceSearch(alpha, beta, plyFromRoot, evaluationData, out Line _);
+                    if (newScore < beta) return Mathf.Max(newScore, score);
+                }
+            }
+        }
+
+        // Futility pruning condition.
+        bool useFutilityPruning = false;
+        if (plyFromRoot > 0 && depth < 3 && !inCheck)
+        {
+            // Should also check if eval is a mate score, 
+            // otherwise the engine will be blind to certain checkmates.
+
+            if (staticEvaluation + _futilityMargin[depth] <= alpha)
+            {
+                useFutilityPruning = true;
+            }
+        }
 
         // Null move pruning.
         if (depth > 2 && useNullMovePruning && plyFromRoot > 0 && !inCheck)
@@ -613,45 +653,8 @@ public class AI : MonoBehaviour
         }
 
 
-        int staticEvaluation = Evaluation.Evaluate(out int gamePhase, evaluationData);
-
-        // Futility pruning condition.
-        bool useFutilityPruning = false;
-        if (depth < 3 && !inCheck)
-        {
-            if (staticEvaluation + _futilityMargin[depth] <= alpha)
-            {
-                useFutilityPruning = true;
-            }
-        }
-
-
-        // Razoring.
-        // Inspired by Strelka: https://www.chessprogramming.org/Razoring#Strelka.
-        // As implemented in Wukong JS: https://github.com/maksimKorzh/wukongJS/blob/main/wukong.js#L1575-L1591.
-        if (plyFromRoot > 0)
-        {
-            int score = staticEvaluation + Evaluation.StaticPieceValues[Piece.Pawn].Interpolate(Evaluation.OpeningPhaseScore + 1);
-            if (score < beta)
-            {
-                if (depth == 1)
-                {
-                    int newScore = QuiescenceSearch(alpha, beta, plyFromRoot, evaluationData, out Line _);
-                    return Mathf.Max(newScore, score);
-                }
-
-                score += Evaluation.StaticPieceValues[Piece.Pawn].Interpolate(Evaluation.OpeningPhaseScore + 1);
-                if (score < beta && depth <= 3)
-                {
-                    int newScore = QuiescenceSearch(alpha, beta, plyFromRoot, evaluationData, out Line _);
-                    if (newScore < beta) return Mathf.Max(newScore, score);
-                }
-            }
-        }
-
-
         // Check extension.
-        if (extensions < MaxExtensions && inCheck)
+        if (plyFromRoot > 0 && extensions < MaxExtensions && inCheck)
         {
             extensions++;
             depth++;
@@ -691,7 +694,7 @@ public class AI : MonoBehaviour
 
 
         // One reply extension.
-        if (extensions < MaxExtensions && moves.Count == 1)
+        if (plyFromRoot > 0 && extensions < MaxExtensions && moves.Count == 1)
         {
             extensions++;
             depth++;
@@ -912,13 +915,20 @@ public class AI : MonoBehaviour
     public static int QuiescenceSearch(int alpha, int beta, int plyFromRoot, EvaluationData evaluationData, out Line pvLine)
     {
         pvLine = null;
-
-        //Instance._currentSearchNodes++;
-        //Instance._nodeCount++;
-
-        Board.QuiescenceSearchTimer.Start();
         if (AbortSearch) return 0;
 
+        Board.QuiescenceSearchTimer.Start();
+
+        Board.LookupEvaluationTimer.Start();
+        int ttVal = TranspositionTable.LookupEvaluation(0, plyFromRoot, alpha, beta);
+        Board.LookupEvaluationTimer.Stop();
+        
+        if (ttVal != TranspositionTable.lookupFailed)
+        {
+            Board.TranspositionCounter++;
+            pvLine = TranspositionTable.GetStoredLine();
+            return ttVal;
+        }
 
         // Standing pat.
         int evaluation = Evaluation.Evaluate(out int gamePhase, evaluationData);
@@ -963,6 +973,8 @@ public class AI : MonoBehaviour
 
         bool isEndGame = gamePhase < Evaluation.EndgamePhaseScore;
 
+        int evalType = TranspositionTable.UpperBound;
+
         foreach (var move in moves)
         {
             ulong oldKey = Board.ZobristKey;
@@ -984,13 +996,18 @@ public class AI : MonoBehaviour
 
             if (evaluation >= beta)
             {
-                Board.QuiescenceSearchTimer.Stop();
+                Board.StoreEvaluationTimer.Start();
+                TranspositionTable.StoreEvaluation(0, plyFromRoot, beta, TranspositionTable.LowerBound, new(move));
+                Board.StoreEvaluationTimer.Stop();
 
+                Board.QuiescenceSearchTimer.Stop();
                 return beta;
             }
 
             if (evaluation > alpha)
             {
+                evalType = TranspositionTable.Exact;
+
                 alpha = evaluation;
 
                 pvLine.Move = move;
@@ -998,8 +1015,12 @@ public class AI : MonoBehaviour
             }
         }
 
-        Board.QuiescenceSearchTimer.Stop();
 
+        Board.StoreEvaluationTimer.Start();
+        TranspositionTable.StoreEvaluation(0, plyFromRoot, alpha, evalType, pvLine);
+        Board.StoreEvaluationTimer.Stop();
+
+        Board.QuiescenceSearchTimer.Stop();
         return alpha;
     }
 
