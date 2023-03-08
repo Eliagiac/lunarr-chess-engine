@@ -1,8 +1,6 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.XR;
 
 public class Evaluation
 {
@@ -14,14 +12,14 @@ public class Evaluation
     //public static readonly int[][] KingValue = { new int[] { 20001, 20002 }, new int[] { 19998, 20000 } };
 
 
-    public static readonly Score[] StaticPieceValues =
+    public static readonly int[][] StaticPieceValues =
     {
-        new(   0,   0), /* None */
-        new( 126, 208), /* Pawn */
-        new( 781, 854), /* Knight */
-        new( 825, 915), /* Bishop */
-        new(1276,1380), /* Rook */
-        new(2538,2682)  /* Queen */
+        new[] {   0,   0}, /* None */
+        new[] { 126, 208}, /* Pawn */
+        new[] { 781, 854}, /* Knight */
+        new[] { 825, 915}, /* Bishop */
+        new[] {1276,1380}, /* Rook */
+        new[] {2538,2682}  /* Queen */
     };
 
 
@@ -59,8 +57,8 @@ public class Evaluation
 
 
         // Offset the evaluation towards better endgame tactics.
-        whiteEval += EndgameEval(0, 1, whiteLategameMaterial, blackLategameMaterial, gamePhase);
-        blackEval += EndgameEval(1, 0, blackLategameMaterial, whiteLategameMaterial, gamePhase);
+        whiteEval += EndgameEval(0, 1, whiteMaterial, blackMaterial, gamePhase);
+        blackEval += EndgameEval(1, 0, blackMaterial, whiteMaterial, gamePhase);
 
 
         // Add positional advantages to the evaluation.
@@ -150,27 +148,27 @@ public class Evaluation
             int material = 0;
 
             pawnCount = BitboardUtility.OccupiedSquaresCount(Board.Pawns[turnIndex]);
-            material += pawnMaterial = pawnCount * evaluationData.PieceValues[Piece.Pawn].Value;
+            material += pawnMaterial = pawnCount * StaticPieceValues[Piece.Pawn][0];
 
             knightCount = BitboardUtility.OccupiedSquaresCount(Board.Knights[turnIndex]);
-            material += knightCount * evaluationData.PieceValues[Piece.Knight].Value;
+            material += knightCount * StaticPieceValues[Piece.Knight][0];
 
             bishopCount = BitboardUtility.OccupiedSquaresCount(Board.Bishops[turnIndex]);
-            material += bishopCount * evaluationData.PieceValues[Piece.Bishop].Value;
+            material += bishopCount * StaticPieceValues[Piece.Bishop][0];
 
-            material += BitboardUtility.OccupiedSquaresCount(Board.Rooks[turnIndex]) * evaluationData.PieceValues[Piece.Rook].Value;
-            material += BitboardUtility.OccupiedSquaresCount(Board.Queens[turnIndex]) * evaluationData.PieceValues[Piece.Queen].Value;
+            material += BitboardUtility.OccupiedSquaresCount(Board.Rooks[turnIndex]) * StaticPieceValues[Piece.Rook][0];
+            material += BitboardUtility.OccupiedSquaresCount(Board.Queens[turnIndex]) * StaticPieceValues[Piece.Queen][0];
             return material;
         }
 
         int LategameMaterial(int turnIndex)
         {
             int material = 0;
-            material += BitboardUtility.OccupiedSquaresCount(Board.Pawns[turnIndex]) * evaluationData.PieceValues[Piece.Pawn].Value;
-            material += BitboardUtility.OccupiedSquaresCount(Board.Knights[turnIndex]) * evaluationData.PieceValues[Piece.Knight].Value;
-            material += BitboardUtility.OccupiedSquaresCount(Board.Bishops[turnIndex]) * evaluationData.PieceValues[Piece.Bishop].Value;
-            material += BitboardUtility.OccupiedSquaresCount(Board.Rooks[turnIndex]) * evaluationData.PieceValues[Piece.Rook].Value;
-            material += BitboardUtility.OccupiedSquaresCount(Board.Queens[turnIndex]) * evaluationData.PieceValues[Piece.Queen].Value;
+            material += BitboardUtility.OccupiedSquaresCount(Board.Pawns[turnIndex]) * StaticPieceValues[Piece.Pawn][1];
+            material += BitboardUtility.OccupiedSquaresCount(Board.Knights[turnIndex]) * StaticPieceValues[Piece.Knight][1];
+            material += BitboardUtility.OccupiedSquaresCount(Board.Bishops[turnIndex]) * StaticPieceValues[Piece.Bishop][1];
+            material += BitboardUtility.OccupiedSquaresCount(Board.Rooks[turnIndex]) * StaticPieceValues[Piece.Rook][1];
+            material += BitboardUtility.OccupiedSquaresCount(Board.Queens[turnIndex]) * StaticPieceValues[Piece.Queen][1];
             return material;
         }
 
@@ -319,11 +317,11 @@ public class Evaluation
     {
         switch (piece)
         {
-            case Piece.Pawn :   return StaticPieceValues[Piece.Pawn].Interpolate(gamePhase);
-            case Piece.Knight:  return StaticPieceValues[Piece.Knight].Interpolate(gamePhase);
-            case Piece.Bishop:  return StaticPieceValues[Piece.Bishop].Interpolate(gamePhase);
-            case Piece.Rook:    return StaticPieceValues[Piece.Rook].Interpolate(gamePhase);
-            case Piece.Queen:   return StaticPieceValues[Piece.Queen].Interpolate(gamePhase);
+            case Piece.Pawn :   return StaticPieceValues[Piece.Pawn][0];
+            case Piece.Knight:  return StaticPieceValues[Piece.Knight][0];
+            case Piece.Bishop:  return StaticPieceValues[Piece.Bishop][0];
+            case Piece.Rook:    return StaticPieceValues[Piece.Rook][0];
+            case Piece.Queen:   return StaticPieceValues[Piece.Queen][0];
             default:            return 0;
         }
     }
@@ -331,6 +329,16 @@ public class Evaluation
     public static int GetGamePhase(int whiteMaterial, int blackMaterial, int whitePawnMaterial, int blackPawnMaterial) => 
         (whiteMaterial + blackMaterial) - (whitePawnMaterial + blackPawnMaterial);
 
+    public static bool PawnsOnly(EvaluationData evaluationData)
+    {
+        int materialCount = 0;
+        materialCount += BitboardUtility.OccupiedSquaresCount(Board.Knights[Board.CurrentTurn]);
+        materialCount += BitboardUtility.OccupiedSquaresCount(Board.Bishops[Board.CurrentTurn]);
+        materialCount += BitboardUtility.OccupiedSquaresCount(Board.Rooks[Board.CurrentTurn]);
+        materialCount += BitboardUtility.OccupiedSquaresCount(Board.Queens[Board.CurrentTurn]);
+        return materialCount == 0;
+    }
+    
     public static int EndgameEval(int currentTurnIndex, int opponentTurnIndex, int myMaterial, int opponentMaterial, int gamePhase)
     {
         int mopUpScore = 0;
@@ -708,6 +716,11 @@ public class EvaluationData
 
     public Score KnightOutpostBonus = new(+54, +34);
     public Score BishopOutpostBonus = new(+31, +25);
+
+    public EvaluationData()
+    {
+        ResetAllValues();
+    }
 
 
     public void InterpolateAll(int gamePhase)

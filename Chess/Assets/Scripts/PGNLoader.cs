@@ -55,7 +55,7 @@ public static class PGNLoader {
 	static Move MoveFromAlgebraic (Board board, string algebraicMove) {
 		// Remove unrequired info from move string
 		algebraicMove = algebraicMove.Replace ("+", "").Replace ("#", "").Replace ("x", "").Replace ("-", "");
-		var allMoves = AI.GenerateAllLegalMoves(promotionMode : 0);
+		var allMoves = AIPlayer.GenerateAllLegalMoves(promotionMode : 0);
 
 		Move move = null;
 		foreach (Move moveToTest in allMoves) {

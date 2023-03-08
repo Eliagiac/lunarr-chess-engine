@@ -1,9 +1,7 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Threading;
 using UnityEngine;
+using System.Diagnostics;
 
 public class Board
 {
@@ -346,9 +344,7 @@ public class Board
 
     public static void MakeMove(Move move)
     {
-        //MakeMoveCounter++;
-        AI.Instance._currentSearchNodes++;
-        AI.Instance._nodeCount++;
+        MakeMoveCounter++;
 
         // Empty the move's start square.
         Pieces[move.PieceType][CurrentTurn] &= ~move.StartSquare;

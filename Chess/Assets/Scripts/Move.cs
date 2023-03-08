@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -43,7 +42,7 @@ public class Move
 
     public override string ToString()
     {
-        return $"{(Square)BitboardUtility.FirstSquareIndex(StartSquare)}{(Square)BitboardUtility.FirstSquareIndex(TargetSquare)}";
+        return $"{(Square)BitboardUtility.FirstSquareIndex(StartSquare)}{(Square)BitboardUtility.FirstSquareIndex(TargetSquare)}{new[] { "", "p", "n", "b", "r", "q", "k" }[PromotionPiece]}";
     }
 
     private string PieceTypeString()
