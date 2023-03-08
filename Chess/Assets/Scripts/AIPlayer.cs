@@ -811,9 +811,6 @@ public class AIPlayer
 
         foreach (var move in moves)
         {
-            ulong oldKey = Board.ZobristKey;
-            ulong correctOldKey = Zobrist.CalculateZobristKey();
-
             // Delta pruning
             if (!isEndGame)
                 if (Evaluation.GetPieceValue(move.CapturedPieceType, Board.OpponentTurn, gamePhase) + 200 <= alpha) continue;

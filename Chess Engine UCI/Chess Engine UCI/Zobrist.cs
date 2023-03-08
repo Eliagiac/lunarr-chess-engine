@@ -16,14 +16,17 @@ public static class Zobrist {
 
 	static System.Random prng = new System.Random(seed);
 
-	static void WriteRandomNumbers () {
+	static void WriteRandomNumbers () 
+	{
 		prng = new System.Random(seed);
 		string randomNumberString = "";
 		int numRandomNumbers = 64 * 8 * 2 + castlingRights.Length + 9 + 1;
 
-		for (int i = 0; i < numRandomNumbers; i++) {
+		for (int i = 0; i < numRandomNumbers; i++) 
+		{
 			randomNumberString += RandomUnsigned64BitNumber();
-			if (i != numRandomNumbers - 1) {
+			if (i != numRandomNumbers - 1) 
+			{
 				randomNumberString += ',';
 			}
 		}
@@ -32,8 +35,10 @@ public static class Zobrist {
 		writer.Close();
 	}
 
-	static Queue<ulong> ReadRandomNumbers() {
-		if (!File.Exists(randomNumbersPath)) {
+	static Queue<ulong> ReadRandomNumbers() 
+	{
+		if (!File.Exists(randomNumbersPath)) 
+		{
 			WriteRandomNumbers();
 		}
 		Queue<ulong> randomNumbers = new Queue<ulong> ();
@@ -43,7 +48,8 @@ public static class Zobrist {
 		reader.Close();
 
 		string[] numberStrings = numbersString.Split(',');
-		for (int i = 0; i < numberStrings.Length; i++) {
+		for (int i = 0; i < numberStrings.Length; i++) 
+		{
 			ulong number = ulong.Parse(numberStrings[i]);
 			randomNumbers.Enqueue(number);
 		}
@@ -54,18 +60,22 @@ public static class Zobrist {
 
 		var randomNumbers = ReadRandomNumbers ();
 
-		for (int squareIndex = 0; squareIndex < 64; squareIndex++) {
-			for (int pieceIndex = 0; pieceIndex < 8; pieceIndex++) {
+		for (int squareIndex = 0; squareIndex < 64; squareIndex++) 
+		{
+			for (int pieceIndex = 0; pieceIndex < 8; pieceIndex++) 
+			{
 				piecesArray[pieceIndex, 0, squareIndex] = randomNumbers.Dequeue();
 				piecesArray[pieceIndex, 1, squareIndex] = randomNumbers.Dequeue();
 			}
 		}
 
-		for (int i = 0; i < 16; i++) {
+		for (int i = 0; i < 16; i++) 
+		{
 			castlingRights[i] = randomNumbers.Dequeue();
 		}
 
-		for (int i = 0; i < enPassantFile.Length; i++) {
+		for (int i = 0; i < enPassantFile.Length; i++) 
+		{
 			enPassantFile[i] = randomNumbers.Dequeue();
 		}
 
@@ -102,16 +112,18 @@ public static class Zobrist {
         return zobristKey;
 	}
 
-	static string randomNumbersPath {
-		get {
-			return Path.Combine ("C:\\Users\\eliag\\source\\repos\\Chess Engine UCI\\Chess Engine UCI\\", randomNumbersFileName);
-
+	static string randomNumbersPath 
+	{
+		get 
+		{
+			return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, randomNumbersFileName);
         }
 	}
 
-	static ulong RandomUnsigned64BitNumber () {
+	static ulong RandomUnsigned64BitNumber () 
+	{
 		byte[] buffer = new byte[8];
-		prng.NextBytes (buffer);
-		return BitConverter.ToUInt64 (buffer, 0);
+		prng.NextBytes(buffer);
+		return BitConverter.ToUInt64(buffer, 0);
 	}
 }

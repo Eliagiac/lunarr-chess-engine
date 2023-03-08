@@ -1,4 +1,4 @@
-public class Piece
+public struct Piece
 {
     public const int None   = 0;
     public const int Pawn   = 1;

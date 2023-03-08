@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\eliag\\source\\repos\\Chess Engine UCI\\Chess Engine UCI\\Chess Engine UCI.csproj": {}
+    "C:\\Users\\eliag\\OneDrive\\Documenti\\GitHub\\chess\\Chess Engine UCI\\Chess Engine UCI\\Chess Engine UCI.csproj": {}
   },
   "projects": {
-    "C:\\Users\\eliag\\source\\repos\\Chess Engine UCI\\Chess Engine UCI\\Chess Engine UCI.csproj": {
+    "C:\\Users\\eliag\\OneDrive\\Documenti\\GitHub\\chess\\Chess Engine UCI\\Chess Engine UCI\\Chess Engine UCI.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\eliag\\source\\repos\\Chess Engine UCI\\Chess Engine UCI\\Chess Engine UCI.csproj",
+        "projectUniqueName": "C:\\Users\\eliag\\OneDrive\\Documenti\\GitHub\\chess\\Chess Engine UCI\\Chess Engine UCI\\Chess Engine UCI.csproj",
         "projectName": "Chess Engine UCI",
-        "projectPath": "C:\\Users\\eliag\\source\\repos\\Chess Engine UCI\\Chess Engine UCI\\Chess Engine UCI.csproj",
+        "projectPath": "C:\\Users\\eliag\\OneDrive\\Documenti\\GitHub\\chess\\Chess Engine UCI\\Chess Engine UCI\\Chess Engine UCI.csproj",
         "packagesPath": "C:\\Users\\eliag\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\eliag\\source\\repos\\Chess Engine UCI\\Chess Engine UCI\\obj\\",
+        "outputPath": "C:\\Users\\eliag\\OneDrive\\Documenti\\GitHub\\chess\\Chess Engine UCI\\Chess Engine UCI\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\eliag\\AppData\\Roaming\\NuGet\\NuGet.Config",

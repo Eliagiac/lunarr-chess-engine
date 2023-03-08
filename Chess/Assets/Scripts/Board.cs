@@ -257,42 +257,55 @@ public class Board
 
     public static void UpdateBoardInformation(ulong startSquare = 0, ulong targetSquare = 0, bool enPassant = false, ulong enPassantTarget = 0, bool castling = false, ulong castledRookSquare = 0, ulong castledRookTarget = 0)
     {
-        UpdateOccupiedSquares(0);
-        UpdateOccupiedSquares(1);
-
-        AllOccupiedSquares = OccupiedSquares[0] | OccupiedSquares[1];
-        AllSlidingPieces = SlidingPieces[0] | SlidingPieces[1];
-
+        //OccupiedSquares[0] = Kings[0] | Pawns[0] | Knights[0] | SlidingPieces[0];
+        //OccupiedSquares[1] = Kings[1] | Pawns[1] | Knights[1] | SlidingPieces[1];
 
         KingPosition[0] = BitboardUtility.FirstSquareIndex(Kings[0]);
         KingPosition[1] = BitboardUtility.FirstSquareIndex(Kings[1]);
-
 
         UpdateAttackedSquares(startSquare, targetSquare, enPassant, enPassantTarget, castling, castledRookSquare, castledRookTarget);
 
         AttackedSquares[0] = 0;
         AttackedSquares[1] = 0;
-        for (int i = 0; i < 64; i++)
-        {
-            AttackedSquares[0] |= Attacks[0, i];
-            AttackedSquares[1] |= Attacks[1, i];
-        }
 
+        UpdateAttacks();
 
-        PawnAttackedSquares[0] = 0;
-        List<int> whitePawns = GetIndexes(Pawns[0]);
-        foreach (var pawn in whitePawns) PawnAttackedSquares[0] |= Attacks[0, pawn];
-
-        PawnAttackedSquares[1] = 0;
-        List<int> blackPawns = GetIndexes(Pawns[1]);
-        foreach (var pawn in blackPawns) PawnAttackedSquares[1] |= Attacks[1, pawn];
-
+        UpdatePawnAttacks();
 
         // The king is in check if the opponent's attacked
         // squares map intersects with the king position map.
         IsKingInCheck[0] = (Kings[0] & AttackedSquares[1]) != 0;
         IsKingInCheck[1] = (Kings[1] & AttackedSquares[0]) != 0;
 
+
+        void UpdateAttacks()
+        {
+            for (int i = 0; i < 64; i++)
+            {
+                AttackedSquares[0] |= Attacks[0, i];
+                AttackedSquares[1] |= Attacks[1, i];
+            }
+        }
+
+        void UpdatePawnAttacks()
+        {
+            PawnAttackedSquares[0] = 0;
+            List<int> whitePawns = GetIndexes(Pawns[0]);
+            foreach (var pawn in whitePawns) PawnAttackedSquares[0] |= Attacks[0, pawn];
+
+            PawnAttackedSquares[1] = 0;
+            List<int> blackPawns = GetIndexes(Pawns[1]);
+            foreach (var pawn in blackPawns) PawnAttackedSquares[1] |= Attacks[1, pawn];
+        }
+    }
+
+    public static void UpdateAllOccupiedSquares()
+    {
+        UpdateOccupiedSquares(0);
+        UpdateOccupiedSquares(1);
+
+        AllOccupiedSquares = OccupiedSquares[0] | OccupiedSquares[1];
+        AllSlidingPieces = SlidingPieces[0] | SlidingPieces[1];
 
         void UpdateOccupiedSquares(int colourIndex)
         {
@@ -346,20 +359,16 @@ public class Board
     {
         MakeMoveCounter++;
 
+        int pieceTypeOrPromotion = move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece;
+
         // Empty the move's start square.
-        Pieces[move.PieceType][CurrentTurn] &= ~move.StartSquare;
-        ZobristKey ^= Zobrist.piecesArray[move.PieceType, CurrentTurn, BitboardUtility.FirstSquareIndex(move.StartSquare)];
+        RemovePiece(move.StartSquare, move.PieceType, CurrentTurn);
 
         // Remove any captured piece.
-        if (move.CapturedPieceType != Piece.None)
-        {
-            Pieces[move.CapturedPieceType][OpponentTurn] &= ~move.TargetSquare;
-            ZobristKey ^= Zobrist.piecesArray[move.CapturedPieceType, OpponentTurn, BitboardUtility.FirstSquareIndex(move.TargetSquare)];
-        }
+        if (move.CapturedPieceType != Piece.None) RemovePiece(move.TargetSquare, move.CapturedPieceType, OpponentTurn);
 
         // Place moved piece on the target square (unless promoting).
-        Pieces[move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece][CurrentTurn] |= move.TargetSquare;
-        ZobristKey ^= Zobrist.piecesArray[move.PromotionPiece != Piece.None ? move.PromotionPiece : move.PieceType, CurrentTurn, BitboardUtility.FirstSquareIndex(move.TargetSquare)];
+        AddPiece(move.TargetSquare, pieceTypeOrPromotion, CurrentTurn);
 
 
         // Remove old en passant square.
@@ -405,13 +414,11 @@ public class Board
             {
                 // Add rook on the target square.
                 castledRookTarget = move.TargetSquare << 1;
-                Rooks[CurrentTurn] |= castledRookTarget;
+                AddPiece(castledRookTarget, Piece.Rook, CurrentTurn);
+
                 // Remove it from its start square.
                 castledRookSquare = move.StartSquare >> 4;
-                Rooks[CurrentTurn] &= ~castledRookSquare;
-
-                ZobristKey ^= Zobrist.piecesArray[Piece.Rook, CurrentTurn, BitboardUtility.FirstSquareIndex(castledRookSquare)];
-                ZobristKey ^= Zobrist.piecesArray[Piece.Rook, CurrentTurn, BitboardUtility.FirstSquareIndex(castledRookTarget)];
+                RemovePiece(castledRookSquare, Piece.Rook, CurrentTurn);
             }
 
             // Kingside castling
@@ -419,13 +426,11 @@ public class Board
             {
                 // Add rook on the target square.
                 castledRookTarget = move.TargetSquare >> 1;
-                Rooks[CurrentTurn] |= castledRookTarget;
+                AddPiece(castledRookTarget, Piece.Rook, CurrentTurn);
+
                 // Remove it from its start square.
                 castledRookSquare = move.StartSquare << 3;
-                Rooks[CurrentTurn] &= ~castledRookSquare;
-
-                ZobristKey ^= Zobrist.piecesArray[Piece.Rook, CurrentTurn, BitboardUtility.FirstSquareIndex(castledRookSquare)];
-                ZobristKey ^= Zobrist.piecesArray[Piece.Rook, CurrentTurn, BitboardUtility.FirstSquareIndex(castledRookTarget)];
+                RemovePiece(castledRookSquare, Piece.Rook, CurrentTurn);
             }
         }
 
@@ -456,8 +461,7 @@ public class Board
                 enPassantTargetBackup = EnPassantTarget;
 
                 // Remove en passant target.
-                Pawns[OpponentTurn] &= ~EnPassantTarget;
-                ZobristKey ^= Zobrist.piecesArray[Piece.Pawn, OpponentTurn, BitboardUtility.FirstSquareIndex(EnPassantTarget)];
+                RemovePiece(EnPassantTarget, Piece.Pawn, OpponentTurn);
 
                 EnPassantTarget &= 0;
                 EnPassantSquare &= 0;
@@ -497,6 +501,9 @@ public class Board
 
     public static void UnmakeMove(Move move)
     {
+        int pieceTypeOrPromotedPawn = move.PromotionPiece == Piece.None ? move.PieceType : Piece.Pawn;
+        int pieceTypeOrPromotion = move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece;
+
         // Restore current turn before anything else.
         CurrentTurn ^= 1;
         OpponentTurn ^= 1;
@@ -517,19 +524,13 @@ public class Board
 
 
         // Place moved piece back on the start square.
-        Pieces[move.PromotionPiece == Piece.None ? move.PieceType : Piece.Pawn][CurrentTurn] |= move.StartSquare;
-        ZobristKey ^= Zobrist.piecesArray[move.PieceType, CurrentTurn, BitboardUtility.FirstSquareIndex(move.StartSquare)];
+        AddPiece(move.StartSquare, pieceTypeOrPromotedPawn, CurrentTurn);
 
         // Empty the move's target square.
-        Pieces[move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece][CurrentTurn] &= ~move.TargetSquare;
-        ZobristKey ^= Zobrist.piecesArray[move.PromotionPiece != Piece.None ? move.PromotionPiece : move.PieceType, CurrentTurn, BitboardUtility.FirstSquareIndex(move.TargetSquare)];
+        RemovePiece(move.TargetSquare, pieceTypeOrPromotion, CurrentTurn);
 
         // Restore any captured piece.
-        if (move.CapturedPieceType != Piece.None)
-        {
-            Pieces[move.CapturedPieceType][OpponentTurn] |= move.TargetSquare;
-            ZobristKey ^= Zobrist.piecesArray[move.CapturedPieceType, OpponentTurn, BitboardUtility.FirstSquareIndex(move.TargetSquare)];
-        }
+        if (move.CapturedPieceType != Piece.None) AddPiece(move.TargetSquare, move.CapturedPieceType, OpponentTurn);
 
 
         // Remove old en passant square.
@@ -556,13 +557,11 @@ public class Board
             {
                 // Remove rook from the target square.
                 castledRookTarget = move.TargetSquare << 1;
-                Rooks[CurrentTurn] &= ~castledRookTarget;
+                RemovePiece(castledRookTarget, Piece.Rook, CurrentTurn);
+
                 // Add it to its start square.
                 castledRookSquare = move.StartSquare >> 4;
-                Rooks[CurrentTurn] |= castledRookSquare;
-
-                ZobristKey ^= Zobrist.piecesArray[Piece.Rook, CurrentTurn, BitboardUtility.FirstSquareIndex(castledRookSquare)];
-                ZobristKey ^= Zobrist.piecesArray[Piece.Rook, CurrentTurn, BitboardUtility.FirstSquareIndex(castledRookTarget)];
+                AddPiece(castledRookSquare, Piece.Rook, CurrentTurn);
             }
 
             // Kingside castling
@@ -570,13 +569,11 @@ public class Board
             {
                 // Remove rook from the target square.
                 castledRookTarget = move.TargetSquare >> 1;
-                Rooks[CurrentTurn] &= ~castledRookTarget;
+                RemovePiece(castledRookTarget, Piece.Rook, CurrentTurn);
+
                 // Add it to its start square.
                 castledRookSquare = move.StartSquare << 3;
-                Rooks[CurrentTurn] |= castledRookSquare;
-
-                ZobristKey ^= Zobrist.piecesArray[Piece.Rook, CurrentTurn, BitboardUtility.FirstSquareIndex(castledRookSquare)];
-                ZobristKey ^= Zobrist.piecesArray[Piece.Rook, CurrentTurn, BitboardUtility.FirstSquareIndex(castledRookTarget)];
+                AddPiece(castledRookSquare, Piece.Rook, CurrentTurn);
             }
         }
 
@@ -589,13 +586,48 @@ public class Board
         {
             if (move.TargetSquare == EnPassantSquare)
             {
-                ZobristKey ^= Zobrist.piecesArray[Piece.Pawn, OpponentTurn, BitboardUtility.FirstSquareIndex(EnPassantTarget)];
-
-                // Restore en passant target.
-                Pawns[OpponentTurn] |= EnPassantTarget;
+                AddPiece(EnPassantTarget, Piece.Pawn, OpponentTurn);
                 enPassant = true;
             }
         }
+    }
+
+    private static void AddPiece(ulong square, int pieceType, int colourIndex)
+    {
+        // Add the piece to the specified bitboard.
+        Pieces[pieceType][colourIndex] |= square;
+
+        // Update occupied squares.
+        OccupiedSquares[colourIndex] |= square;
+        AllOccupiedSquares |= square;
+
+        if (pieceType.IsSlidingPiece())
+        {
+            SlidingPieces[colourIndex] |= square;
+            AllSlidingPieces |= square;
+        }
+
+        // Update the Zobrist key.
+        ZobristKey ^= Zobrist.piecesArray[pieceType, colourIndex, BitboardUtility.FirstSquareIndex(square)];
+    }
+
+    private static void RemovePiece(ulong square, int pieceType, int colourIndex)
+    {
+        // Add the piece to the specified bitboard.
+        Pieces[pieceType][colourIndex] &= ~square;
+
+        // Update occupied squares.
+        OccupiedSquares[colourIndex] &= ~square;
+        AllOccupiedSquares &= ~square;
+
+        if (pieceType.IsSlidingPiece())
+        {
+            SlidingPieces[colourIndex] &= ~square;
+            AllSlidingPieces &= ~square;
+        }
+
+        // Update the Zobrist key.
+        ZobristKey ^= Zobrist.piecesArray[pieceType, colourIndex, BitboardUtility.FirstSquareIndex(square)];
     }
 
     private static uint FourBitCastlingRights()

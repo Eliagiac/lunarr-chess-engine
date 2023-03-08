@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -122,6 +123,49 @@ public class AIPlayer
         }
 
         OnSearchComplete += FinishSearch;
+    }
+
+
+    public static int Perft(int depth, int startingDepth, Move previousMove = null)
+    {
+        if (depth == startingDepth - 1 && depth == 0)
+        {
+            _moves += previousMove + ": 1\n";
+            Console.WriteLine(previousMove + ": 1");
+        }
+
+        if (depth == 0)
+        {
+            return 1;
+        }
+
+        Board.GenerateAllLegalMovesTimer.Start();
+        var moves = GenerateAllLegalMoves(promotionMode : 0);
+        Board.GenerateAllLegalMovesTimer.Stop();
+
+        int numPositions = 0;
+
+        foreach (var move in moves)
+        {
+
+            Board.MakeMoveTimer.Start();
+            Board.MakeMove(move);
+            Board.MakeMoveTimer.Stop();
+
+            numPositions += Perft(depth - 1, startingDepth, move);
+
+            Board.UnmakeMoveTimer.Start();
+            Board.UnmakeMove(move);
+            Board.UnmakeMoveTimer.Stop();
+        }
+
+        if (depth == startingDepth - 1)
+        {
+            _moves += previousMove + ": " + numPositions + "\n";
+            Console.WriteLine(previousMove + ": " + numPositions);
+        }
+
+        return numPositions;
     }
 
 
@@ -291,7 +335,7 @@ public class AIPlayer
                 SearchNodes = (ulong)_currentSearchNodes;
                 SearchNodesPerDepth.Add(_currentSearchNodes);
 
-                Console.WriteLine($"info depth {depth} score cp {(!IsMateScore(evaluation) ? (int)Math.Round(evaluation / 2.6) : $"{((evaluation > 0) ? " + " : " - ")}M{((CheckmateScore - Math.Abs(evaluation)) - 1) / 2}")} nodes {SearchNodes} nps {(int)Math.Round(SearchNodes / (double)SearchTime.ElapsedMilliseconds * 1000)} time {SearchTime.ElapsedMilliseconds} pv {MainLine}");
+                Console.WriteLine($"info depth {depth} score cp {(!IsMateScore(evaluation) ? (int)Math.Round(evaluation / 2.6) : $"{((evaluation > 0) ? "+" : "-")}M{((CheckmateScore - Math.Abs(evaluation)) - 1) / 2}")} nodes {SearchNodes} nps {(int)Math.Round(SearchNodes / (double)SearchTime.ElapsedMilliseconds * 1000)} time {SearchTime.ElapsedMilliseconds} pv {MainLine}");
             }
 
             depth++;
@@ -787,9 +831,6 @@ public class AIPlayer
 
         foreach (var move in moves)
         {
-            ulong oldKey = Board.ZobristKey;
-            ulong correctOldKey = Zobrist.CalculateZobristKey();
-
             // Delta pruning
             if (!isEndGame)
                 if (Evaluation.GetPieceValue(move.CapturedPieceType, Board.OpponentTurn, gamePhase) + 200 <= alpha) continue;

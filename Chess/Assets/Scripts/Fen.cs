@@ -82,6 +82,8 @@ public class Fen : MonoBehaviour
         }
 
         Board.UpdateSquares();
+
+        Board.UpdateAllOccupiedSquares();
         Board.UpdateBoardInformation();
         Board.GenerateAttackedSquares();
         Board.UpdateBoardInformation();

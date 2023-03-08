@@ -81,6 +81,8 @@ public class Fen
         }
 
         Board.UpdateSquares();
+
+        Board.UpdateAllOccupiedSquares();
         Board.UpdateBoardInformation();
         Board.GenerateAttackedSquares();
         Board.UpdateBoardInformation();
