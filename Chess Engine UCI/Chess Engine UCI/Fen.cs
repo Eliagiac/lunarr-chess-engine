@@ -17,17 +17,6 @@ public class Fen
 
     public static void ConvertFromFen(string fen)
     {
-        Board.Squares = new int[64];
-        Board.Pieces = new()
-        {
-            [Piece.King] = new ulong[2],
-            [Piece.Pawn] = new ulong[2],
-            [Piece.Knight] = new ulong[2],
-            [Piece.Bishop] = new ulong[2],
-            [Piece.Rook] = new ulong[2],
-            [Piece.Queen] = new ulong[2],
-        };
-        Board.PositionHistory = new();
         Board.Init();
 
         string[] sections = fen.Split(' ');
@@ -50,10 +39,10 @@ public class Fen
                 }
                 else
                 {
-                    Colour pieceColour = (char.IsUpper(symbol)) ? Colour.White : Colour.Black;
+                    int pieceColour = char.IsUpper(symbol) ? Piece.White : Piece.Black;
                     int pieceType = pieceTypeFromSymbol[char.ToLower(symbol)];
 
-                    Board.Pieces[pieceType][pieceColour == Colour.White ? 0 : 1] |= 1UL << (rank * 8 + file);
+                    Board.Pieces[pieceType][pieceColour == Piece.White ? 0 : 1] |= 1UL << (rank * 8 + file);
 
                     file++;
 
@@ -87,5 +76,8 @@ public class Fen
         Board.GenerateAttackedSquares();
         Board.UpdateBoardInformation();
         Board.ZobristKey = Zobrist.CalculateZobristKey();
+
+        Board.PsqtScore[0] = PieceSquareTables.EvaluateAllPsqt(0);
+        Board.PsqtScore[1] = PieceSquareTables.EvaluateAllPsqt(1);
     }
 }

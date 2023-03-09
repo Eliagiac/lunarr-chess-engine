@@ -108,16 +108,16 @@ public class Board
         Files[5] | Files[7],
         Files[6]
     };
-    public static ulong[] KingFiles =
+    public static ulong[][] KingFiles =
     {
-        Files[0] | Files[1] |        0,
-        Files[0] | Files[1] | Files[2],
-        Files[1] | Files[2] | Files[3],
-        Files[2] | Files[3] | Files[4],
-        Files[3] | Files[4] | Files[5],
-        Files[4] | Files[5] | Files[6],
-        Files[5] | Files[6] | Files[7],
-               0 | Files[6] | Files[7],
+        new ulong[] { Files[0], Files[1],        0 },
+        new ulong[] { Files[0], Files[1], Files[2] },
+        new ulong[] { Files[1], Files[2], Files[3] },
+        new ulong[] { Files[2], Files[3], Files[4] },
+        new ulong[] { Files[3], Files[4], Files[5] },
+        new ulong[] { Files[4], Files[5], Files[6] },
+        new ulong[] { Files[5], Files[6], Files[7] },
+        new ulong[] {        0, Files[6], Files[7] }
     };
 
     public static ulong[][] Ranks =
@@ -159,8 +159,25 @@ public class Board
     public static Stack<ulong> PositionHistory;
 
 
+    public static uint[] PsqtScore;
+
+
     public static void Init()
     {
+        Squares = new int[64];
+        Pieces = new()
+        {
+            [Piece.King] = new ulong[2],
+            [Piece.Pawn] = new ulong[2],
+            [Piece.Knight] = new ulong[2],
+            [Piece.Bishop] = new ulong[2],
+            [Piece.Rook] = new ulong[2],
+            [Piece.Queen] = new ulong[2],
+        };
+        PositionHistory = new();
+        PsqtScore = new uint[2];
+
+
         Fills = new ulong[2, 64];
         for (int i = 0; i < 64; i++)
         {
@@ -265,7 +282,7 @@ public class Board
         KingPosition[0] = BitboardUtility.FirstSquareIndex(Kings[0]);
         KingPosition[1] = BitboardUtility.FirstSquareIndex(Kings[1]);
 
-        UpdateAttackedSquares(startSquare, targetSquare, enPassant, enPassantTarget, castling, castledRookSquare, castledRookTarget);
+        if (startSquare != 0) UpdateAttackedSquares(startSquare, targetSquare, enPassant, enPassantTarget, castling, castledRookSquare, castledRookTarget);
 
         AttackedSquares[0] = 0;
         AttackedSquares[1] = 0;
@@ -311,56 +328,14 @@ public class Board
 
         void UpdateOccupiedSquares(int colourIndex)
         {
-            GetOccupiedSquaresTimer.Start();
             SlidingPieces[colourIndex] = Bishops[colourIndex] | Rooks[colourIndex] | Queens[colourIndex];
             OccupiedSquares[colourIndex] = Kings[colourIndex] | Pawns[colourIndex] | Knights[colourIndex] | SlidingPieces[colourIndex];
-            GetOccupiedSquaresTimer.Stop();
         }
     }
 
 
-    public static Stopwatch GeneratePseudoLegalMovesForLegalMovesTimer = new();
-    public static Stopwatch GeneratePseudoLegalMovesForAttacksTimer = new();
-    public static Stopwatch PrintPerftTimer = new();
-    public static Stopwatch GenerateLegalMovesForListTimer = new();
-    public static Stopwatch GenerateAllLegalMovesTimer = new();
-    public static Stopwatch MakeMoveTimer = new();
-    public static Stopwatch UnmakeMoveTimer = new();
-    public static Stopwatch FindPinsTimer = new();
-    public static Stopwatch CalculatePinsTimer = new();
-    public static Stopwatch UpdateAttackedSquaresTimer = new();
-    public static Stopwatch UpdatePreviousAttackersTimer = new();
-    public static Stopwatch FindPreviousAttackersTimer = new();
-    public static Stopwatch SearchTimer = new();
-    public static Stopwatch GenerateDiagonalMovesTimer = new();
-    public static Stopwatch GenerateDiagonalMovesStep1Timer = new();
-    public static Stopwatch GenerateDiagonalMovesStep2Timer = new();
-    public static Stopwatch GenerateDiagonalMovesStep3Timer = new();
-    public static Stopwatch GenerateDiagonalMovesStep4Timer = new();
-    public static Stopwatch GetOccupiedSquaresTimer = new();
-    public static Stopwatch QuiescenceSearchTimer = new();
-    public static Stopwatch GetTypeTimer = new();
-    public static Stopwatch EvaluationTimer = new();
-    public static Stopwatch OrderMovesTimer = new();
-    public static Stopwatch GenerateLegalMovesTimer = new();
-    public static Stopwatch GetStoredMoveTimer = new();
-    public static Stopwatch StoreEvaluationTimer = new();
-    public static Stopwatch LookupEvaluationTimer = new();
-    public static Stopwatch DetectDrawByRepetitionTimer = new();
-    public static Stopwatch EvaluatePieceSquareTablesTimer = new();
-
-    public static int GeneratePseudoLegalMovesForAttacksCounter;
-    public static int MakeMoveCounter;
-    public static int EvaluationCounter;
-    public static int TranspositionCounter;
-
-    public static int DepthReached;
-
-
     public static void MakeMove(Move move)
     {
-        MakeMoveCounter++;
-
         int pieceTypeOrPromotion = move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece;
 
         // Empty the move's start square.
@@ -596,40 +571,54 @@ public class Board
 
     private static void AddPiece(ulong square, int pieceType, int colourIndex)
     {
+        int squareIndex = BitboardUtility.FirstSquareIndex(square);
+
+        Squares[squareIndex] = (colourIndex << 3) | pieceType;
+
         // Add the piece to the specified bitboard.
-        Pieces[pieceType][colourIndex]  |= square;
+        Pieces[pieceType][colourIndex] |= square;
 
         // Update occupied squares.
-        OccupiedSquares[colourIndex]    |= square;
-        AllOccupiedSquares              |= square;
+        OccupiedSquares[colourIndex] |= square;
+        AllOccupiedSquares |= square;
 
         if (pieceType.IsSlidingPiece())
         {
-            SlidingPieces[colourIndex]  |= square;
-            AllSlidingPieces            |= square;
+            SlidingPieces[colourIndex] |= square;
+            AllSlidingPieces |= square;
         }
 
         // Update the Zobrist key.
-        ZobristKey ^= Zobrist.piecesArray[pieceType, colourIndex, BitboardUtility.FirstSquareIndex(square)];
+        ZobristKey ^= Zobrist.piecesArray[pieceType, colourIndex, squareIndex];
+
+        // Update piesce square tables score.
+        PsqtScore[colourIndex] += PieceSquareTables.ReadScore(pieceType, squareIndex, colourIndex == 0);
     }
 
     private static void RemovePiece(ulong square, int pieceType, int colourIndex)
     {
+        int squareIndex = BitboardUtility.FirstSquareIndex(square);
+
+        Squares[squareIndex] = Piece.None;
+
         // Add the piece to the specified bitboard.
-        Pieces[pieceType][colourIndex]  &= ~square;
+        Pieces[pieceType][colourIndex] &= ~square;
 
         // Update occupied squares.
-        OccupiedSquares[colourIndex]    &= ~square;
-        AllOccupiedSquares              &= ~square;
+        OccupiedSquares[colourIndex] &= ~square;
+        AllOccupiedSquares &= ~square;
 
         if (pieceType.IsSlidingPiece())
         {
-            SlidingPieces[colourIndex]  &= ~square;
-            AllSlidingPieces            &= ~square;
+            SlidingPieces[colourIndex] &= ~square;
+            AllSlidingPieces &= ~square;
         }
 
         // Update the Zobrist key.
-        ZobristKey ^= Zobrist.piecesArray[pieceType, colourIndex, BitboardUtility.FirstSquareIndex(square)];
+        ZobristKey ^= Zobrist.piecesArray[pieceType, colourIndex, squareIndex];
+
+        // Update piesce square tables score.
+        PsqtScore[colourIndex] -= PieceSquareTables.ReadScore(pieceType, squareIndex, colourIndex == 0);
     }
 
     private static uint FourBitCastlingRights()
@@ -683,19 +672,14 @@ public class Board
 
     public static List<Move> GenerateLegalMovesList(ulong square, int promotionMode = 0, bool capturesOnly = false)
     {
-        GenerateLegalMovesForListTimer.Start();
         ulong movesBitboard = GenerateLegalMoves(square, capturesOnly);
-        GenerateLegalMovesForListTimer.Stop();
-        int pieceType = Piece.None;
-        foreach (var bitboard in Pieces) if ((bitboard.Value[CurrentTurn] & square) != 0) pieceType = bitboard.Key;
+        int pieceType = PieceType(BitboardUtility.FirstSquareIndex(square));
 
         List<Move> movesList = new();
         while (movesBitboard != 0)
         {
             ulong target = 1UL << BitboardUtility.FirstSquareIndex(movesBitboard);
-            GetTypeTimer.Start();
-            int capturedPieceType = PieceType(target, OpponentTurn);
-            GetTypeTimer.Stop();
+            int capturedPieceType = PieceType(BitboardUtility.FirstSquareIndex(target));
 
             if (pieceType == Piece.Pawn && (CurrentTurn == 0 ? ((target & Mask.WhitePromotionRank) != 0) : ((target & Mask.BlackPromotionRank) != 0)))
             {
@@ -714,11 +698,8 @@ public class Board
 
     public static ulong GenerateLegalMoves(ulong square, bool capturesOnly = false)
     {
-        GenerateLegalMovesTimer.Start();
-        GeneratePseudoLegalMovesForLegalMovesTimer.Start();
         ulong moves = GeneratePseudoLegalMoves(square, CurrentTurn);
         if (capturesOnly) moves &= OccupiedSquares[OpponentTurn];
-        GeneratePseudoLegalMovesForLegalMovesTimer.Stop();
 
         bool inCheck = IsKingInCheck[CurrentTurn];
         bool isKing = (Kings[CurrentTurn] & square) != 0;
@@ -762,10 +743,8 @@ public class Board
 
                 if (attackerIndex != -1)
                 {
-                    GetTypeTimer.Start();
-                    if (PieceType(attackerIndex, OpponentTurn, true) != Piece.None)
+                    if (PieceType(attackerIndex, slidingPiecesOnly: true) != Piece.None)
                     {
-                        GetTypeTimer.Stop();
                         int kingIndex = BitboardUtility.FirstSquareIndex(Kings[CurrentTurn]);
                         int attackerType;
                         if (GetFile(attackerIndex) == GetFile(kingIndex) || GetRank(attackerIndex) == GetRank(kingIndex)) attackerType = Piece.Rook;
@@ -783,14 +762,11 @@ public class Board
 
                         moves &= ~mask;
                     }
-                    GetTypeTimer.Stop();
 
                     if (secondAttackerIndex != -1)
                     {
-                        GetTypeTimer.Start();
-                        if (PieceType(secondAttackerIndex, OpponentTurn, true) != Piece.None)
+                        if (PieceType(secondAttackerIndex, slidingPiecesOnly: true) != Piece.None)
                         {
-                            GetTypeTimer.Stop();
                             int kingIndex = BitboardUtility.FirstSquareIndex(Kings[CurrentTurn]);
                             int attackerType;
                             if (GetFile(secondAttackerIndex) == GetFile(kingIndex) || GetRank(secondAttackerIndex) == GetRank(kingIndex)) attackerType = Piece.Rook;
@@ -808,7 +784,6 @@ public class Board
 
                             moves &= ~mask;
                         }
-                        GetTypeTimer.Stop();
                     }
                 }
             }
@@ -835,15 +810,12 @@ public class Board
                 // In case of a double attack on the king, the only option is to move the king to safety.
                 if (secondAttackerIndex != -1)
                 {
-                    GenerateLegalMovesTimer.Stop();
                     return 0;
                 }
 
                 ulong movesBackup = moves;
 
-                GetTypeTimer.Start();
-                int attackerType = PieceType(attackerIndex, OpponentTurn, true);
-                GetTypeTimer.Stop();
+                int attackerType = PieceType(attackerIndex, slidingPiecesOnly: true);
                 if (attackerType != Piece.None)
                 {
                     moves &= MoveData.Masks[attackerIndex, KingPosition[CurrentTurn]];
@@ -858,7 +830,6 @@ public class Board
                 }
             }
 
-            FindPinsTimer.Start();
             List<int> bishops = GetIndexes(Bishops[OpponentTurn]);
             List<int> rooks = GetIndexes(Rooks[OpponentTurn]);
             List<int> queens = GetIndexes(Queens[OpponentTurn]);
@@ -868,15 +839,8 @@ public class Board
 
             foreach (var i in bishops)
             {
-                FindPinsTimer.Stop();
-
-                CalculatePinsTimer.Start();
-
-
                 if ((Attacks[OpponentTurn, i] & square) == 0)
                 {
-                    CalculatePinsTimer.Stop();
-                    FindPinsTimer.Start();
                     continue;
                 }
 
@@ -884,27 +848,16 @@ public class Board
 
                 if ((square & mask) == 0)
                 {
-                    CalculatePinsTimer.Stop();
-                    FindPinsTimer.Start();
                     continue;
                 }
 
                 if (RemovePins(square, mask, ref moves)) break;
-
-                FindPinsTimer.Start();
             }
 
             foreach (var i in rooks)
             {
-                FindPinsTimer.Stop();
-
-                CalculatePinsTimer.Start();
-
-
                 if ((Attacks[OpponentTurn, i] & square) == 0)
                 {
-                    CalculatePinsTimer.Stop();
-                    FindPinsTimer.Start();
                     continue;
                 }
 
@@ -912,98 +865,83 @@ public class Board
 
                 if ((square & mask) == 0)
                 {
-                    CalculatePinsTimer.Stop();
-                    FindPinsTimer.Start();
                     continue;
                 }
 
                 if (RemovePins(square, mask, ref moves)) break;
-
-                FindPinsTimer.Start();
             }
-
-            FindPinsTimer.Stop();
         }
 
-        GenerateLegalMovesTimer.Stop();
         return moves;
     }
 
     public static ulong GeneratePseudoLegalMoves(ulong square, int currentTurnIndex, bool capturesOnly = false, bool friendlyCaptures = false)
     {
+        // Available moves are stored in a bitboard.
+        ulong moves = 0;
+
         int squareIndex = BitboardUtility.FirstSquareIndex(square);
+        int pieceType = PieceType(squareIndex);
 
-        // To find the given piece, iterate through the bitboards and check if the bit at squareIndex is occupied (there can be only 1 piece per square).
-        foreach (var bitboard in Pieces)
+        if (pieceType == Piece.None) return 0;
+
+        if (pieceType.IsSlidingPiece())
         {
-            if ((bitboard.Value[currentTurnIndex] & square) != 0)
+            GenerateDiagonalPseudoLegalMoves(pieceType);
+        }
+
+        else
+        {
+            if (pieceType == Piece.Pawn)
             {
-                // Available moves are stored in a bitboard.
-                ulong moves = 0;
+                ulong opponentBlockers = OccupiedSquares[currentTurnIndex ^ 1];
 
-                if (bitboard.Key.IsSlidingPiece())
+                // Pawns can only move forward if there is not a blocking piece.
+                if (!capturesOnly) moves |= MoveData.Moves[pieceType][squareIndex, currentTurnIndex] & ~AllOccupiedSquares;
+                // If the pawn was able to move forward, it may be eligible for a double push.
+                if (moves != 0) moves |= MoveData.Moves[pieceType][squareIndex, currentTurnIndex + 2] & ~opponentBlockers;
+                // Pawns can only capture if there is an enemy piece.
+                moves |= MoveData.Moves[pieceType][squareIndex, currentTurnIndex + 4] & (capturesOnly ? ulong.MaxValue : (opponentBlockers | EnPassantSquare));
+            }
+
+            else
+            {
+                // For other pieces, all moves are allowed (friendly blockers will be removed later).
+                moves |= MoveData.Moves[pieceType][squareIndex, 0];
+
+                if (pieceType == Piece.King)
                 {
-                    GenerateDiagonalMovesTimer.Start();
-                    // Store moves in each direction individually to identify blockers.
-                    for (int direction = 0; direction < MoveData.Moves[bitboard.Key].GetLength(1); direction++)
-                    {
-                        GenerateDiagonalMovesStep1Timer.Start();
-                        ulong maskedBlockers = AllOccupiedSquares & MoveData.Moves[bitboard.Key][squareIndex, direction];
-                        GenerateDiagonalMovesStep1Timer.Stop();
-
-                        GenerateDiagonalMovesStep2Timer.Start();
-                        // Use bitscanning to find first blocker.
-                        // Directions at even indexes are always positive, and viceversa.
-                        int firstBlockerIndex = direction % 2 == 0 ? BitboardUtility.FirstSquareIndex(maskedBlockers) : BitboardUtility.LastSquareIndex(maskedBlockers);
-                        GenerateDiagonalMovesStep2Timer.Stop();
-
-                        GenerateDiagonalMovesStep3Timer.Start();
-                        // Add moves in this direction.
-                        moves |= MoveData.Moves[bitboard.Key][squareIndex, direction];
-                        GenerateDiagonalMovesStep3Timer.Stop();
-
-                        GenerateDiagonalMovesStep4Timer.Start();
-                        // Remove moves in the ray from the first blocker in the same direction (only moves between the piece and the first blocker remain).
-                        if (maskedBlockers != 0) moves &= ~MoveData.Moves[bitboard.Key][firstBlockerIndex, direction];
-                        GenerateDiagonalMovesStep4Timer.Stop();
-                    }
-                    GenerateDiagonalMovesTimer.Stop();
+                    ulong relevantOccupiedSquares = AllOccupiedSquares & (0x6eUL << (currentTurnIndex * 56));
+                    ulong relevantCastlingRights = CastlingRights & (CurrentTurn == 0 ? Mask.WhiteInitialCastlingRights : Mask.BlackInitialCastlingRights);
+                    moves |= relevantCastlingRights & ~(relevantOccupiedSquares << 1 | relevantOccupiedSquares | relevantOccupiedSquares >> 1);
                 }
-
-                else
-                {
-                    if (bitboard.Key == Piece.Pawn)
-                    {
-                        // Pawns can only move forward if there is not a blocking piece.
-                        if (!capturesOnly) moves |= MoveData.Moves[bitboard.Key][squareIndex, currentTurnIndex] & ~AllOccupiedSquares;
-                        // If the pawn was able to move forward, it may be eligible for a double push.
-                        if (moves != 0) moves |= MoveData.Moves[bitboard.Key][squareIndex, currentTurnIndex + 2] & ~OccupiedSquares[currentTurnIndex ^ 1];
-                        // Pawns can only capture if there is an enemy piece.
-                        moves |= MoveData.Moves[bitboard.Key][squareIndex, currentTurnIndex + 4] & (capturesOnly ? ulong.MaxValue : (OccupiedSquares[currentTurnIndex ^ 1] | EnPassantSquare));
-                    }
-
-                    else
-                    {
-                        // For other pieces, all moves are allowed (friendly blockers will be removed later).
-                        moves |= MoveData.Moves[bitboard.Key][squareIndex, 0];
-
-                        if (bitboard.Key == Piece.King)
-                        {
-                            ulong relevantOccupiedSquares = AllOccupiedSquares & (0x6eUL << (currentTurnIndex * 56));
-                            ulong relevantCastlingRights = CastlingRights & (CurrentTurn == 0 ? Mask.WhiteInitialCastlingRights : Mask.BlackInitialCastlingRights);
-                            moves |= relevantCastlingRights & ~(relevantOccupiedSquares << 1 | relevantOccupiedSquares | relevantOccupiedSquares >> 1);
-                        }
-                    }
-                }
-
-                // Remove friendly blockers (all captures were included, but only enemy pieces can actually be captured).
-                if (!friendlyCaptures) moves &= ~OccupiedSquares[currentTurnIndex];
-
-                return moves;
             }
         }
 
-        return 0;
+        // Remove friendly blockers (all captures were included, but only enemy pieces can actually be captured).
+        if (!friendlyCaptures) moves &= ~OccupiedSquares[currentTurnIndex];
+
+        return moves;
+
+
+        void GenerateDiagonalPseudoLegalMoves(int pieceType)
+        {
+            // Store moves in each direction individually to identify blockers.
+            for (int direction = 0; direction < MoveData.Moves[pieceType].GetLength(1); direction++)
+            {
+                ulong maskedBlockers = AllOccupiedSquares & MoveData.Moves[pieceType][squareIndex, direction];
+
+                // Use bitscanning to find first blocker.
+                // Directions at even indexes are always positive, and viceversa.
+                int firstBlockerIndex = direction % 2 == 0 ? BitboardUtility.FirstSquareIndex(maskedBlockers) : BitboardUtility.LastSquareIndex(maskedBlockers);
+
+                // Add moves in this direction.
+                moves |= MoveData.Moves[pieceType][squareIndex, direction];
+
+                // Remove moves in the ray from the first blocker in the same direction (only moves between the piece and the first blocker remain).
+                if (maskedBlockers != 0) moves &= ~MoveData.Moves[pieceType][firstBlockerIndex, direction];
+            }
+        }
     }
 
 
@@ -1027,7 +965,7 @@ public class Board
                     // If the bit is occupied, fill its slot in the Squares array with the piece's info.
                     if ((bitboard.Value[colour] & bit) != 0)
                     {
-                        Squares[index] = bitboard.Key | (int)(colour == 0 ? Colour.White : Colour.Black);
+                        Squares[index] = bitboard.Key | (int)(colour == 0 ? Piece.White : Piece.Black);
                     }
                 }
 
@@ -1057,7 +995,7 @@ public class Board
         for (int i = 0; i < 64; i++)
         {
             if (Squares[i].PieceType() != Piece.None)
-                Pieces[Squares[i].PieceType()][Squares[i].PieceColour() == Colour.White ? 0 : 1] |= bit;
+                Pieces[Squares[i].PieceType()][Squares[i].PieceColour() == Piece.White ? 0 : 1] |= bit;
 
             bit <<= 1;
         }
@@ -1068,9 +1006,6 @@ public class Board
 
     public static void UpdateAttackedSquares(ulong startSquare, ulong targetSquare, bool enPassant, ulong enPassantTarget, bool castling, ulong castledRookSquare, ulong castledRookTarget)
     {
-        UpdateAttackedSquaresTimer.Start();
-        UpdatePreviousAttackersTimer.Start();
-        FindPreviousAttackersTimer.Start();
         ulong bit = 1;
         int i = 0;
 
@@ -1080,38 +1015,22 @@ public class Board
             {
                 if ((Attacks[0, i] & startSquare) != 0 || (Attacks[0, i] & targetSquare) != 0 || (enPassant && ((Attacks[0, i] & enPassantTarget) != 0)))
                 {
-                    FindPreviousAttackersTimer.Stop();
-
-                    GeneratePseudoLegalMovesForAttacksTimer.Start();
                     ulong threats = GeneratePseudoLegalMoves(bit, 0, true, true);
-                    GeneratePseudoLegalMovesForAttacksCounter++;
-                    GeneratePseudoLegalMovesForAttacksTimer.Stop();
 
                     Attacks[0, i] = threats;
-
-                    FindPreviousAttackersTimer.Start();
                 }
 
                 if ((Attacks[1, i] & startSquare) != 0 || (Attacks[1, i] & targetSquare) != 0 || (enPassant && ((Attacks[1, i] & enPassantTarget) != 0)))
                 {
-                    FindPreviousAttackersTimer.Stop();
-
-                    GeneratePseudoLegalMovesForAttacksTimer.Start();
                     ulong threats = GeneratePseudoLegalMoves(bit, 1, true, true);
-                    GeneratePseudoLegalMovesForAttacksCounter++;
-                    GeneratePseudoLegalMovesForAttacksTimer.Stop();
 
                     Attacks[1, i] = threats;
-
-                    FindPreviousAttackersTimer.Start();
                 }
             }
 
             bit <<= 1;
             i++;
         }
-        FindPreviousAttackersTimer.Stop();
-        UpdatePreviousAttackersTimer.Stop();
 
         int startSquareIndex = BitboardUtility.FirstSquareIndex(startSquare);
         Attacks[CurrentTurn, startSquareIndex] &= 0;
@@ -1125,15 +1044,10 @@ public class Board
         int targetSquareIndex = BitboardUtility.FirstSquareIndex(targetSquare);
         Attacks[OpponentTurn, targetSquareIndex] &= 0;
 
-        GeneratePseudoLegalMovesForAttacksTimer.Start();
         Attacks[OpponentTurn, startSquareIndex] = GeneratePseudoLegalMoves(startSquare, OpponentTurn, true, true);
         if (enPassant) Attacks[OpponentTurn, BitboardUtility.FirstSquareIndex(enPassantTarget)] = GeneratePseudoLegalMoves(enPassantTarget, OpponentTurn, true, true);
         Attacks[CurrentTurn, targetSquareIndex] = GeneratePseudoLegalMoves(targetSquare, CurrentTurn, true, true);
         if (castling) Attacks[CurrentTurn, BitboardUtility.FirstSquareIndex(castledRookTarget)] = GeneratePseudoLegalMoves(castledRookTarget, CurrentTurn, true, true);
-        GeneratePseudoLegalMovesForAttacksCounter++;
-        GeneratePseudoLegalMovesForAttacksTimer.Stop();
-
-        UpdateAttackedSquaresTimer.Stop();
     }
 
     public static void GenerateAttackedSquares()
@@ -1152,9 +1066,7 @@ public class Board
             {
                 if ((OccupiedSquares[i] & bit) != 0)
                 {
-                    GeneratePseudoLegalMovesForAttacksTimer.Start();
                     ulong attacks = GeneratePseudoLegalMoves(bit, i, true, true);
-                    GeneratePseudoLegalMovesForAttacksTimer.Stop();
 
                     Attacks[i, index] = attacks;
                 }
@@ -1183,49 +1095,17 @@ public class Board
         return squareIndex >= 0 && squareIndex < 64;
     }
 
-    public static int PieceType(int squareIndex, int turnIndex, bool slidingPiecesOnly = false)
+    public static int PieceType(int squareIndex, bool slidingPiecesOnly = false)
     {
-        if ((Bishops[turnIndex] & (1UL << squareIndex)) != 0) return Piece.Bishop;
-        if ((Rooks[turnIndex] & (1UL << squareIndex)) != 0) return Piece.Rook;
-        if ((Queens[turnIndex] & (1UL << squareIndex)) != 0) return Piece.Queen;
-        if (slidingPiecesOnly) return Piece.None;
-        if ((Pawns[turnIndex] & (1UL << squareIndex)) != 0) return Piece.Pawn;
-        if ((Knights[turnIndex] & (1UL << squareIndex)) != 0) return Piece.Knight;
-        if ((Kings[turnIndex] & (1UL << squareIndex)) != 0) return Piece.King;
-        return Piece.None;
+        int pieceType = Squares[squareIndex].PieceType();
+        return
+            !slidingPiecesOnly ? pieceType :
+            (pieceType.IsSlidingPiece() ? pieceType : Piece.None);
     }
 
-    public static int PieceType(ulong square, int turnIndex, bool slidingPiecesOnly = false)
+    public static int PieceColour(int squareIndex)
     {
-        if ((Bishops[turnIndex] & square) != 0) return Piece.Bishop;
-        if ((Rooks[turnIndex] & square) != 0) return Piece.Rook;
-        if ((Queens[turnIndex] & square) != 0) return Piece.Queen;
-        if (slidingPiecesOnly) return Piece.None;
-        if ((Pawns[turnIndex] & square) != 0) return Piece.Pawn;
-        if ((Knights[turnIndex] & square) != 0) return Piece.Knight;
-        if ((Kings[turnIndex] & square) != 0) return Piece.King;
-        return Piece.None;
-    }
-
-    public static int PieceType(int squareIndex)
-    {
-        if ((Bishops[0] & (1UL << squareIndex)) != 0 || (Bishops[1] & (1UL << squareIndex)) != 0) return Piece.Bishop;
-        if ((Rooks[0] & (1UL << squareIndex)) != 0 || (Rooks[1] & (1UL << squareIndex)) != 0) return Piece.Rook;
-        if ((Queens[0] & (1UL << squareIndex)) != 0 || (Queens[1] & (1UL << squareIndex)) != 0) return Piece.Queen;
-        if ((Pawns[0] & (1UL << squareIndex)) != 0 || (Pawns[1] & (1UL << squareIndex)) != 0) return Piece.Pawn;
-        if ((Knights[0] & (1UL << squareIndex)) != 0 || (Knights[1] & (1UL << squareIndex)) != 0) return Piece.Knight;
-        if ((Kings[0] & (1UL << squareIndex)) != 0 || (Kings[1] & (1UL << squareIndex)) != 0) return Piece.King;
-        return Piece.None;
-    }
-
-    public static Colour PieceColour(int squareIndex)
-    {
-        foreach (var bitboard in Pieces)
-        {
-            if ((bitboard.Value[0] & (1UL << squareIndex)) != 0) return Colour.White;
-            if ((bitboard.Value[1] & (1UL << squareIndex)) != 0) return Colour.Black;
-        }
-        return 0;
+        return Squares[squareIndex].PieceColour();
     }
 
     public static bool IsSlidingPiece(ulong square) => (AllSlidingPieces & square) != 0;
@@ -1236,7 +1116,6 @@ public class Board
         {
             moves &= mask;
 
-            CalculatePinsTimer.Stop();
             return true;
         }
 
@@ -1246,12 +1125,10 @@ public class Board
             {
                 moves &= ~EnPassantSquare;
 
-                CalculatePinsTimer.Stop();
                 return true;
             }
         }
 
-        CalculatePinsTimer.Stop();
         return false;
     }
 

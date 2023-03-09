@@ -139,24 +139,15 @@ public class AIPlayer
             return 1;
         }
 
-        Board.GenerateAllLegalMovesTimer.Start();
         var moves = GenerateAllLegalMoves(promotionMode : 0);
-        Board.GenerateAllLegalMovesTimer.Stop();
 
         int numPositions = 0;
 
         foreach (var move in moves)
         {
-
-            Board.MakeMoveTimer.Start();
             Board.MakeMove(move);
-            Board.MakeMoveTimer.Stop();
-
             numPositions += Perft(depth - 1, startingDepth, move);
-
-            Board.UnmakeMoveTimer.Start();
             Board.UnmakeMove(move);
-            Board.UnmakeMoveTimer.Stop();
         }
 
         if (depth == startingDepth - 1)
@@ -220,7 +211,6 @@ public class AIPlayer
         if (ResetTranspositionTableOnEachSearch) TranspositionTable.Clear();
 
         // Opening book not available in UCI mode.
-        Board.SearchTimer.Start();
 
         SearchTime.Restart();
         int depth = 1;
@@ -324,7 +314,6 @@ public class AIPlayer
             {
                 _totalSearchTime = SearchTime.ElapsedMilliseconds;
 
-                Board.DepthReached = depth;
                 DepthReachedData = new(CurrentDepthReachedData);
                 _searchTimeResult = CurrentSearchTime.ElapsedMilliseconds;
                 //Debug.Log($"{depth} : {CurrentSearchTime.Elapsed.ToString()}, ({alpha}, {beta}).");
@@ -347,8 +336,6 @@ public class AIPlayer
         SearchTime.Stop();
 
         OnSearchComplete.Invoke();
-
-        Board.SearchTimer.Stop();
     }
 
     public static int Search(int depth, int plyFromRoot, int alpha, int beta, int extensions, EvaluationData evaluationData, out Line pvLine, bool useNullMovePruning = true, int nullMoveSearchPlyFromRoot = 0, ulong previousCapture = 0, bool useMultiCut = true)
@@ -357,16 +344,13 @@ public class AIPlayer
         if (AbortSearch) return 0;
 
         // Detect draws by repetition.
-        Board.DetectDrawByRepetitionTimer.Start();
         if (plyFromRoot > 0)
         {
             if (Board.PositionHistory.Count(key => key == Board.ZobristKey) >= 2)
             {
-                Board.DetectDrawByRepetitionTimer.Stop();
                 return 0;
             }
         }
-        Board.DetectDrawByRepetitionTimer.Stop();
 
         if (depth <= 0)
         {
@@ -385,14 +369,11 @@ public class AIPlayer
             }
         }
 
-        Board.LookupEvaluationTimer.Start();
         int ttVal = TranspositionTable.LookupEvaluation(depth, plyFromRoot, alpha, beta);
-        Board.LookupEvaluationTimer.Stop();
 
         // Don't use traspositions at ply from root 0 to analyse possible draws by repetition.
         if (ttVal != TranspositionTable.lookupFailed && plyFromRoot > 0)
         {
-            Board.TranspositionCounter++;
             pvLine = TranspositionTable.GetStoredLine();
             return ttVal;
         }
@@ -495,10 +476,8 @@ public class AIPlayer
 
         Move bestMove = null;
 
-        Board.GenerateAllLegalMovesTimer.Start();
         var moves = GenerateAllLegalMoves();
         if (UseMoveOrdering) OrderMoves(moves, plyFromRoot, gamePhase);
-        Board.GenerateAllLegalMovesTimer.Stop();
 
         if (moves.Count == 0)
         {
@@ -548,9 +527,7 @@ public class AIPlayer
 
         for (int i = 0; i < moves.Count; i++)
         {
-            Board.MakeMoveTimer.Start();
             Board.MakeMove(moves[i]);
-            Board.MakeMoveTimer.Stop();
 
 
             bool captureOrPromotion =
@@ -563,9 +540,7 @@ public class AIPlayer
             if (useFutilityPruning && i > 0 &&
                 !captureOrPromotion && !givesCheck)
             {
-                Board.UnmakeMoveTimer.Start();
                 Board.UnmakeMove(moves[i]);
-                Board.UnmakeMoveTimer.Stop();
 
                 FutilityPrunes++;
                 continue;
@@ -581,9 +556,7 @@ public class AIPlayer
             if (moveCountBasedPruning &&
                 !captureOrPromotion && !givesCheck)
             {
-                Board.UnmakeMoveTimer.Start();
                 Board.UnmakeMove(moves[i]);
-                Board.UnmakeMoveTimer.Stop();
 
                 MoveCountBasedPrunes++;
                 continue;
@@ -658,15 +631,11 @@ public class AIPlayer
             {
                 foreach (int promotionPiece in _extraPromotions)
                 {
-                    Board.UnmakeMoveTimer.Start();
                     Board.UnmakeMove(moves[i]);
-                    Board.UnmakeMoveTimer.Stop();
 
                     moves[i].PromotionPiece = promotionPiece;
 
-                    Board.MakeMoveTimer.Start();
                     Board.MakeMove(moves[i]);
-                    Board.MakeMoveTimer.Stop();
 
                     evaluation = -Search(depth - 1, plyFromRoot + 1, -beta, -alpha, extensions + newExtensions, evaluationData, out nextLine, previousCapture: moves[i].CapturedPieceType != Piece.None ? moves[i].TargetSquare : 0);
 
@@ -674,42 +643,8 @@ public class AIPlayer
                 }
             }
 
-            // Try to avoid draws by repetition.
-            //if (plyFromRoot == 0)
-            //{
-            //    // This move would cause an immediate draw by repetition.
-            //    if (BoardVisualizer.Instance._positionHistory.Count(key => key == Board.ZobristKey) >= 2)
-            //    {
-            //        evaluation = 0;
-            //        //Debug.Log("Draw by repetition detected!");
-            //    }
-            //
-            //    // This move would allow the opponent to cause a draw by repetition.
-            //    // Only prevent it if drawing wouldn't be beneficial.
-            //    if (evaluation > 0)
-            //    {
-            //        var opponentResponses = GenerateAllLegalMoves();
-            //        foreach (var response in opponentResponses)
-            //        {
-            //            Board.MakeMoveTimer.Start();
-            //            Board.MakeMove(response);
-            //            Board.MakeMoveTimer.Stop();
-            //    
-            //            if (BoardVisualizer.Instance._positionHistory.Count(key => key == Board.ZobristKey) >= 2) evaluation = 0;
-            //    
-            //            Board.UnmakeMoveTimer.Start();
-            //            Board.UnmakeMove(response);
-            //            Board.UnmakeMoveTimer.Stop();
-            //    
-            //            if (evaluation == 0) break;
-            //        }
-            //    }
-            //}
 
-
-            Board.UnmakeMoveTimer.Start();
             Board.UnmakeMove(moves[i]);
-            Board.UnmakeMoveTimer.Stop();
 
 
             if (AbortSearch) return 0;
@@ -718,9 +653,7 @@ public class AIPlayer
                 // Fail-high.
                 if (evaluation >= beta)
                 {
-                    Board.StoreEvaluationTimer.Start();
                     TranspositionTable.StoreEvaluation(depth, plyFromRoot, beta, TranspositionTable.LowerBound, new(moves[i]));
-                    Board.StoreEvaluationTimer.Stop();
 
                     if (moves[i].CapturedPieceType == Piece.None)
                     {
@@ -759,9 +692,7 @@ public class AIPlayer
         //    StoreKillerMove(pvLine.Move, plyFromRoot);
         //}
 
-        Board.StoreEvaluationTimer.Start();
         TranspositionTable.StoreEvaluation(depth, plyFromRoot, alpha, evalType, pvLine);
-        Board.StoreEvaluationTimer.Stop();
 
         return alpha;
     }
@@ -771,15 +702,10 @@ public class AIPlayer
         pvLine = null;
         if (AbortSearch) return 0;
 
-        Board.QuiescenceSearchTimer.Start();
-
-        Board.LookupEvaluationTimer.Start();
         int ttVal = TranspositionTable.LookupEvaluation(0, plyFromRoot, alpha, beta);
-        Board.LookupEvaluationTimer.Stop();
 
         if (ttVal != TranspositionTable.lookupFailed)
         {
-            Board.TranspositionCounter++;
             pvLine = TranspositionTable.GetStoredLine();
             return ttVal;
         }
@@ -788,8 +714,6 @@ public class AIPlayer
         int evaluation = Evaluation.Evaluate(out int gamePhase, evaluationData);
         if (evaluation >= beta)
         {
-            Board.QuiescenceSearchTimer.Stop();
-
             if (CurrentDepthReachedData.Any(d => d.Depth == plyFromRoot)) CurrentDepthReachedData.Find(d => d.Depth == plyFromRoot).Count++;
             else CurrentDepthReachedData.Add(new(plyFromRoot));
 
@@ -813,8 +737,6 @@ public class AIPlayer
 
         if (moves.Count == 0)
         {
-            Board.QuiescenceSearchTimer.Stop();
-
             if (CurrentDepthReachedData.Any(d => d.Depth == plyFromRoot)) CurrentDepthReachedData.Find(d => d.Depth == plyFromRoot).Count++;
             else CurrentDepthReachedData.Add(new(plyFromRoot));
 
@@ -835,26 +757,19 @@ public class AIPlayer
             if (!isEndGame)
                 if (Evaluation.GetPieceValue(move.CapturedPieceType, Board.OpponentTurn, gamePhase) + 200 <= alpha) continue;
 
-            Board.MakeMoveTimer.Start();
             Board.MakeMove(move);
-            Board.MakeMoveTimer.Stop();
 
             _currentSearchNodes++;
             _nodeCount++;
 
             evaluation = -QuiescenceSearch(-beta, -alpha, plyFromRoot + 1, evaluationData, out Line nextLine);
 
-            Board.UnmakeMoveTimer.Start();
             Board.UnmakeMove(move);
-            Board.UnmakeMoveTimer.Stop();
 
             if (evaluation >= beta)
             {
-                Board.StoreEvaluationTimer.Start();
                 TranspositionTable.StoreEvaluation(0, plyFromRoot, beta, TranspositionTable.LowerBound, new(move));
-                Board.StoreEvaluationTimer.Stop();
 
-                Board.QuiescenceSearchTimer.Stop();
                 return beta;
             }
 
@@ -870,11 +785,7 @@ public class AIPlayer
         }
 
 
-        Board.StoreEvaluationTimer.Start();
         TranspositionTable.StoreEvaluation(0, plyFromRoot, alpha, evalType, pvLine);
-        Board.StoreEvaluationTimer.Stop();
-
-        Board.QuiescenceSearchTimer.Stop();
         return alpha;
     }
 
@@ -924,12 +835,8 @@ public class AIPlayer
 
     private static void OrderMoves(List<Move> moves, int plyFromRoot, int gamePhase, bool useTranspositionTable = true)
     {
-        Board.OrderMovesTimer.Start();
-
         Move hashMove = null;
-        Board.GetStoredMoveTimer.Start();
         if (useTranspositionTable) hashMove = TranspositionTable.GetStoredMove();
-        Board.GetStoredMoveTimer.Stop();
 
         var moveScores = new List<int>();
         foreach (var move in moves)
@@ -963,10 +870,7 @@ public class AIPlayer
                 {
                     moveScoreGuess += HistoryHeuristic[BitboardUtility.FirstSquareIndex(move.StartSquare), BitboardUtility.FirstSquareIndex(move.TargetSquare)];
 
-
-                    Board.EvaluatePieceSquareTablesTimer.Start();
                     moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece, BitboardUtility.FirstSquareIndex(move.TargetSquare), Board.CurrentTurn == 0, gamePhase);
-                    Board.EvaluatePieceSquareTablesTimer.Stop();
 
                     moveScoreGuess += Evaluation.GetPieceValue(move.PromotionPiece, Board.CurrentTurn, gamePhase);
                     if ((Board.PawnAttackedSquares[Board.OpponentTurn] & move.TargetSquare) != 0) moveScoreGuess -= 350;
@@ -989,8 +893,6 @@ public class AIPlayer
                 }
             }
         }
-
-        Board.OrderMovesTimer.Stop();
     }
 
     public static bool IsMateScore(int score)

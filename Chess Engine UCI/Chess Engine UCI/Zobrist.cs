@@ -88,12 +88,10 @@ public static class Zobrist {
 
 		for (int squareIndex = 0; squareIndex < 64; squareIndex++) 
 		{
-            Board.GetTypeTimer.Start();
             int pieceType = Board.PieceType(squareIndex);
-            Board.GetTypeTimer.Stop();
-            Colour pieceColour = Board.PieceColour(squareIndex);
+            int pieceColour = Board.PieceColour(squareIndex);
 
-            if (pieceType != Piece.None) zobristKey ^= piecesArray[pieceType, pieceColour == Colour.White ? 0 : 1, squareIndex];
+            if (pieceType != Piece.None) zobristKey ^= piecesArray[pieceType, pieceColour == Piece.White ? 0 : 1, squareIndex];
         }
 
 		if (Board.CurrentTurn == 1) {

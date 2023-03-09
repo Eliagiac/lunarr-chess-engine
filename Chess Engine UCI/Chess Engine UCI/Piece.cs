@@ -7,13 +7,9 @@ public struct Piece
     public const int Rook   = 4;
     public const int Queen  = 5;
     public const int King   = 6;
-}
 
-
-public enum Colour
-{
-    White = 0b01000,
-    Black = 0b10000
+    public const int White = 0b0000;
+    public const int Black = 0b1000;
 }
 
 
@@ -21,7 +17,7 @@ public static class IntExtensions
 {
     public static int PieceType(this int piece) => piece & 0b111;
 
-    public static Colour PieceColour(this int piece) => (Colour)(piece & 0b1000);
+    public static int PieceColour(this int piece) => piece & 0b1000;
 }
 
 public static class PieceExtensions
