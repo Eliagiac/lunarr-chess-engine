@@ -21,4 +21,9 @@ public class BitboardUtility
     {
         return BitOperations.PopCount(bitboard);
     }
+
+    public static ulong ParallelBitExtract(ulong bitboard, ulong mask)
+    {
+        return Bmi2.X64.ParallelBitExtract(bitboard, mask);
+    }
 }

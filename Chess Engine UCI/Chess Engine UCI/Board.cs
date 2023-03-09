@@ -14,12 +14,12 @@ public class Board
     public static Dictionary<int, ulong[]> Pieces { get; set; }
 
 
-    public static ulong[] Kings => Pieces[Piece.King];
     public static ulong[] Pawns => Pieces[Piece.Pawn];
     public static ulong[] Knights => Pieces[Piece.Knight];
     public static ulong[] Bishops => Pieces[Piece.Bishop];
     public static ulong[] Rooks => Pieces[Piece.Rook];
     public static ulong[] Queens => Pieces[Piece.Queen];
+    public static ulong[] Kings => Pieces[Piece.King];
 
 
     // 0 = white to move.
@@ -276,9 +276,6 @@ public class Board
 
     public static void UpdateBoardInformation(ulong startSquare = 0, ulong targetSquare = 0, bool enPassant = false, ulong enPassantTarget = 0, bool castling = false, ulong castledRookSquare = 0, ulong castledRookTarget = 0)
     {
-        //OccupiedSquares[0] = Kings[0] | Pawns[0] | Knights[0] | SlidingPieces[0];
-        //OccupiedSquares[1] = Kings[1] | Pawns[1] | Knights[1] | SlidingPieces[1];
-
         KingPosition[0] = BitboardUtility.FirstSquareIndex(Kings[0]);
         KingPosition[1] = BitboardUtility.FirstSquareIndex(Kings[1]);
 
@@ -887,7 +884,7 @@ public class Board
 
         if (pieceType.IsSlidingPiece())
         {
-            GenerateDiagonalPseudoLegalMoves(pieceType);
+            moves |= MagicBitboard.GetAttacks(pieceType, squareIndex, AllOccupiedSquares);
         }
 
         else
@@ -924,24 +921,24 @@ public class Board
         return moves;
 
 
-        void GenerateDiagonalPseudoLegalMoves(int pieceType)
-        {
-            // Store moves in each direction individually to identify blockers.
-            for (int direction = 0; direction < MoveData.Moves[pieceType].GetLength(1); direction++)
-            {
-                ulong maskedBlockers = AllOccupiedSquares & MoveData.Moves[pieceType][squareIndex, direction];
-
-                // Use bitscanning to find first blocker.
-                // Directions at even indexes are always positive, and viceversa.
-                int firstBlockerIndex = direction % 2 == 0 ? BitboardUtility.FirstSquareIndex(maskedBlockers) : BitboardUtility.LastSquareIndex(maskedBlockers);
-
-                // Add moves in this direction.
-                moves |= MoveData.Moves[pieceType][squareIndex, direction];
-
-                // Remove moves in the ray from the first blocker in the same direction (only moves between the piece and the first blocker remain).
-                if (maskedBlockers != 0) moves &= ~MoveData.Moves[pieceType][firstBlockerIndex, direction];
-            }
-        }
+        //void GenerateDiagonalPseudoLegalMoves(int pieceType)
+        //{
+        //    // Store moves in each direction individually to identify blockers.
+        //    for (int direction = 0; direction < MoveData.Moves[pieceType].GetLength(1); direction++)
+        //    {
+        //        ulong maskedBlockers = AllOccupiedSquares & MoveData.Moves[pieceType][squareIndex, direction];
+        //
+        //        // Use bitscanning to find first blocker.
+        //        // Directions at even indexes are always positive, and viceversa.
+        //        int firstBlockerIndex = direction % 2 == 0 ? BitboardUtility.FirstSquareIndex(maskedBlockers) : BitboardUtility.LastSquareIndex(maskedBlockers);
+        //
+        //        // Add moves in this direction.
+        //        moves |= MoveData.Moves[pieceType][squareIndex, direction];
+        //
+        //        // Remove moves in the ray from the first blocker in the same direction (only moves between the piece and the first blocker remain).
+        //        if (maskedBlockers != 0) moves &= ~MoveData.Moves[pieceType][firstBlockerIndex, direction];
+        //    }
+        //}
     }
 
 
@@ -1015,16 +1012,12 @@ public class Board
             {
                 if ((Attacks[0, i] & startSquare) != 0 || (Attacks[0, i] & targetSquare) != 0 || (enPassant && ((Attacks[0, i] & enPassantTarget) != 0)))
                 {
-                    ulong threats = GeneratePseudoLegalMoves(bit, 0, true, true);
-
-                    Attacks[0, i] = threats;
+                    Attacks[0, i] = MagicBitboard.GetAttacks(PieceType(i), i, AllOccupiedSquares);
                 }
 
                 if ((Attacks[1, i] & startSquare) != 0 || (Attacks[1, i] & targetSquare) != 0 || (enPassant && ((Attacks[1, i] & enPassantTarget) != 0)))
                 {
-                    ulong threats = GeneratePseudoLegalMoves(bit, 1, true, true);
-
-                    Attacks[1, i] = threats;
+                    Attacks[1, i] = MagicBitboard.GetAttacks(PieceType(i), i, AllOccupiedSquares); ;
                 }
             }
 
