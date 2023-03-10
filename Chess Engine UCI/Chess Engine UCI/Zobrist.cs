@@ -7,7 +7,7 @@ public static class Zobrist {
 	const int seed = 2361912;
 	const string randomNumbersFileName = "RandomNumbers.txt";
 
-	/// piece type, colour, square index
+	/// piece type, color, square index
 	public static readonly ulong[, , ] piecesArray = new ulong[8, 2, 64];
 	public static readonly ulong[] castlingRights = new ulong[16];
 	/// ep file (0 = no ep).
@@ -89,9 +89,9 @@ public static class Zobrist {
 		for (int squareIndex = 0; squareIndex < 64; squareIndex++) 
 		{
             int pieceType = Board.PieceType(squareIndex);
-            int pieceColour = Board.PieceColour(squareIndex);
+            int pieceColor = Board.PieceColor(squareIndex);
 
-            if (pieceType != Piece.None) zobristKey ^= piecesArray[pieceType, pieceColour == Piece.White ? 0 : 1, squareIndex];
+            if (pieceType != Piece.None) zobristKey ^= piecesArray[pieceType, pieceColor == Piece.White ? 0 : 1, squareIndex];
         }
 
 		if (Board.CurrentTurn == 1) {

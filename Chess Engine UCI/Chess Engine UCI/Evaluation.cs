@@ -112,8 +112,8 @@ public class Evaluation
 
 
         // Give a bonus based on piece mobility.
-        whiteEval += MobilityScore(Board.AttackedSquares[0]);
-        blackEval += MobilityScore(Board.AttackedSquares[1]);
+        whiteEval += MobilityScore(0);
+        blackEval += MobilityScore(1);
 
 
         // Give a bonus in case of a well protected king.
@@ -121,9 +121,9 @@ public class Evaluation
         blackEval += KingSafetyScore(1, Board.Pawns[1], Board.Pawns[0]);
 
 
-        // Give a bonus to bishops that help with colour weakness caused by an imbalanced pawn structure.
-        whiteEval += ColourWeaknessScore(Board.Pawns[0], Board.Bishops[0]);
-        blackEval += ColourWeaknessScore(Board.Pawns[1], Board.Bishops[1]);
+        // Give a bonus to bishops that help with color weakness caused by an imbalanced pawn structure.
+        whiteEval += ColorWeaknessScore(Board.Pawns[0], Board.Bishops[0]);
+        blackEval += ColorWeaknessScore(Board.Pawns[1], Board.Bishops[1]);
 
 
         // Give a bonus to knights defended by a pawn in the opponent's half of the board.
@@ -169,20 +169,20 @@ public class Evaluation
         }
 
 
-        uint PassedPawnsBonus(int colourIndex, ulong pawns, ulong opponentPawns)
+        uint PassedPawnsBonus(int colorIndex, ulong pawns, ulong opponentPawns)
         {
             uint bonus = 0;
             for (int i = 1; i < 7; i++)
             {
                 uint count = 0;
 
-                foreach (var pawn in Board.GetIndexes(pawns & Board.Ranks[colourIndex][i]))
+                foreach (var pawn in Board.GetIndexes(pawns & Board.Ranks[colorIndex][i]))
                 {
                     // If there are no enemy pawns on this or adjacent files,
                     // and the pawn doesn't have another friendly pawn in front,
                     // it is considered a "passed pawn".
-                    if ((Board.Spans[colourIndex, pawn] & opponentPawns) == 0)
-                        if ((Board.Fills[colourIndex, pawn] & pawns) == 0) count++;
+                    if ((Board.Spans[colorIndex, pawn] & opponentPawns) == 0)
+                        if ((Board.Fills[colorIndex, pawn] & pawns) == 0) count++;
                 }
 
                 bonus += evaluationData.PassedPawnBonus[i] * count;
@@ -214,7 +214,7 @@ public class Evaluation
             return count;
         }
 
-        uint BackwardPawnsCount(int colourIndex, ulong opponentColourIndex, ulong pawns)
+        uint BackwardPawnsCount(int colorIndex, ulong opponentColorIndex, ulong pawns)
         {
             uint count = 0;
             foreach (var pawn in Board.GetIndexes(pawns))
@@ -222,8 +222,8 @@ public class Evaluation
                 // If there are no friendly pawns protecting the pawn
                 // and its stop square is attacked by an enemy pawn,
                 // it is considered a "backward pawn".
-                if ((Board.BackwardProtectors[colourIndex, pawn] & pawns) == 0) 
-                    if ((Board.StopSquare[colourIndex, pawn] & Board.PawnAttackedSquares[opponentColourIndex]) != 0) count++;
+                if ((Board.BackwardProtectors[colorIndex, pawn] & pawns) == 0) 
+                    if ((Board.StopSquare[colorIndex, pawn] & Board.PawnAttackedSquares[opponentColorIndex]) != 0) count++;
             }
             return count;
         }
@@ -232,25 +232,44 @@ public class Evaluation
         bool IsPositionOpen() => BitboardUtility.OccupiedSquaresCount(Board.AllOccupiedSquares) < 24;
 
 
-        uint MobilityScore(ulong attackMap)
+        uint MobilityScore(int colorIndex)
         {
-            return
-                evaluationData.MobilityBonusPerSquare *
-                (uint)BitboardUtility.OccupiedSquaresCount(attackMap);
+            ulong blockedSquares = colorIndex == 0 ?
+                Board.AllOccupiedSquares >> 8 :
+                Board.AllOccupiedSquares << 8;
+
+            ulong lowRanks = Board.Ranks[colorIndex][1] | Board.Ranks[colorIndex][2];
+
+            ulong mobilityArea = ~(
+                (Board.Pawns[colorIndex] & (blockedSquares | lowRanks)) |   /* Exclude blocked pawns or pawns on a low rank. */
+                (Board.Kings[colorIndex] | Board.Queens[colorIndex]) |      /* Exclude our king/queens. */
+                Board.PawnAttackedSquares[colorIndex ^ 1]);                 /* Exclude squares controlled by enemy pawns. */
+
+            uint score = 0;
+            for (int pieceType = Piece.Knight; pieceType <= Piece.Queen; pieceType++)
+            {
+                foreach (var piece in Board.GetIndexes(Board.Pieces[pieceType][colorIndex]))
+                {
+                    score += evaluationData.MobilityBonus[pieceType][BitboardUtility.OccupiedSquaresCount(
+                        Board.AttacksFrom(piece, pieceType, Board.AllOccupiedSquares) & mobilityArea)];
+                }
+            }
+
+            return score;
         }
 
-        uint KingSafetyScore(int colourIndex, ulong friendlyPawns, ulong opponentPawns)
+        uint KingSafetyScore(int colorIndex, ulong friendlyPawns, ulong opponentPawns)
         {
             uint score = 0;
 
-            if ((Board.Kings[colourIndex] & (colourIndex == 0 ? Mask.WhiteCastledKingPosition : Mask.BlackCastledKingPosition)) != 0)
+            if ((Board.Kings[colorIndex] & (colorIndex == 0 ? Mask.WhiteCastledKingPosition : Mask.BlackCastledKingPosition)) != 0)
             {
                 score +=
-                    evaluationData.FirstShieldingPawnKingSafetyBonus * (uint)BitboardUtility.OccupiedSquaresCount(friendlyPawns & Board.FirstShieldingPawns[Board.KingPosition[colourIndex]]) +
-                    evaluationData.SecondShieldingPawnKingSafetyBonus * (uint)BitboardUtility.OccupiedSquaresCount(friendlyPawns & Board.SecondShieldingPawns[Board.KingPosition[colourIndex]]);
+                    evaluationData.FirstShieldingPawnKingSafetyBonus * (uint)BitboardUtility.OccupiedSquaresCount(friendlyPawns & Board.FirstShieldingPawns[Board.KingPosition[colorIndex]]) +
+                    evaluationData.SecondShieldingPawnKingSafetyBonus * (uint)BitboardUtility.OccupiedSquaresCount(friendlyPawns & Board.SecondShieldingPawns[Board.KingPosition[colorIndex]]);
             }
 
-            int kingFile = Board.GetFile(Board.KingPosition[colourIndex]);
+            int kingFile = Board.GetFile(Board.KingPosition[colorIndex]);
             ulong[] kingFiles = Board.KingFiles[kingFile];
 
             foreach (var file in kingFiles)
@@ -268,7 +287,7 @@ public class Evaluation
             return score;
         }
 
-        uint ColourWeaknessScore(ulong pawns, ulong bishops)
+        uint ColorWeaknessScore(ulong pawns, ulong bishops)
         {
             uint score = 0;
 
@@ -279,10 +298,10 @@ public class Evaluation
             int darkBishopsCount = BitboardUtility.OccupiedSquaresCount(bishops & Mask.DarkSquares);
 
             // Give a penalty for the lack of a bishop on a light square, for each extra pawn on a dark square.
-            score += evaluationData.ColourWeaknessPenaltyPerPawn * (uint)(lightBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, darkPawnsCount - lightPawnsCount);
+            score += evaluationData.ColorWeaknessPenaltyPerPawn * (uint)(lightBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, darkPawnsCount - lightPawnsCount);
 
             // Give a penalty for the lack of a bishop on a light square, for each extra pawn on a dark square.
-            score += evaluationData.ColourWeaknessPenaltyPerPawn * (uint)(darkBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, lightPawnsCount - darkPawnsCount);
+            score += evaluationData.ColorWeaknessPenaltyPerPawn * (uint)(darkBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, lightPawnsCount - darkPawnsCount);
 
             return score;
         }
@@ -305,7 +324,7 @@ public class Evaluation
     }
 
 
-    public static int GetPieceValue(int piece, int pieceColour, int gamePhase)
+    public static int GetPieceValue(int piece)
     {
         switch (piece)
         {
@@ -704,8 +723,31 @@ public class EvaluationData
     public uint KnightPairInClosedPositionBonus = Score.MakeScore(+50, +30);
     public uint BishopPairInClosedPositionBonus = Score.MakeScore(+30, +10);
 
-    // Not from Stockfish.
-    public uint MobilityBonusPerSquare = Score.MakeScore(+5, +3);
+    // MobilityBonus[PieceType][attacked] contains bonuses for middle and end game,
+    // indexed by piece type and number of attacked squares in the mobility area.
+    public uint[][] MobilityBonus =
+    {
+        /* None */
+        new uint[] { },
+
+        /* Pawn */
+        new uint[] { },
+
+        /* Knight */
+        new uint[] { Score.MakeScore(-62,-81), Score.MakeScore(-53,-56), Score.MakeScore(-12,-30), Score.MakeScore( -4,-14), Score.MakeScore(  3,  8), Score.MakeScore( 13, 15), Score.MakeScore( 22, 23), Score.MakeScore( 28, 27), Score.MakeScore( 33, 33) },
+    
+        /* Bishop */
+        new uint[] { Score.MakeScore(-48, -59), Score.MakeScore(-20, -23), Score.MakeScore(16, -3), Score.MakeScore(26, 13), Score.MakeScore(38, 24), Score.MakeScore(51, 42), Score.MakeScore(55, 54), Score.MakeScore(63, 57), Score.MakeScore(63, 65), Score.MakeScore(68, 73), Score.MakeScore(81, 78), Score.MakeScore(81, 86), Score.MakeScore(91, 88), Score.MakeScore(98, 97) },
+        
+        /* Rook */
+        new uint[] { Score.MakeScore(-58, -76), Score.MakeScore(-27, -18), Score.MakeScore(-15, 28), Score.MakeScore(-10, 55), Score.MakeScore(-5, 69), Score.MakeScore(-2, 82), Score.MakeScore(9, 112), Score.MakeScore(16, 118), Score.MakeScore(30, 132), Score.MakeScore(29, 142), Score.MakeScore(32, 155), Score.MakeScore(38, 165), Score.MakeScore(46, 166), Score.MakeScore(48, 169), Score.MakeScore(58, 171) },
+
+        /* Queen */
+        new uint[] { Score.MakeScore(-39, -36), Score.MakeScore(-21, -15), Score.MakeScore(3, 8), Score.MakeScore(3, 18), Score.MakeScore(14, 34), Score.MakeScore(22, 54), Score.MakeScore(28, 61), Score.MakeScore(41, 73), Score.MakeScore(43, 79), Score.MakeScore(48, 92), Score.MakeScore(56, 94), Score.MakeScore(60, 104), Score.MakeScore(60, 113), Score.MakeScore(66, 120), Score.MakeScore(67, 123), Score.MakeScore(70, 126), Score.MakeScore(71, 133), Score.MakeScore(73, 136), Score.MakeScore(79, 140), Score.MakeScore(88, 143), Score.MakeScore(88, 148), Score.MakeScore(99, 166), Score.MakeScore(102, 170), Score.MakeScore(102, 175), Score.MakeScore(106, 184), Score.MakeScore(109, 191), Score.MakeScore(113, 206), Score.MakeScore(116, 212) },
+
+        /* King */
+        new uint[] { }
+    };
 
     // Not from Stockfish.
     public uint FirstShieldingPawnKingSafetyBonus = Score.MakeScore(+20, +10);
@@ -715,7 +757,7 @@ public class EvaluationData
     public uint HalfOpenFileNextToKingPenalty = Score.MakeScore(-20, -30);
     public uint OpenFileNextToKingPenalty = Score.MakeScore(-40, -50);
 
-    public uint ColourWeaknessPenaltyPerPawn = Score.MakeScore(-3, -8);
+    public uint ColorWeaknessPenaltyPerPawn = Score.MakeScore(-3, -8);
 
     public uint KnightOutpostBonus = Score.MakeScore(+54, +34);
     public uint BishopOutpostBonus = Score.MakeScore(+31, +25);
@@ -750,7 +792,7 @@ public class EvaluationData
     //    HalfOpenFileNextToKingPenalty.Interpolate(gamePhase);
     //    OpenFileNextToKingPenalty.Interpolate(gamePhase);
     //
-    //    ColourWeaknessPenaltyPerPawn.Interpolate(gamePhase);
+    //    ColorWeaknessPenaltyPerPawn.Interpolate(gamePhase);
     //
     //    KnightOutpostBonus.Interpolate(gamePhase);
     //    BishopOutpostBonus.Interpolate(gamePhase);
@@ -791,16 +833,38 @@ public class EvaluationData
         BishopPairInOpenPositionBonus = Score.MakeScore(+60, +40);
         KnightPairInClosedPositionBonus = Score.MakeScore(+50, +30);
         BishopPairInClosedPositionBonus = Score.MakeScore(+30, +10);
-    
-        MobilityBonusPerSquare = Score.MakeScore(+5, +3);
-    
+
+        MobilityBonus = new[]
+        {
+            /* None */
+            new uint[] { },
+
+            /* Pawn */
+            new uint[] { },
+
+            /* Knight */
+            new uint[] { Score.MakeScore(-62, -81), Score.MakeScore(-53, -56), Score.MakeScore(-12, -30), Score.MakeScore(-4, -14), Score.MakeScore(3, 8), Score.MakeScore(13, 15), Score.MakeScore(22, 23), Score.MakeScore(28, 27), Score.MakeScore(33, 33) },
+        
+            /* Bishop */
+            new uint[] { Score.MakeScore(-48, -59), Score.MakeScore(-20, -23), Score.MakeScore(16, -3), Score.MakeScore(26, 13), Score.MakeScore(38, 24), Score.MakeScore(51, 42), Score.MakeScore(55, 54), Score.MakeScore(63, 57), Score.MakeScore(63, 65), Score.MakeScore(68, 73), Score.MakeScore(81, 78), Score.MakeScore(81, 86), Score.MakeScore(91, 88), Score.MakeScore(98, 97) },
+            
+            /* Rook */
+            new uint[] { Score.MakeScore(-58, -76), Score.MakeScore(-27, -18), Score.MakeScore(-15, 28), Score.MakeScore(-10, 55), Score.MakeScore(-5, 69), Score.MakeScore(-2, 82), Score.MakeScore(9, 112), Score.MakeScore(16, 118), Score.MakeScore(30, 132), Score.MakeScore(29, 142), Score.MakeScore(32, 155), Score.MakeScore(38, 165), Score.MakeScore(46, 166), Score.MakeScore(48, 169), Score.MakeScore(58, 171) },
+
+            /* Queen */
+            new uint[] { Score.MakeScore(-39, -36), Score.MakeScore(-21, -15), Score.MakeScore(3, 8), Score.MakeScore(3, 18), Score.MakeScore(14, 34), Score.MakeScore(22, 54), Score.MakeScore(28, 61), Score.MakeScore(41, 73), Score.MakeScore(43, 79), Score.MakeScore(48, 92), Score.MakeScore(56, 94), Score.MakeScore(60, 104), Score.MakeScore(60, 113), Score.MakeScore(66, 120), Score.MakeScore(67, 123), Score.MakeScore(70, 126), Score.MakeScore(71, 133), Score.MakeScore(73, 136), Score.MakeScore(79, 140), Score.MakeScore(88, 143), Score.MakeScore(88, 148), Score.MakeScore(99, 166), Score.MakeScore(102, 170), Score.MakeScore(102, 175), Score.MakeScore(106, 184), Score.MakeScore(109, 191), Score.MakeScore(113, 206), Score.MakeScore(116, 212) },
+
+            /* King */
+            new uint[] { }
+        };
+
         FirstShieldingPawnKingSafetyBonus = Score.MakeScore(+20, +10);
         SecondShieldingPawnKingSafetyBonus = Score.MakeScore(+10, +5);
     
         HalfOpenFileNextToKingPenalty = Score.MakeScore(-20, -30);
         OpenFileNextToKingPenalty = Score.MakeScore(-40, -50);
     
-        ColourWeaknessPenaltyPerPawn = Score.MakeScore(-3, -8);
+        ColorWeaknessPenaltyPerPawn = Score.MakeScore(-3, -8);
     
         KnightOutpostBonus = Score.MakeScore(+54, +34);
         BishopOutpostBonus = Score.MakeScore(+31, +25);

@@ -126,7 +126,7 @@ public class AIPlayer
     }
 
 
-    public static int Perft(int depth, int startingDepth, Move previousMove = null)
+    public static int Perft(int depth, int startingDepth, Move previousMove = null, Move ancestorMove = null)
     {
         if (depth == startingDepth - 1 && depth == 0)
         {
@@ -134,19 +134,30 @@ public class AIPlayer
             Console.WriteLine(previousMove + ": 1");
         }
 
+        //if (depth == startingDepth - 1 && depth == 0 && ancestorMove.ToString() == "b2b3")
+        //{
+        //    _moves += previousMove + ": 1\n";
+        //    Console.WriteLine(previousMove + ": 1");
+        //}
+
         if (depth == 0)
         {
             return 1;
         }
 
-        var moves = GenerateAllLegalMoves(promotionMode : 0);
+        var moves = Board.GenerateAllLegalMoves(promotionMode : 0);
 
         int numPositions = 0;
 
         foreach (var move in moves)
         {
+            //if (depth == startingDepth && move.ToString() == "b2b3")
+            //{
+            //    int a = 0;
+            //}
+            
             Board.MakeMove(move);
-            numPositions += Perft(depth - 1, startingDepth, move);
+            numPositions += Perft(depth - 1, startingDepth, move, previousMove);
             Board.UnmakeMove(move);
         }
 
@@ -476,7 +487,7 @@ public class AIPlayer
 
         Move bestMove = null;
 
-        var moves = GenerateAllLegalMoves();
+        var moves = Board.GenerateAllLegalMoves(promotionMode : 2);
         if (UseMoveOrdering) OrderMoves(moves, plyFromRoot, gamePhase);
 
         if (moves.Count == 0)
@@ -733,7 +744,7 @@ public class AIPlayer
             return evaluation;
         }
 
-        var moves = GenerateAllLegalMoves(true);
+        var moves = Board.GenerateAllLegalMoves(capturesOnly : true, promotionMode : 2);
 
         if (moves.Count == 0)
         {
@@ -745,7 +756,7 @@ public class AIPlayer
 
         pvLine = new();
 
-        if (UseMoveOrdering) OrderMoves(moves, -1, gamePhase, false);
+        if (UseMoveOrdering) OrderMoves(moves, -1, gamePhase);
 
         bool isEndGame = gamePhase < Evaluation.EndgamePhaseScore;
 
@@ -755,7 +766,7 @@ public class AIPlayer
         {
             // Delta pruning
             if (!isEndGame)
-                if (Evaluation.GetPieceValue(move.CapturedPieceType, Board.OpponentTurn, gamePhase) + 200 <= alpha) continue;
+                if (Evaluation.GetPieceValue(move.CapturedPieceType) + 200 <= alpha) continue;
 
             Board.MakeMove(move);
 
@@ -792,19 +803,6 @@ public class AIPlayer
 
     public static void StoreKillerMove(Move move, int plyFromRoot)
     {
-        //Move firstKillerMove = KillerMoves[0, plyFromRoot];
-        //
-        //// Only store the move if it's not already the first.
-        //if (move.Equals(firstKillerMove)) return;
-
-        //// Shift the previous moves up by 1.
-        //const int startingIndex = _maxKillerMoves - 1;
-        //for (int i = startingIndex; i > 0; i--)
-        //    KillerMoves[i, plyFromRoot] = KillerMoves[i - 1, plyFromRoot];
-
-        // Store the move in the first slot.
-        //KillerMoves[0, plyFromRoot] = move;
-
         if (KillerMoves[0, plyFromRoot] != null)
             KillerMoves[1, plyFromRoot] = new(KillerMoves[0, plyFromRoot]);
 
@@ -812,31 +810,9 @@ public class AIPlayer
     }
 
 
-    public static List<Move> GenerateAllLegalMoves(bool capturesOnly = false, int promotionMode = 2)
+    private static void OrderMoves(List<Move> moves, int plyFromRoot, int gamePhase)
     {
-        List<Move> moves = new();
-
-        foreach (var bitboard in Board.Pieces)
-        {
-            ulong bit = 1;
-            while (bit != 0)
-            {
-                if ((bitboard.Value[Board.CurrentTurn] & bit) != 0)
-                {
-                    moves.AddRange(Board.GenerateLegalMovesList(bitboard.Value[Board.CurrentTurn] & bit, promotionMode, capturesOnly));
-                }
-
-                bit <<= 1;
-            }
-        }
-
-        return moves;
-    }
-
-    private static void OrderMoves(List<Move> moves, int plyFromRoot, int gamePhase, bool useTranspositionTable = true)
-    {
-        Move hashMove = null;
-        if (useTranspositionTable) hashMove = TranspositionTable.GetStoredMove();
+        Move hashMove = TranspositionTable.GetStoredMove();
 
         var moveScores = new List<int>();
         foreach (var move in moves)
@@ -851,7 +827,7 @@ public class AIPlayer
             // Sort captures.
             else if (move.CapturedPieceType != Piece.None)
             {
-                moveScoreGuess += 10 * Evaluation.GetPieceValue(move.CapturedPieceType, Board.OpponentTurn, gamePhase) - Evaluation.GetPieceValue(move.PieceType, Board.CurrentTurn, gamePhase);
+                moveScoreGuess += 10 * Evaluation.GetPieceValue(move.CapturedPieceType) - Evaluation.GetPieceValue(move.PieceType);
                 moveScoreGuess += 10000;
 
                 // MVV-LVA has poor performance compared to the above code (in terms of nodes searched).
@@ -868,12 +844,14 @@ public class AIPlayer
                 // Sort non-killer quiet moves by history heuristic, piece square tables, etc.
                 else
                 {
-                    moveScoreGuess += HistoryHeuristic[BitboardUtility.FirstSquareIndex(move.StartSquare), BitboardUtility.FirstSquareIndex(move.TargetSquare)];
+                    int targetSquareIndex = BitboardUtility.FirstSquareIndex(move.TargetSquare);
 
-                    moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece, BitboardUtility.FirstSquareIndex(move.TargetSquare), Board.CurrentTurn == 0, gamePhase);
+                    moveScoreGuess += HistoryHeuristic[BitboardUtility.FirstSquareIndex(move.StartSquare), targetSquareIndex];
 
-                    moveScoreGuess += Evaluation.GetPieceValue(move.PromotionPiece, Board.CurrentTurn, gamePhase);
-                    if ((Board.PawnAttackedSquares[Board.OpponentTurn] & move.TargetSquare) != 0) moveScoreGuess -= 350;
+                    //moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece, targetSquareIndex, Board.CurrentTurn == 0, gamePhase);
+
+                    moveScoreGuess += Evaluation.GetPieceValue(move.PromotionPiece);
+                    if (Board.PawnAttackersTo(targetSquareIndex, Board.CurrentTurn, Board.OpponentTurn) != 0) moveScoreGuess -= 350;
                 }
             }
 
@@ -909,7 +887,7 @@ public class AIPlayer
             (BitboardUtility.OccupiedSquaresCount(Board.OccupiedSquares[1]) == 2 && (Board.Bishops[1] != 0 || Board.Knights[1] != 0)) || /* King vs king and bishop or king vs king and knight. */
             ((BitboardUtility.OccupiedSquaresCount(Board.OccupiedSquares[0]) == 2 && BitboardUtility.OccupiedSquaresCount(Board.Bishops[0]) == 1) &&
             (BitboardUtility.OccupiedSquaresCount(Board.OccupiedSquares[1]) == 2 && BitboardUtility.OccupiedSquaresCount(Board.Bishops[1]) == 1) &&
-            BitboardUtility.FirstSquareIndex(Board.Bishops[0]) % 2 == BitboardUtility.FirstSquareIndex(Board.Bishops[1]) % 2); /* King and bishop vs king and bishop with bishops of the same colour. */
+            BitboardUtility.FirstSquareIndex(Board.Bishops[0]) % 2 == BitboardUtility.FirstSquareIndex(Board.Bishops[1]) % 2); /* King and bishop vs king and bishop with bishops of the same color. */
     }
 
 

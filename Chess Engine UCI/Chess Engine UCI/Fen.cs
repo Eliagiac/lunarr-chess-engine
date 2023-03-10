@@ -39,10 +39,10 @@ public class Fen
                 }
                 else
                 {
-                    int pieceColour = char.IsUpper(symbol) ? Piece.White : Piece.Black;
+                    int pieceColor = char.IsUpper(symbol) ? Piece.White : Piece.Black;
                     int pieceType = pieceTypeFromSymbol[char.ToLower(symbol)];
 
-                    Board.Pieces[pieceType][pieceColour == Piece.White ? 0 : 1] |= 1UL << (rank * 8 + file);
+                    Board.Pieces[pieceType][pieceColor == Piece.White ? 0 : 1] |= 1UL << (rank * 8 + file);
 
                     file++;
 
@@ -73,7 +73,7 @@ public class Fen
 
         Board.UpdateAllOccupiedSquares();
         Board.UpdateBoardInformation();
-        Board.GenerateAttackedSquares();
+        //Board.GenerateAttackedSquares();
         Board.UpdateBoardInformation();
         Board.ZobristKey = Zobrist.CalculateZobristKey();
 

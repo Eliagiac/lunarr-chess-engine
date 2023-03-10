@@ -17,7 +17,7 @@ public static class IntExtensions
 {
     public static int PieceType(this int piece) => piece & 0b111;
 
-    public static int PieceColour(this int piece) => piece & 0b1000;
+    public static int PieceColor(this int piece) => piece & 0b1000;
 }
 
 public static class PieceExtensions
