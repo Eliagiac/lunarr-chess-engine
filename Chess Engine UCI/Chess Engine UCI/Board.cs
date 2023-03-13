@@ -1,9 +1,6 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Data;
-using System.Diagnostics;
-using System.Threading;
+using static BitboardUtility;
+using static Piece;
+using static Mask;
 
 public class Board
 {
@@ -14,12 +11,12 @@ public class Board
     public static Dictionary<int, ulong[]> Pieces { get; set; }
 
 
-    public static ulong[] Pawns => Pieces[Piece.Pawn];
-    public static ulong[] Knights => Pieces[Piece.Knight];
-    public static ulong[] Bishops => Pieces[Piece.Bishop];
-    public static ulong[] Rooks => Pieces[Piece.Rook];
-    public static ulong[] Queens => Pieces[Piece.Queen];
-    public static ulong[] Kings => Pieces[Piece.King];
+    public static ulong[] Pawns => Pieces[Pawn];
+    public static ulong[] Knights => Pieces[Knight];
+    public static ulong[] Bishops => Pieces[Bishop];
+    public static ulong[] Rooks => Pieces[Rook];
+    public static ulong[] Queens => Pieces[Queen];
+    public static ulong[] Kings => Pieces[King];
 
 
     // 0 = white to move.
@@ -167,12 +164,12 @@ public class Board
         Squares = new int[64];
         Pieces = new()
         {
-            [Piece.King] = new ulong[2],
-            [Piece.Pawn] = new ulong[2],
-            [Piece.Knight] = new ulong[2],
-            [Piece.Bishop] = new ulong[2],
-            [Piece.Rook] = new ulong[2],
-            [Piece.Queen] = new ulong[2],
+            [King] = new ulong[2],
+            [Pawn] = new ulong[2],
+            [Knight] = new ulong[2],
+            [Bishop] = new ulong[2],
+            [Rook] = new ulong[2],
+            [Queen] = new ulong[2],
         };
         PositionHistory = new();
         PsqtScore = new uint[2];
@@ -276,8 +273,8 @@ public class Board
 
     public static void UpdateBoardInformation(ulong startSquare = 0, ulong targetSquare = 0, bool enPassant = false, ulong enPassantTarget = 0, bool castling = false, ulong castledRookSquare = 0, ulong castledRookTarget = 0)
     {
-        KingPosition[0] = BitboardUtility.FirstSquareIndex(Kings[0]);
-        KingPosition[1] = BitboardUtility.FirstSquareIndex(Kings[1]);
+        KingPosition[0] = FirstSquareIndex(Kings[0]);
+        KingPosition[1] = FirstSquareIndex(Kings[1]);
 
         //if (startSquare != 0) UpdateAttackedSquares(startSquare, targetSquare, enPassant, enPassantTarget, castling, castledRookSquare, castledRookTarget);
 
@@ -325,25 +322,25 @@ public class Board
 
     public static void MakeMove(Move move)
     {
-        int pieceTypeOrPromotion = move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece;
+        int pieceTypeOrPromotion = move.PromotionPiece == None ? move.PieceType : move.PromotionPiece;
 
         // Empty the move's start square.
         RemovePiece(move.StartSquare, move.PieceType, CurrentTurn);
 
         // Remove any captured piece.
-        if (move.CapturedPieceType != Piece.None) RemovePiece(move.TargetSquare, move.CapturedPieceType, OpponentTurn);
+        if (move.CapturedPieceType != None) RemovePiece(move.TargetSquare, move.CapturedPieceType, OpponentTurn);
 
         // Place moved piece on the target square (unless promoting).
         AddPiece(move.TargetSquare, pieceTypeOrPromotion, CurrentTurn);
 
 
         // Remove old en passant square.
-        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(BitboardUtility.FirstSquareIndex(EnPassantSquare)) + 1 : 0];
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
         bool enPassant = false;
         ulong enPassantTargetBackup = 0;
         // Special pawn moves.
-        if (move.PieceType == Piece.Pawn) MakePawnMove();
+        if (move.PieceType == Pawn) MakePawnMove();
 
         // Remove previous en passant target.
         else
@@ -353,7 +350,7 @@ public class Board
         }
 
         // Update en passant square.
-        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(BitboardUtility.FirstSquareIndex(EnPassantSquare)) + 1 : 0];
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
 
         // Save the current castling rights
@@ -361,30 +358,30 @@ public class Board
         uint oldCastlingRights = FourBitCastlingRights();
 
         // Remove castling rights if a rook is captured.
-        if (move.CapturedPieceType == Piece.Rook) RemoveRookCastlingRights(move.TargetSquare, OpponentTurn == 0 ? Mask.WhiteRank : Mask.BlackRank);
+        if (move.CapturedPieceType == Rook) RemoveRookCastlingRights(move.TargetSquare, OpponentTurn == 0 ? WhiteRank : BlackRank);
 
         // Remove castling rights if the king moves.
-        if (move.PieceType == Piece.King) CastlingRights &= ~(CurrentTurn == 0 ? Mask.WhiteRank : Mask.BlackRank);
+        if (move.PieceType == King) CastlingRights &= ~(CurrentTurn == 0 ? WhiteRank : BlackRank);
 
         // Remove castling rights if the rook moves.
-        if (move.PieceType == Piece.Rook) RemoveRookCastlingRights(move.StartSquare, CurrentTurn == 0 ? Mask.WhiteRank : Mask.BlackRank);
+        if (move.PieceType == Rook) RemoveRookCastlingRights(move.StartSquare, CurrentTurn == 0 ? WhiteRank : BlackRank);
 
 
         ulong castledRookSquare = 0;
         ulong castledRookTarget = 0;
         // If the king is castling, the rook should follow it.
-        if (move.PieceType == Piece.King)
+        if (move.PieceType == King)
         {
             // Queenside castling
             if (move.StartSquare >> 2 == move.TargetSquare)
             {
                 // Add rook on the target square.
                 castledRookTarget = move.TargetSquare << 1;
-                AddPiece(castledRookTarget, Piece.Rook, CurrentTurn);
+                AddPiece(castledRookTarget, Rook, CurrentTurn);
 
                 // Remove it from its start square.
                 castledRookSquare = move.StartSquare >> 4;
-                RemovePiece(castledRookSquare, Piece.Rook, CurrentTurn);
+                RemovePiece(castledRookSquare, Rook, CurrentTurn);
             }
 
             // Kingside castling
@@ -392,11 +389,11 @@ public class Board
             {
                 // Add rook on the target square.
                 castledRookTarget = move.TargetSquare >> 1;
-                AddPiece(castledRookTarget, Piece.Rook, CurrentTurn);
+                AddPiece(castledRookTarget, Rook, CurrentTurn);
 
                 // Remove it from its start square.
                 castledRookSquare = move.StartSquare << 3;
-                RemovePiece(castledRookSquare, Piece.Rook, CurrentTurn);
+                RemovePiece(castledRookSquare, Rook, CurrentTurn);
             }
         }
 
@@ -427,7 +424,7 @@ public class Board
                 enPassantTargetBackup = EnPassantTarget;
 
                 // Remove en passant target.
-                RemovePiece(EnPassantTarget, Piece.Pawn, OpponentTurn);
+                RemovePiece(EnPassantTarget, Pawn, OpponentTurn);
 
                 EnPassantTarget &= 0;
                 EnPassantSquare &= 0;
@@ -457,7 +454,7 @@ public class Board
         void RemoveRookCastlingRights(ulong rookPosition, ulong rank)
         {
             // Only consider rooks at the edge of the board.
-            ulong edgeRookPosition = rookPosition & Mask.RookEdge & rank;
+            ulong edgeRookPosition = rookPosition & RookEdge & rank;
 
             // Remove castling rights if the captured rook was 2 squares
             // to the left or 1 square to the right of the castling target.
@@ -467,8 +464,8 @@ public class Board
 
     public static void UnmakeMove(Move move)
     {
-        int pieceTypeOrPromotedPawn = move.PromotionPiece == Piece.None ? move.PieceType : Piece.Pawn;
-        int pieceTypeOrPromotion = move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece;
+        int pieceTypeOrPromotedPawn = move.PromotionPiece == None ? move.PieceType : Pawn;
+        int pieceTypeOrPromotion = move.PromotionPiece == None ? move.PieceType : move.PromotionPiece;
 
         // Restore current turn before anything else.
         CurrentTurn ^= 1;
@@ -496,38 +493,38 @@ public class Board
         RemovePiece(move.TargetSquare, pieceTypeOrPromotion, CurrentTurn);
 
         // Restore any captured piece.
-        if (move.CapturedPieceType != Piece.None) AddPiece(move.TargetSquare, move.CapturedPieceType, OpponentTurn);
+        if (move.CapturedPieceType != None) AddPiece(move.TargetSquare, move.CapturedPieceType, OpponentTurn);
 
 
         // Remove old en passant square.
-        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(BitboardUtility.FirstSquareIndex(EnPassantSquare)) + 1 : 0];
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
         // Reset en passant data.
         EnPassantSquare = move.EnPassantSquareBackup;
         EnPassantTarget = move.EnPassantTargetBackup;
 
         // Add new en passant square.
-        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(BitboardUtility.FirstSquareIndex(EnPassantSquare)) + 1 : 0];
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
 
         bool enPassant = false;
-        if (move.PieceType == Piece.Pawn) UnmakePawnMove();
+        if (move.PieceType == Pawn) UnmakePawnMove();
 
         ulong castledRookSquare = 0;
         ulong castledRookTarget = 0;
         // If the king is castling, the rook should follow it.
-        if (move.PieceType == Piece.King)
+        if (move.PieceType == King)
         {
             // Queenside castling
             if (move.StartSquare >> 2 == move.TargetSquare)
             {
                 // Remove rook from the target square.
                 castledRookTarget = move.TargetSquare << 1;
-                RemovePiece(castledRookTarget, Piece.Rook, CurrentTurn);
+                RemovePiece(castledRookTarget, Rook, CurrentTurn);
 
                 // Add it to its start square.
                 castledRookSquare = move.StartSquare >> 4;
-                AddPiece(castledRookSquare, Piece.Rook, CurrentTurn);
+                AddPiece(castledRookSquare, Rook, CurrentTurn);
             }
 
             // Kingside castling
@@ -535,11 +532,11 @@ public class Board
             {
                 // Remove rook from the target square.
                 castledRookTarget = move.TargetSquare >> 1;
-                RemovePiece(castledRookTarget, Piece.Rook, CurrentTurn);
+                RemovePiece(castledRookTarget, Rook, CurrentTurn);
 
                 // Add it to its start square.
                 castledRookSquare = move.StartSquare << 3;
-                AddPiece(castledRookSquare, Piece.Rook, CurrentTurn);
+                AddPiece(castledRookSquare, Rook, CurrentTurn);
             }
         }
 
@@ -552,7 +549,7 @@ public class Board
         {
             if (move.TargetSquare == EnPassantSquare)
             {
-                AddPiece(EnPassantTarget, Piece.Pawn, OpponentTurn);
+                AddPiece(EnPassantTarget, Pawn, OpponentTurn);
                 enPassant = true;
             }
         }
@@ -560,7 +557,7 @@ public class Board
 
     private static void AddPiece(ulong square, int pieceType, int colorIndex)
     {
-        int squareIndex = BitboardUtility.FirstSquareIndex(square);
+        int squareIndex = FirstSquareIndex(square);
 
         Squares[squareIndex] = (colorIndex << 3) | pieceType;
 
@@ -586,9 +583,9 @@ public class Board
 
     private static void RemovePiece(ulong square, int pieceType, int colorIndex)
     {
-        int squareIndex = BitboardUtility.FirstSquareIndex(square);
+        int squareIndex = FirstSquareIndex(square);
 
-        Squares[squareIndex] = Piece.None;
+        Squares[squareIndex] = None;
 
         // Add the piece to the specified bitboard.
         Pieces[pieceType][colorIndex] &= ~square;
@@ -627,7 +624,7 @@ public class Board
         move.EnPassantTargetBackup = EnPassantTarget;
 
         // Remove old en passant square.
-        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(BitboardUtility.FirstSquareIndex(EnPassantSquare)) + 1 : 0];
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
         EnPassantSquare = 0;
         EnPassantTarget = 0;
@@ -650,7 +647,7 @@ public class Board
         EnPassantTarget = move.EnPassantTargetBackup;
 
         // Add new en passant square.
-        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(BitboardUtility.FirstSquareIndex(EnPassantSquare)) + 1 : 0];
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
         ZobristKey ^= Zobrist.sideToMove;
 
@@ -679,13 +676,13 @@ public class Board
 
     public static bool IsLegal(Move move)
     {
-        int startSquareIndex = BitboardUtility.FirstSquareIndex(move.StartSquare);
-        int targetSquareIndex = BitboardUtility.FirstSquareIndex(move.TargetSquare);
+        int startSquareIndex = FirstSquareIndex(move.StartSquare);
+        int targetSquareIndex = FirstSquareIndex(move.TargetSquare);
 
         int pieceType = PieceType(startSquareIndex);
 
         bool inCheck = IsKingInCheck[CurrentTurn];
-        bool isKing = pieceType == Piece.King;
+        bool isKing = pieceType == King;
 
         if (isKing)
         {
@@ -720,8 +717,8 @@ public class Board
                 ulong attacks = 0;
                 if ((attacks = AttackersTo(KingPosition[CurrentTurn], CurrentTurn, OpponentTurn, AllOccupiedSquares)) != 0)
                 {
-                    attackerIndex = BitboardUtility.FirstSquareIndex(attacks);
-                    secondAttackerIndex = BitboardUtility.LastSquareIndex(attacks);
+                    attackerIndex = FirstSquareIndex(attacks);
+                    secondAttackerIndex = LastSquareIndex(attacks);
 
                     if (secondAttackerIndex == attackerIndex) secondAttackerIndex = -1;
                 }
@@ -729,7 +726,7 @@ public class Board
                 if (attackerIndex != -1)
                 {
                     int attackerType = PieceType(attackerIndex, slidingPiecesOnly : true);
-                    if (attackerType != Piece.None)
+                    if (attackerType != None)
                     {
                         if (MoveData.SpecificMasks[attackerType][attackerIndex, targetSquareIndex] != 0) return false;
                     }
@@ -737,7 +734,7 @@ public class Board
                     if (secondAttackerIndex != -1)
                     {
                         int secondAttackerType = PieceType(secondAttackerIndex, slidingPiecesOnly: true);
-                        if (secondAttackerType != Piece.None)
+                        if (secondAttackerType != None)
                         {
                             if (MoveData.SpecificMasks[secondAttackerType][secondAttackerIndex, targetSquareIndex] != 0) return false;
                         }
@@ -756,8 +753,8 @@ public class Board
                 ulong attacks = AttackersTo(KingPosition[CurrentTurn], CurrentTurn, OpponentTurn, AllOccupiedSquares);
                 if (attacks != 0)
                 {
-                    attackerIndex = BitboardUtility.FirstSquareIndex(attacks);
-                    secondAttackerIndex = BitboardUtility.LastSquareIndex(attacks);
+                    attackerIndex = FirstSquareIndex(attacks);
+                    secondAttackerIndex = LastSquareIndex(attacks);
 
                     if (secondAttackerIndex == attackerIndex) secondAttackerIndex = -1;
                 }
@@ -766,7 +763,7 @@ public class Board
                 if (secondAttackerIndex != -1) return false;
 
                 int attackerType = PieceType(attackerIndex, slidingPiecesOnly : true);
-                if (attackerType != Piece.None)
+                if (attackerType != None)
                 {
                     // A check must be stoppped by blocking the attack.
                     if ((move.TargetSquare & MoveData.Masks[attackerIndex, KingPosition[CurrentTurn]]) == 0) return false;
@@ -777,24 +774,24 @@ public class Board
                 {
                     // The move is illegal if we are not capturing the attacker (which may also be captured using en passant).
                     if (targetSquareIndex != attackerIndex &&
-                        !(pieceType == Piece.Pawn && move.TargetSquare == EnPassantSquare && (1UL << attackerIndex) == EnPassantTarget)) return false;
+                        !(pieceType == Pawn && move.TargetSquare == EnPassantSquare && (1UL << attackerIndex) == EnPassantTarget)) return false;
                 }
             }
 
             ulong slidingAttackers = SlidingAttackersTo(startSquareIndex, CurrentTurn, OpponentTurn, AllOccupiedSquares);
             while (slidingAttackers != 0)
             {
-                int attackerIndex = BitboardUtility.FirstSquareIndex(slidingAttackers);
-                int attackerType = GetRank(attackerIndex) == GetRank(startSquareIndex) || GetFile(attackerIndex) == GetFile(startSquareIndex) ? Piece.Rook : Piece.Bishop;
+                int attackerIndex = FirstSquareIndex(slidingAttackers);
+                int attackerType = GetRank(attackerIndex) == GetRank(startSquareIndex) || GetFile(attackerIndex) == GetFile(startSquareIndex) ? Rook : Bishop;
 
 
                 ulong attackRayToKing = MoveData.SpecificMasks[attackerType][attackerIndex, KingPosition[CurrentTurn]];
                 if (attackRayToKing != 0 && (move.TargetSquare & attackRayToKing) == 0)
                 {
-                    if (BitboardUtility.OccupiedSquaresCount(AllOccupiedSquares & attackRayToKing) == 3) return false;
+                    if (OccupiedSquaresCount(AllOccupiedSquares & attackRayToKing) == 3) return false;
 
-                    if (pieceType == Piece.Pawn && move.TargetSquare == EnPassantSquare && 
-                        BitboardUtility.OccupiedSquaresCount(AllOccupiedSquares & attackRayToKing) == 4) return false;
+                    if (pieceType == Pawn && move.TargetSquare == EnPassantSquare && 
+                        OccupiedSquaresCount(AllOccupiedSquares & attackRayToKing) == 4) return false;
                 }
 
                 slidingAttackers &= slidingAttackers - 1;
@@ -809,13 +806,13 @@ public class Board
         // Available moves are stored in a bitboard.
         ulong moves = 0;
 
-        int squareIndex = BitboardUtility.FirstSquareIndex(square);
+        int squareIndex = FirstSquareIndex(square);
 
         if (PieceColorIndex(squareIndex) == OpponentTurn) return new();
 
         int pieceType = PieceType(squareIndex);
 
-        if (pieceType == Piece.None) return new();
+        if (pieceType == None) return new();
 
         if (pieceType.IsSlidingPiece())
         {
@@ -824,7 +821,7 @@ public class Board
 
         else
         {
-            if (pieceType == Piece.Pawn)
+            if (pieceType == Pawn)
             {
                 ulong opponentBlockers = OccupiedSquares[OpponentTurn];
 
@@ -841,10 +838,10 @@ public class Board
                 // For other pieces, all moves are allowed (friendly blockers will be removed later).
                 moves |= MoveData.Moves[pieceType][squareIndex, 0];
 
-                if (pieceType == Piece.King)
+                if (pieceType == King)
                 {
                     ulong relevantOccupiedSquares = AllOccupiedSquares & (0x6eUL << (CurrentTurn * 56));
-                    ulong relevantCastlingRights = CastlingRights & (CurrentTurn == 0 ? Mask.WhiteInitialCastlingRights : Mask.BlackInitialCastlingRights);
+                    ulong relevantCastlingRights = CastlingRights & (CurrentTurn == 0 ? WhiteInitialCastlingRights : BlackInitialCastlingRights);
                     moves |= relevantCastlingRights & ~(relevantOccupiedSquares << 1 | relevantOccupiedSquares | relevantOccupiedSquares >> 1);
                 }
             }
@@ -859,17 +856,17 @@ public class Board
         var movesList = new Stack<Move>();
         while (moves != 0)
         {
-            int targetSquareIndex = BitboardUtility.FirstSquareIndex(moves);
+            int targetSquareIndex = FirstSquareIndex(moves);
             ulong target = 1UL << targetSquareIndex;
 
             int capturedPieceType = PieceType(targetSquareIndex);
 
-            if (pieceType == Piece.Pawn && (target & Mask.PromotionRanks) != 0)
+            if (pieceType == Pawn && (target & PromotionRanks) != 0)
             {
-                movesList.Push(new(pieceType, square, target, capturedPieceType, Piece.Queen));
-                if (promotionMode < 2) movesList.Push(new(pieceType, square, target, capturedPieceType, Piece.Knight));
-                if (promotionMode == 0) movesList.Push(new(pieceType, square, target, capturedPieceType, Piece.Bishop));
-                if (promotionMode == 0) movesList.Push(new(pieceType, square, target, capturedPieceType, Piece.Rook));
+                movesList.Push(new(pieceType, square, target, capturedPieceType, Queen));
+                if (promotionMode < 2) movesList.Push(new(pieceType, square, target, capturedPieceType, Knight));
+                if (promotionMode == 0) movesList.Push(new(pieceType, square, target, capturedPieceType, Bishop));
+                if (promotionMode == 0) movesList.Push(new(pieceType, square, target, capturedPieceType, Rook));
             }
 
             else movesList.Push(new(pieceType, square, target, capturedPieceType));
@@ -901,7 +898,7 @@ public class Board
                     // If the bit is occupied, fill its slot in the Squares array with the piece's info.
                     if ((bitboard.Value[color] & bit) != 0)
                     {
-                        Squares[index] = bitboard.Key | (color == 0 ? Piece.White : Piece.Black);
+                        Squares[index] = bitboard.Key | (color == 0 ? White : Black);
                     }
                 }
 
@@ -918,98 +915,24 @@ public class Board
     {
         Pieces = new()
         {
-            [Piece.King] = new ulong[2],
-            [Piece.Pawn] = new ulong[2],
-            [Piece.Knight] = new ulong[2],
-            [Piece.Bishop] = new ulong[2],
-            [Piece.Rook] = new ulong[2],
-            [Piece.Queen] = new ulong[2],
+            [King] = new ulong[2],
+            [Pawn] = new ulong[2],
+            [Knight] = new ulong[2],
+            [Bishop] = new ulong[2],
+            [Rook] = new ulong[2],
+            [Queen] = new ulong[2],
         };
 
         ulong bit = 1;
 
         for (int i = 0; i < 64; i++)
         {
-            if (Squares[i].PieceType() != Piece.None)
-                Pieces[Squares[i].PieceType()][Squares[i].PieceColor() == Piece.White ? 0 : 1] |= bit;
+            if (Squares[i].PieceType() != None)
+                Pieces[Squares[i].PieceType()][Squares[i].PieceColor() == White ? 0 : 1] |= bit;
 
             bit <<= 1;
         }
-
-        //GenerateAttackedSquares();
     }
-
-
-    //public static void UpdateAttackedSquares(ulong startSquare, ulong targetSquare, bool enPassant, ulong enPassantTarget, bool castling, ulong castledRookSquare, ulong castledRookTarget)
-    //{
-    //    ulong bit = 1;
-    //    int i = 0;
-    //
-    //    while (bit != 0)
-    //    {
-    //        if (IsSlidingPiece(bit))
-    //        {
-    //            if ((Attacks[0, i] & startSquare) != 0 || (Attacks[0, i] & targetSquare) != 0 || (enPassant && ((Attacks[0, i] & enPassantTarget) != 0)))
-    //            {
-    //                Attacks[0, i] = MagicBitboard.GetAttacks(PieceType(i), i, AllOccupiedSquares);
-    //            }
-    //
-    //            if ((Attacks[1, i] & startSquare) != 0 || (Attacks[1, i] & targetSquare) != 0 || (enPassant && ((Attacks[1, i] & enPassantTarget) != 0)))
-    //            {
-    //                Attacks[1, i] = MagicBitboard.GetAttacks(PieceType(i), i, AllOccupiedSquares); ;
-    //            }
-    //        }
-    //
-    //        bit <<= 1;
-    //        i++;
-    //    }
-    //
-    //    int startSquareIndex = BitboardUtility.FirstSquareIndex(startSquare);
-    //    Attacks[CurrentTurn, startSquareIndex] &= 0;
-    //
-    //    if (castling)
-    //    {
-    //        int castledRookSquareIndex = BitboardUtility.FirstSquareIndex(castledRookSquare);
-    //        Attacks[CurrentTurn, castledRookSquareIndex] &= 0;
-    //    }
-    //
-    //    int targetSquareIndex = BitboardUtility.FirstSquareIndex(targetSquare);
-    //    Attacks[OpponentTurn, targetSquareIndex] &= 0;
-    //
-    //    Attacks[OpponentTurn, startSquareIndex] = GeneratePseudoLegalMoves(startSquare, OpponentTurn, true, true);
-    //    if (enPassant) Attacks[OpponentTurn, BitboardUtility.FirstSquareIndex(enPassantTarget)] = GeneratePseudoLegalMoves(enPassantTarget, OpponentTurn, true, true);
-    //    Attacks[CurrentTurn, targetSquareIndex] = GeneratePseudoLegalMoves(targetSquare, CurrentTurn, true, true);
-    //    if (castling) Attacks[CurrentTurn, BitboardUtility.FirstSquareIndex(castledRookTarget)] = GeneratePseudoLegalMoves(castledRookTarget, CurrentTurn, true, true);
-    //}
-
-    //public static void GenerateAttackedSquares()
-    //{
-    //    int currentTurnBackup = CurrentTurn;
-    //
-    //    Attacks = new ulong[2, 64];
-    //
-    //    for (int i = 0; i < 2; i++)
-    //    {
-    //        CurrentTurn = i;
-    //
-    //        ulong bit = 1;
-    //        int index = 0;
-    //        while (bit != 0)
-    //        {
-    //            if ((OccupiedSquares[i] & bit) != 0)
-    //            {
-    //                ulong attacks = GeneratePseudoLegalMoves(bit, i, true, true);
-    //
-    //                Attacks[i, index] = attacks;
-    //            }
-    //
-    //            bit <<= 1;
-    //            index++;
-    //        }
-    //    }
-    //
-    //    CurrentTurn = currentTurnBackup;
-    //}
 
 
     // In chess, any square that is attacked by a piece
@@ -1020,33 +943,33 @@ public class Board
     public static ulong AttackersTo(int squareIndex, int colorIndex, int opponentColorIndex, ulong occupiedSquares)
     {
         return
-            (MoveData.Moves[Piece.Pawn][squareIndex, colorIndex + 4]                & Pawns[opponentColorIndex]) |
-            (MoveData.Moves[Piece.Knight][squareIndex, 0]                           & Knights[opponentColorIndex]) |
-            (MoveData.Moves[Piece.King][squareIndex, 0]                             & Kings[opponentColorIndex]) |
-            (MagicBitboard.GetAttacks(Piece.Rook, squareIndex, occupiedSquares)     & (Rooks[opponentColorIndex] | Queens[opponentColorIndex])) |
-            (MagicBitboard.GetAttacks(Piece.Bishop, squareIndex, occupiedSquares)   & (Bishops[opponentColorIndex] | Queens[opponentColorIndex]));
+            (MoveData.Moves[Pawn][squareIndex, colorIndex + 4]                & Pawns[opponentColorIndex]) |
+            (MoveData.Moves[Knight][squareIndex, 0]                           & Knights[opponentColorIndex]) |
+            (MoveData.Moves[King][squareIndex, 0]                             & Kings[opponentColorIndex]) |
+            (MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares)     & (Rooks[opponentColorIndex] | Queens[opponentColorIndex])) |
+            (MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares)   & (Bishops[opponentColorIndex] | Queens[opponentColorIndex]));
     }
 
     public static ulong PawnAttackersTo(int squareIndex, int colorIndex, int opponentColorIndex)
     {
-        return MoveData.Moves[Piece.Pawn][squareIndex, colorIndex + 4] & Pawns[opponentColorIndex];
+        return MoveData.Moves[Pawn][squareIndex, colorIndex + 4] & Pawns[opponentColorIndex];
     }
 
     public static ulong SlidingAttackersTo(int squareIndex, int colorIndex, int opponentColorIndex, ulong occupiedSquares)
     {
         return
-            (MagicBitboard.GetAttacks(Piece.Rook, squareIndex, occupiedSquares) & (Rooks[opponentColorIndex] | Queens[opponentColorIndex])) |
-            (MagicBitboard.GetAttacks(Piece.Bishop, squareIndex, occupiedSquares) & (Bishops[opponentColorIndex] | Queens[opponentColorIndex]));
+            (MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) & (Rooks[opponentColorIndex] | Queens[opponentColorIndex])) |
+            (MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) & (Bishops[opponentColorIndex] | Queens[opponentColorIndex]));
     }
 
     // Not available for pawns and kings.
     public static ulong AttacksFrom(int squareIndex, int pieceType, ulong occupiedSquares)
     {
         return
-            pieceType == Piece.Knight ? MoveData.Moves[Piece.Knight][squareIndex, 0] :
-            pieceType == Piece.Bishop ? MagicBitboard.GetAttacks(Piece.Bishop, squareIndex, occupiedSquares) :
-            pieceType == Piece.Rook ? MagicBitboard.GetAttacks(Piece.Rook, squareIndex, occupiedSquares) :
-            pieceType == Piece.Queen ? MagicBitboard.GetAttacks(Piece.Rook, squareIndex, occupiedSquares) | MagicBitboard.GetAttacks(Piece.Bishop, squareIndex, occupiedSquares) : 0;
+            pieceType == Knight ? MoveData.Moves[Knight][squareIndex, 0] :
+            pieceType == Bishop ? MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) :
+            pieceType == Rook ? MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) :
+            pieceType == Queen ? MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) | MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) : 0;
     }
 
 
@@ -1070,7 +993,7 @@ public class Board
         int pieceType = Squares[squareIndex].PieceType();
         return
             !slidingPiecesOnly ? pieceType :
-            (pieceType.IsSlidingPiece() ? pieceType : Piece.None);
+            (pieceType.IsSlidingPiece() ? pieceType : None);
     }
 
     public static int PieceColor(int squareIndex)
@@ -1087,7 +1010,7 @@ public class Board
 
     public static bool RemovePins(ulong square, ulong mask, ref ulong moves)
     {
-        if (BitboardUtility.OccupiedSquaresCount(AllOccupiedSquares & mask) == 3)
+        if (OccupiedSquaresCount(AllOccupiedSquares & mask) == 3)
         {
             moves &= mask;
 
@@ -1096,7 +1019,7 @@ public class Board
 
         if ((Pawns[CurrentTurn] & square) != 0 && (moves & EnPassantSquare) != 0)
         {
-            if (BitboardUtility.OccupiedSquaresCount(AllOccupiedSquares & mask) == 4)
+            if (OccupiedSquaresCount(AllOccupiedSquares & mask) == 4)
             {
                 moves &= ~EnPassantSquare;
 

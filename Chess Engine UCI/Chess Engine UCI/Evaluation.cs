@@ -1,7 +1,7 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using static System.Formats.Asn1.AsnWriter;
+using static Score;
+using static Piece;
+using static Evaluation;
+using static BitboardUtility;
 
 public class Evaluation
 {
@@ -50,8 +50,8 @@ public class Evaluation
         //int whiteMaterial = Interpolate(gamePhase, whiteEarlygameMaterial, whiteLategameMaterial);
         //int blackMaterial = Interpolate(gamePhase, blackEarlygameMaterial, blackLategameMaterial);
 
-        whiteEval += Score.MakeScore(whiteEarlygameMaterial, whiteLategameMaterial);
-        blackEval += Score.MakeScore(blackEarlygameMaterial, blackLategameMaterial);
+        whiteEval += MakeScore(whiteEarlygameMaterial, whiteLategameMaterial);
+        blackEval += MakeScore(blackEarlygameMaterial, blackLategameMaterial);
 
 
         // Offset the evaluation towards better endgame tactics.
@@ -135,7 +135,7 @@ public class Evaluation
         blackEval += evaluationData.BishopOutpostBonus * BishopOutpostsCount(Board.PawnAttackedSquares[1], Board.PawnAttackedSquares[0], Board.Bishops[1], Mask.WhiteHalf);
 
 
-        int eval = Score.Interpolate(whiteEval - blackEval, gamePhase) * (Board.CurrentTurn == 0 ? 1 : -1);
+        int eval = Interpolate(whiteEval - blackEval, gamePhase) * (Board.CurrentTurn == 0 ? 1 : -1);
         return eval;
 
 
@@ -143,28 +143,28 @@ public class Evaluation
         {
             short material = 0;
 
-            pawnCount = BitboardUtility.OccupiedSquaresCount(Board.Pawns[turnIndex]);
-            material += (short)(pawnMaterial = pawnCount * StaticPieceValues[Piece.Pawn][0]);
+            pawnCount = OccupiedSquaresCount(Board.Pawns[turnIndex]);
+            material += (short)(pawnMaterial = pawnCount * StaticPieceValues[Pawn][0]);
 
-            knightCount = BitboardUtility.OccupiedSquaresCount(Board.Knights[turnIndex]);
-            material += (short)(knightCount * StaticPieceValues[Piece.Knight][0]);
+            knightCount = OccupiedSquaresCount(Board.Knights[turnIndex]);
+            material += (short)(knightCount * StaticPieceValues[Knight][0]);
 
-            bishopCount = BitboardUtility.OccupiedSquaresCount(Board.Bishops[turnIndex]);
-            material += (short)(bishopCount * StaticPieceValues[Piece.Bishop][0]);
+            bishopCount = OccupiedSquaresCount(Board.Bishops[turnIndex]);
+            material += (short)(bishopCount * StaticPieceValues[Bishop][0]);
 
-            material += (short)(BitboardUtility.OccupiedSquaresCount(Board.Rooks[turnIndex]) * StaticPieceValues[Piece.Rook][0]);
-            material += (short)(BitboardUtility.OccupiedSquaresCount(Board.Queens[turnIndex]) * StaticPieceValues[Piece.Queen][0]);
+            material += (short)(OccupiedSquaresCount(Board.Rooks[turnIndex]) * StaticPieceValues[Rook][0]);
+            material += (short)(OccupiedSquaresCount(Board.Queens[turnIndex]) * StaticPieceValues[Queen][0]);
             return material;
         }
 
         short LategameMaterial(int turnIndex)
         {
             short material = 0;
-            material += (short)(BitboardUtility.OccupiedSquaresCount(Board.Pawns[turnIndex]) * StaticPieceValues[Piece.Pawn][1]);
-            material += (short)(BitboardUtility.OccupiedSquaresCount(Board.Knights[turnIndex]) * StaticPieceValues[Piece.Knight][1]);
-            material += (short)(BitboardUtility.OccupiedSquaresCount(Board.Bishops[turnIndex]) * StaticPieceValues[Piece.Bishop][1]);
-            material += (short)(BitboardUtility.OccupiedSquaresCount(Board.Rooks[turnIndex]) * StaticPieceValues[Piece.Rook][1]);
-            material += (short)(BitboardUtility.OccupiedSquaresCount(Board.Queens[turnIndex]) * StaticPieceValues[Piece.Queen][1]);
+            material += (short)(OccupiedSquaresCount(Board.Pawns[turnIndex]) * StaticPieceValues[Pawn][1]);
+            material += (short)(OccupiedSquaresCount(Board.Knights[turnIndex]) * StaticPieceValues[Knight][1]);
+            material += (short)(OccupiedSquaresCount(Board.Bishops[turnIndex]) * StaticPieceValues[Bishop][1]);
+            material += (short)(OccupiedSquaresCount(Board.Rooks[turnIndex]) * StaticPieceValues[Rook][1]);
+            material += (short)(OccupiedSquaresCount(Board.Queens[turnIndex]) * StaticPieceValues[Queen][1]);
             return material;
         }
 
@@ -197,7 +197,7 @@ public class Evaluation
             {
                 // If there are multiple pawns on this file,
                 // they are considered "doubled pawns".
-                count += (uint)Math.Max(0, BitboardUtility.OccupiedSquaresCount(pawns & Board.Files[i]) - 1);
+                count += (uint)Math.Max(0, OccupiedSquaresCount(pawns & Board.Files[i]) - 1);
             }
             return count;
         }
@@ -229,7 +229,7 @@ public class Evaluation
         }
 
 
-        bool IsPositionOpen() => BitboardUtility.OccupiedSquaresCount(Board.AllOccupiedSquares) < 24;
+        bool IsPositionOpen() => OccupiedSquaresCount(Board.AllOccupiedSquares) < 24;
 
 
         uint MobilityScore(int colorIndex)
@@ -246,11 +246,11 @@ public class Evaluation
                 Board.PawnAttackedSquares[colorIndex ^ 1]);                 /* Exclude squares controlled by enemy pawns. */
 
             uint score = 0;
-            for (int pieceType = Piece.Knight; pieceType <= Piece.Queen; pieceType++)
+            for (int pieceType = Knight; pieceType <= Queen; pieceType++)
             {
                 foreach (var piece in Board.GetIndexes(Board.Pieces[pieceType][colorIndex]))
                 {
-                    score += evaluationData.MobilityBonus[pieceType][BitboardUtility.OccupiedSquaresCount(
+                    score += evaluationData.MobilityBonus[pieceType][OccupiedSquaresCount(
                         Board.AttacksFrom(piece, pieceType, Board.AllOccupiedSquares) & mobilityArea)];
                 }
             }
@@ -265,8 +265,8 @@ public class Evaluation
             if ((Board.Kings[colorIndex] & (colorIndex == 0 ? Mask.WhiteCastledKingPosition : Mask.BlackCastledKingPosition)) != 0)
             {
                 score +=
-                    evaluationData.FirstShieldingPawnKingSafetyBonus * (uint)BitboardUtility.OccupiedSquaresCount(friendlyPawns & Board.FirstShieldingPawns[Board.KingPosition[colorIndex]]) +
-                    evaluationData.SecondShieldingPawnKingSafetyBonus * (uint)BitboardUtility.OccupiedSquaresCount(friendlyPawns & Board.SecondShieldingPawns[Board.KingPosition[colorIndex]]);
+                    evaluationData.FirstShieldingPawnKingSafetyBonus * (uint)OccupiedSquaresCount(friendlyPawns & Board.FirstShieldingPawns[Board.KingPosition[colorIndex]]) +
+                    evaluationData.SecondShieldingPawnKingSafetyBonus * (uint)OccupiedSquaresCount(friendlyPawns & Board.SecondShieldingPawns[Board.KingPosition[colorIndex]]);
             }
 
             int kingFile = Board.GetFile(Board.KingPosition[colorIndex]);
@@ -274,8 +274,8 @@ public class Evaluation
 
             foreach (var file in kingFiles)
             {
-                int friendlyPawnsCount = BitboardUtility.OccupiedSquaresCount(friendlyPawns & file);
-                int opponentPawnsCount = BitboardUtility.OccupiedSquaresCount(opponentPawns & file);
+                int friendlyPawnsCount = OccupiedSquaresCount(friendlyPawns & file);
+                int opponentPawnsCount = OccupiedSquaresCount(opponentPawns & file);
 
                 if (friendlyPawnsCount == 0)
                 {
@@ -291,11 +291,11 @@ public class Evaluation
         {
             uint score = 0;
 
-            int lightPawnsCount = BitboardUtility.OccupiedSquaresCount(pawns & Mask.LightSquares);
-            int darkPawnsCount = BitboardUtility.OccupiedSquaresCount(pawns & Mask.DarkSquares);
+            int lightPawnsCount = OccupiedSquaresCount(pawns & Mask.LightSquares);
+            int darkPawnsCount = OccupiedSquaresCount(pawns & Mask.DarkSquares);
 
-            int lightBishopsCount = BitboardUtility.OccupiedSquaresCount(bishops & Mask.LightSquares);
-            int darkBishopsCount = BitboardUtility.OccupiedSquaresCount(bishops & Mask.DarkSquares);
+            int lightBishopsCount = OccupiedSquaresCount(bishops & Mask.LightSquares);
+            int darkBishopsCount = OccupiedSquaresCount(bishops & Mask.DarkSquares);
 
             // Give a penalty for the lack of a bishop on a light square, for each extra pawn on a dark square.
             score += evaluationData.ColorWeaknessPenaltyPerPawn * (uint)(lightBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, darkPawnsCount - lightPawnsCount);
@@ -311,7 +311,7 @@ public class Evaluation
             // If a knight is in the opponent's half of the board (or in the center),
             // is defended by a pawn and is not under attack by an opponent pawn,
             // it is considered an "outpost".
-            return (uint)BitboardUtility.OccupiedSquaresCount(pawnDefendedSquares & ~opponentPawnAttackedSquares & knights & opponentHalf);
+            return (uint)OccupiedSquaresCount(pawnDefendedSquares & ~opponentPawnAttackedSquares & knights & opponentHalf);
         }
 
         uint BishopOutpostsCount(ulong pawnDefendedSquares, ulong opponentPawnAttackedSquares, ulong bishops, ulong opponentHalf)
@@ -319,7 +319,7 @@ public class Evaluation
             // If a bishop is in the opponent's half of the board (or in the center),
             // is defended by a pawn and is not under attack by an opponent pawn,
             // it is considered an "outpost".
-            return (uint)BitboardUtility.OccupiedSquaresCount(pawnDefendedSquares & ~opponentPawnAttackedSquares & bishops & opponentHalf);
+            return (uint)OccupiedSquaresCount(pawnDefendedSquares & ~opponentPawnAttackedSquares & bishops & opponentHalf);
         }
     }
 
@@ -328,11 +328,11 @@ public class Evaluation
     {
         switch (piece)
         {
-            case Piece.Pawn :   return StaticPieceValues[Piece.Pawn][0];
-            case Piece.Knight:  return StaticPieceValues[Piece.Knight][0];
-            case Piece.Bishop:  return StaticPieceValues[Piece.Bishop][0];
-            case Piece.Rook:    return StaticPieceValues[Piece.Rook][0];
-            case Piece.Queen:   return StaticPieceValues[Piece.Queen][0];
+            case Pawn :   return StaticPieceValues[Pawn][0];
+            case Knight:  return StaticPieceValues[Knight][0];
+            case Bishop:  return StaticPieceValues[Bishop][0];
+            case Rook:    return StaticPieceValues[Rook][0];
+            case Queen:   return StaticPieceValues[Queen][0];
             default:            return 0;
         }
     }
@@ -343,10 +343,10 @@ public class Evaluation
     public static bool PawnsOnly(EvaluationData evaluationData)
     {
         int materialCount = 0;
-        materialCount += BitboardUtility.OccupiedSquaresCount(Board.Knights[Board.CurrentTurn]);
-        materialCount += BitboardUtility.OccupiedSquaresCount(Board.Bishops[Board.CurrentTurn]);
-        materialCount += BitboardUtility.OccupiedSquaresCount(Board.Rooks[Board.CurrentTurn]);
-        materialCount += BitboardUtility.OccupiedSquaresCount(Board.Queens[Board.CurrentTurn]);
+        materialCount += OccupiedSquaresCount(Board.Knights[Board.CurrentTurn]);
+        materialCount += OccupiedSquaresCount(Board.Bishops[Board.CurrentTurn]);
+        materialCount += OccupiedSquaresCount(Board.Rooks[Board.CurrentTurn]);
+        materialCount += OccupiedSquaresCount(Board.Queens[Board.CurrentTurn]);
         return materialCount == 0;
     }
     
@@ -372,21 +372,6 @@ public class Evaluation
         }
         return 0;
     }
-
-
-    public static int Interpolate(int gamePhase, int earlygameValue, int endgameValue)
-    {
-        if (gamePhase > OpeningPhaseScore) return earlygameValue;
-        else if (gamePhase < EndgamePhaseScore) return endgameValue;
-
-        else
-        {
-            // Interpolate for middle game
-            return (earlygameValue * gamePhase +
-                endgameValue * (OpeningPhaseScore - gamePhase)
-                ) / OpeningPhaseScore;
-        }
-    }
 }
 
 
@@ -396,12 +381,12 @@ public class PieceSquareTables
     {
         uint score = 0;
         bool isWhite = turnIndex == 0;
-        score += EvaluatePsqtScore(Piece.Pawn, Board.Pawns[turnIndex], isWhite);
-        score += EvaluatePsqtScore(Piece.Rook, Board.Rooks[turnIndex], isWhite);
-        score += EvaluatePsqtScore(Piece.Knight, Board.Knights[turnIndex], isWhite);
-        score += EvaluatePsqtScore(Piece.Bishop, Board.Bishops[turnIndex], isWhite);
-        score += EvaluatePsqtScore(Piece.Queen, Board.Queens[turnIndex], isWhite);
-        score += EvaluatePsqtScore(Piece.King, Board.Kings[turnIndex], isWhite);
+        score += EvaluatePsqtScore(Pawn, Board.Pawns[turnIndex], isWhite);
+        score += EvaluatePsqtScore(Rook, Board.Rooks[turnIndex], isWhite);
+        score += EvaluatePsqtScore(Knight, Board.Knights[turnIndex], isWhite);
+        score += EvaluatePsqtScore(Bishop, Board.Bishops[turnIndex], isWhite);
+        score += EvaluatePsqtScore(Queen, Board.Queens[turnIndex], isWhite);
+        score += EvaluatePsqtScore(King, Board.Kings[turnIndex], isWhite);
         return score;
     }
 
@@ -423,8 +408,8 @@ public class PieceSquareTables
         
         if (!isWhite) rank = 7 - rank;
         
-        if (pieceType != Piece.Pawn) return Score.Interpolate(s_pieceSquareTables[pieceType][rank][FileIndex()], gamePhase);
-        return Score.Interpolate(s_pawnPieceSquareTables[rank][file], gamePhase);
+        if (pieceType != Pawn) return Interpolate(s_pieceSquareTables[pieceType][rank][FileIndex()], gamePhase);
+        return Interpolate(s_pawnPieceSquareTables[rank][file], gamePhase);
         
         
         int FileIndex() => file >= 4 ? 7 - file : file;
@@ -437,7 +422,7 @@ public class PieceSquareTables
 
         if (!isWhite) rank = 7 - rank;
 
-        if (pieceType != Piece.Pawn) return s_pieceSquareTables[pieceType][rank][FileIndex()];
+        if (pieceType != Pawn) return s_pieceSquareTables[pieceType][rank][FileIndex()];
         return s_pawnPieceSquareTables[rank][file];
 
 
@@ -450,7 +435,7 @@ public class PieceSquareTables
 
     private static readonly Dictionary<int, int[]> s_earlygamePieceSquareTables = new()
     {
-        [Piece.Pawn] = new int[] {
+        [Pawn] = new int[] {
        0,   0,   0,   0,   0,   0,   0,   0,
       -1,  45,  49,  47,  47,  61,  68,  -4,
       -6,  14,  24,  24,  33,  25,  16,   6,
@@ -460,7 +445,7 @@ public class PieceSquareTables
        8,  15,  13, -14, -14,  16,  16,   5,
        0,   0,   0,   0,   0,   0,   0,   0 },
 
-        [Piece.Knight] = new int[] {
+        [Knight] = new int[] {
      -50, -40, -30, -26, -28, -30, -40, -55,
      -40, -17,   3,   4,  -6,   0, -15, -37,
      -29,   6,   6,  11,  12,  16,   5, -25,
@@ -470,7 +455,7 @@ public class PieceSquareTables
      -34, -18,  -5,   8,  -1,   4, -22, -38,
      -50, -34, -25, -36, -24, -32, -46, -50 },
 
-        [Piece.Bishop] = new int[] {
+        [Bishop] = new int[] {
      -20, -10, -12, -10,  -5, -12, -15, -16,
       -6,   3,  -5,  -6,   1,   6,   5, -13,
       -5,  -6,  -1,   7,  16,  -1,   6, -16,
@@ -480,7 +465,7 @@ public class PieceSquareTables
       -7,   9,   6,   3,   6,   6,   6,  -5,
      -14, -12,  -4,  -9,  -4, -15,  -4, -14 },
 
-        [Piece.Rook] = new int[] {
+        [Rook] = new int[] {
       -2,   4,  -6,  -2,   2,   6,  -2,   5,
        4,  16,  15,  11,  15,  11,  13,   8,
       -5,   3,  -2,   1,   6,   3,   3,  -6,
@@ -490,7 +475,7 @@ public class PieceSquareTables
       -9,  -6,  -6,   5,   0,  -4,  -1, -10,
       -5,   4,   5,   9,   9,  -6,  -2,  -1 },
 
-        [Piece.Queen] = new int[] {
+        [Queen] = new int[] {
      -17, -10, -13,  -7,  -3, -11,  -9, -25,
       -5,   4,   6,  -1,  -5,   4,  -6,  -4,
       -5,  -4,   6,   7,   0,   2,  -5,  -8,
@@ -500,7 +485,7 @@ public class PieceSquareTables
      -10,   3,  -3,   3,  -6,   1,  -6,  -5,
      -24,  -8, -16,  -3,  -8, -13,  -4, -15 },
 
-        [Piece.King] = new int[] {
+        [King] = new int[] {
      -30, -40, -40, -50, -50, -40, -40, -30,
      -30, -40, -39, -50, -49, -43, -37, -30,
      -30, -46, -40, -49, -46, -40, -41, -32,
@@ -513,7 +498,7 @@ public class PieceSquareTables
 
     private static readonly Dictionary<int, int[]> s_endgamePieceSquareTables = new()
     {
-        [Piece.Pawn] = new int[] {
+        [Pawn] = new int[] {
        0,   0,   0,   0,   0,   0,   0,   0,
        4,  68,  98,  85,  94, 120, 174,  -4,
       -6,  37,  38,  31,  45,  44,  48,   6,
@@ -523,7 +508,7 @@ public class PieceSquareTables
       -4,   4,   3,   0,  -6,   6,   5,  -2,
        0,   0,   0,   0,   0,   0,   0,   0 },
 
-        [Piece.Knight] = new int[] {
+        [Knight] = new int[] {
      -50, -40, -35, -24, -24, -30, -40, -50,
      -40, -15,  -4,   5,  -5,   6, -17, -38,
      -26,  -6,  10,  15,   9,  15,   3, -24,
@@ -533,7 +518,7 @@ public class PieceSquareTables
      -40, -22,   1,   5,  -1,   5, -20, -43,
      -50, -35, -25, -30, -27, -32, -40, -50 },
 
-        [Piece.Bishop] = new int[] {
+        [Bishop] = new int[] {
      -20, -16,  -9, -14,  -7,  -4, -13, -14,
       -4,   5,  -3,   4,  -6,   3,   6, -11,
      -10,  -5,  -1,   4,  15,   5,  -3, -11,
@@ -543,7 +528,7 @@ public class PieceSquareTables
       -7,   1,   2,  -3,   6,   6,   7, -11,
      -17,  -6, -10, -10,  -4, -11,  -4, -15 },
 
-        [Piece.Rook] = new int[] {
+        [Rook] = new int[] {
       -3,   6,  -6,  -4,  -4,   1,  -6,   5,
      -15,   4,   3,  -1,   5,   2,   4,  -6,
       -9,   5,  -6,  -1,   0,   3,   3, -15,
@@ -553,7 +538,7 @@ public class PieceSquareTables
       -5,  -6,  -5,   3,  -4,   1,  -4,  -8,
        0,   2,   4,   1,   1,  -2,   0,   1 },
 
-        [Piece.Queen] = new int[] {
+        [Queen] = new int[] {
      -16, -10, -15,  -8,   1,  -6,  -7,  -21,
      -10,   3,   6,   2,  -4,   3,  -5,   -4,
       -6,  -4,  10,   6,   2,   7,  -2,  -13,
@@ -563,7 +548,7 @@ public class PieceSquareTables
      -10,   4,  -5,   0,   0,   5,  -6,  -12,
      -20,  -9, -12,  -4,  -7,  -7,  -6,  -20 },
 
-        [Piece.King] = new int[] {
+        [King] = new int[] {
      -50, -40, -30, -20, -20, -30, -40,  -50,
      -30, -24,  -6,   3,   6, -15, -18,  -30,
      -30, -11,  14,  34,  32,  20, -16,  -35,
@@ -587,58 +572,58 @@ public class PieceSquareTables
 
         /* Knight */
         new uint[][] {
-            new uint[] { Score.MakeScore(-175, -96), Score.MakeScore( -92, -65), Score.MakeScore( -74, -49), Score.MakeScore( -73, -21) },
-            new uint[] { Score.MakeScore( -77, -67), Score.MakeScore( -41, -54), Score.MakeScore( -27, -18), Score.MakeScore( -15,   8) },
-            new uint[] { Score.MakeScore( -61, -40), Score.MakeScore( -17, -27), Score.MakeScore(   6,  -8), Score.MakeScore(  12,  29) },
-            new uint[] { Score.MakeScore( -35, -35), Score.MakeScore(   8,  -2), Score.MakeScore(  40,  13), Score.MakeScore(  49,  28) },
-            new uint[] { Score.MakeScore( -34, -45), Score.MakeScore(  13, -16), Score.MakeScore(  44,   9), Score.MakeScore(  51,  39) },
-            new uint[] { Score.MakeScore(  -9, -51), Score.MakeScore(  22, -44), Score.MakeScore(  58, -16), Score.MakeScore(  53,  17) },
-            new uint[] { Score.MakeScore( -67, -69), Score.MakeScore( -27, -50), Score.MakeScore(   4, -51), Score.MakeScore(  37,  12) },
-            new uint[] { Score.MakeScore(-201,-100), Score.MakeScore( -83, -88), Score.MakeScore( -56, -56), Score.MakeScore( -26, -17) }
-        },
-
-        new uint[][] { /* Bishop */
-            new uint[] { Score.MakeScore( -37, -40), Score.MakeScore(  -4, -21), Score.MakeScore(  -6, -26), Score.MakeScore( -16,  -8) },
-            new uint[] { Score.MakeScore( -11, -26), Score.MakeScore(   6,  -9), Score.MakeScore(  13, -12), Score.MakeScore(   3,   1) },
-            new uint[] { Score.MakeScore( -5 , -11), Score.MakeScore(  15,  -1), Score.MakeScore(  -4,  -1), Score.MakeScore(  12,   7) },
-            new uint[] { Score.MakeScore( -4 , -14), Score.MakeScore(   8,  -4), Score.MakeScore(  18,   0), Score.MakeScore(  27,  12) },
-            new uint[] { Score.MakeScore( -8 , -12), Score.MakeScore(  20,  -1), Score.MakeScore(  15, -10), Score.MakeScore(  22,  11) },
-            new uint[] { Score.MakeScore( -11, -21), Score.MakeScore(   4,   4), Score.MakeScore(   1,   3), Score.MakeScore(   8,   4) },
-            new uint[] { Score.MakeScore( -12, -22), Score.MakeScore( -10, -14), Score.MakeScore(   4,  -1), Score.MakeScore(   0,   1) },
-            new uint[] { Score.MakeScore( -34, -32), Score.MakeScore(   1, -29), Score.MakeScore( -10, -26), Score.MakeScore( -16, -17) }
-        },
-
-        new uint[][] { /* Rook */
-            new uint[] { Score.MakeScore( -31,  -9), Score.MakeScore( -20, -13), Score.MakeScore( -14, -10), Score.MakeScore(  -5,  -9) },
-            new uint[] { Score.MakeScore( -21, -12), Score.MakeScore( -13,  -9), Score.MakeScore(  -8,  -1), Score.MakeScore(   6,  -2) },
-            new uint[] { Score.MakeScore( -25,   6), Score.MakeScore( -11,  -8), Score.MakeScore(  -1,  -2), Score.MakeScore(   3,  -6) },
-            new uint[] { Score.MakeScore( -13,  -6), Score.MakeScore(  -5,   1), Score.MakeScore(  -4,  -9), Score.MakeScore(  -6,   7) },
-            new uint[] { Score.MakeScore( -27,  -5), Score.MakeScore( -15,   8), Score.MakeScore(  -4,   7), Score.MakeScore(   3,  -6) },
-            new uint[] { Score.MakeScore( -22,   6), Score.MakeScore(  -2,   1), Score.MakeScore(   6,  -7), Score.MakeScore(  12,  10) },
-            new uint[] { Score.MakeScore(  -2,   4), Score.MakeScore(  12,   5), Score.MakeScore(  16,  20), Score.MakeScore(  18,  -5) },
-            new uint[] { Score.MakeScore( -17,  18), Score.MakeScore( -19,   0), Score.MakeScore(  -1,  19), Score.MakeScore(   9,  13) }
-        },
-
-        new uint[][] { /* Queen */
-            new uint[] { Score.MakeScore(   3, -69), Score.MakeScore(  -5, -57), Score.MakeScore(  -5, -47), Score.MakeScore(   4, -26) },
-            new uint[] { Score.MakeScore(  -3, -54), Score.MakeScore(   5, -31), Score.MakeScore(   8, -22), Score.MakeScore(  12,  -4) },
-            new uint[] { Score.MakeScore(  -3, -39), Score.MakeScore(   6, -18), Score.MakeScore(  13,  -9), Score.MakeScore(   7,   3) },
-            new uint[] { Score.MakeScore(   4, -23), Score.MakeScore(   5,  -3), Score.MakeScore(   9,  13), Score.MakeScore(   8,  24) },
-            new uint[] { Score.MakeScore(   0, -29), Score.MakeScore(  14,  -6), Score.MakeScore(  12,   9), Score.MakeScore(   5,  21) },
-            new uint[] { Score.MakeScore(  -4, -38), Score.MakeScore(  10, -18), Score.MakeScore(   6, -11), Score.MakeScore(   8,   1) },
-            new uint[] { Score.MakeScore(  -5, -50), Score.MakeScore(   6, -27), Score.MakeScore(  10, -24), Score.MakeScore(   8,  -8) },
-            new uint[] { Score.MakeScore(  -2, -74), Score.MakeScore(  -2, -52), Score.MakeScore(   1, -43), Score.MakeScore(  -2, -34) }
-        },
-
-        new uint[][] { /* King */
-            new uint[] { Score.MakeScore( 271,   1), Score.MakeScore( 327,  45), Score.MakeScore( 271,  85), Score.MakeScore( 198,  76) },
-            new uint[] { Score.MakeScore( 278,  53), Score.MakeScore( 303, 100), Score.MakeScore( 234, 133), Score.MakeScore( 179, 135) },
-            new uint[] { Score.MakeScore( 195,  88), Score.MakeScore( 258, 130), Score.MakeScore( 169, 169), Score.MakeScore( 120, 175) },
-            new uint[] { Score.MakeScore( 164, 103), Score.MakeScore( 190, 156), Score.MakeScore( 138, 172), Score.MakeScore(  98, 172) },
-            new uint[] { Score.MakeScore( 154,  96), Score.MakeScore( 179, 166), Score.MakeScore( 105, 199), Score.MakeScore(  70, 199) },
-            new uint[] { Score.MakeScore( 123,  92), Score.MakeScore( 145, 172), Score.MakeScore(  81, 184), Score.MakeScore(  31, 191) },
-            new uint[] { Score.MakeScore(  88,  47), Score.MakeScore( 120, 121), Score.MakeScore(  65, 116), Score.MakeScore(  33, 131) },
-            new uint[] { Score.MakeScore(  59,  11), Score.MakeScore(  89,  59), Score.MakeScore(  45,  73), Score.MakeScore(  -1,  78) }
+            new uint[] { MakeScore(-175, -96), MakeScore( -92, -65), MakeScore( -74, -49), MakeScore( -73, -21) },
+            new uint[] { MakeScore( -77, -67), MakeScore( -41, -54), MakeScore( -27, -18), MakeScore( -15,   8) },
+            new uint[] { MakeScore( -61, -40), MakeScore( -17, -27), MakeScore(   6,  -8), MakeScore(  12,  29) },
+            new uint[] { MakeScore( -35, -35), MakeScore(   8,  -2), MakeScore(  40,  13), MakeScore(  49,  28) },
+            new uint[] { MakeScore( -34, -45), MakeScore(  13, -16), MakeScore(  44,   9), MakeScore(  51,  39) },
+            new uint[] { MakeScore(  -9, -51), MakeScore(  22, -44), MakeScore(  58, -16), MakeScore(  53,  17) },
+            new uint[] { MakeScore( -67, -69), MakeScore( -27, -50), MakeScore(   4, -51), MakeScore(  37,  12) },
+            new uint[] { MakeScore(-201,-100), MakeScore( -83, -88), MakeScore( -56, -56), MakeScore( -26, -17) }
+        },                                                                                       
+                                                                                                 
+        new uint[][] { /* Bishop */                                                              
+            new uint[] { MakeScore( -37, -40), MakeScore(  -4, -21), MakeScore(  -6, -26), MakeScore( -16,  -8) },
+            new uint[] { MakeScore( -11, -26), MakeScore(   6,  -9), MakeScore(  13, -12), MakeScore(   3,   1) },
+            new uint[] { MakeScore( -5 , -11), MakeScore(  15,  -1), MakeScore(  -4,  -1), MakeScore(  12,   7) },
+            new uint[] { MakeScore( -4 , -14), MakeScore(   8,  -4), MakeScore(  18,   0), MakeScore(  27,  12) },
+            new uint[] { MakeScore( -8 , -12), MakeScore(  20,  -1), MakeScore(  15, -10), MakeScore(  22,  11) },
+            new uint[] { MakeScore( -11, -21), MakeScore(   4,   4), MakeScore(   1,   3), MakeScore(   8,   4) },
+            new uint[] { MakeScore( -12, -22), MakeScore( -10, -14), MakeScore(   4,  -1), MakeScore(   0,   1) },
+            new uint[] { MakeScore( -34, -32), MakeScore(   1, -29), MakeScore( -10, -26), MakeScore( -16, -17) }
+        },                                                                                       
+                                                                                                 
+        new uint[][] { /* Rook */                                                                
+            new uint[] { MakeScore( -31,  -9), MakeScore( -20, -13), MakeScore( -14, -10), MakeScore(  -5,  -9) },
+            new uint[] { MakeScore( -21, -12), MakeScore( -13,  -9), MakeScore(  -8,  -1), MakeScore(   6,  -2) },
+            new uint[] { MakeScore( -25,   6), MakeScore( -11,  -8), MakeScore(  -1,  -2), MakeScore(   3,  -6) },
+            new uint[] { MakeScore( -13,  -6), MakeScore(  -5,   1), MakeScore(  -4,  -9), MakeScore(  -6,   7) },
+            new uint[] { MakeScore( -27,  -5), MakeScore( -15,   8), MakeScore(  -4,   7), MakeScore(   3,  -6) },
+            new uint[] { MakeScore( -22,   6), MakeScore(  -2,   1), MakeScore(   6,  -7), MakeScore(  12,  10) },
+            new uint[] { MakeScore(  -2,   4), MakeScore(  12,   5), MakeScore(  16,  20), MakeScore(  18,  -5) },
+            new uint[] { MakeScore( -17,  18), MakeScore( -19,   0), MakeScore(  -1,  19), MakeScore(   9,  13) }
+        },                                                                                       
+                                                                                                 
+        new uint[][] { /* Queen */                                                               
+            new uint[] { MakeScore(   3, -69), MakeScore(  -5, -57), MakeScore(  -5, -47), MakeScore(   4, -26) },
+            new uint[] { MakeScore(  -3, -54), MakeScore(   5, -31), MakeScore(   8, -22), MakeScore(  12,  -4) },
+            new uint[] { MakeScore(  -3, -39), MakeScore(   6, -18), MakeScore(  13,  -9), MakeScore(   7,   3) },
+            new uint[] { MakeScore(   4, -23), MakeScore(   5,  -3), MakeScore(   9,  13), MakeScore(   8,  24) },
+            new uint[] { MakeScore(   0, -29), MakeScore(  14,  -6), MakeScore(  12,   9), MakeScore(   5,  21) },
+            new uint[] { MakeScore(  -4, -38), MakeScore(  10, -18), MakeScore(   6, -11), MakeScore(   8,   1) },
+            new uint[] { MakeScore(  -5, -50), MakeScore(   6, -27), MakeScore(  10, -24), MakeScore(   8,  -8) },
+            new uint[] { MakeScore(  -2, -74), MakeScore(  -2, -52), MakeScore(   1, -43), MakeScore(  -2, -34) }
+        },                                                                                       
+                                                                                                 
+        new uint[][] { /* King */                                                                
+            new uint[] { MakeScore( 271,   1), MakeScore( 327,  45), MakeScore( 271,  85), MakeScore( 198,  76) },
+            new uint[] { MakeScore( 278,  53), MakeScore( 303, 100), MakeScore( 234, 133), MakeScore( 179, 135) },
+            new uint[] { MakeScore( 195,  88), MakeScore( 258, 130), MakeScore( 169, 169), MakeScore( 120, 175) },
+            new uint[] { MakeScore( 164, 103), MakeScore( 190, 156), MakeScore( 138, 172), MakeScore(  98, 172) },
+            new uint[] { MakeScore( 154,  96), MakeScore( 179, 166), MakeScore( 105, 199), MakeScore(  70, 199) },
+            new uint[] { MakeScore( 123,  92), MakeScore( 145, 172), MakeScore(  81, 184), MakeScore(  31, 191) },
+            new uint[] { MakeScore(  88,  47), MakeScore( 120, 121), MakeScore(  65, 116), MakeScore(  33, 131) },
+            new uint[] { MakeScore(  59,  11), MakeScore(  89,  59), MakeScore(  45,  73), MakeScore(  -1,  78) }
         }
     };
 
@@ -647,12 +632,12 @@ public class PieceSquareTables
     private static readonly uint[][] s_pawnPieceSquareTables =
     {
         new uint[] { },
-        new uint[] { Score.MakeScore(  2, -8), Score.MakeScore(  4, -6), Score.MakeScore( 11,  9), Score.MakeScore( 18,  5), Score.MakeScore( 16, 16), Score.MakeScore( 21,  6), Score.MakeScore(  9, -6), Score.MakeScore( -3,-18) },
-        new uint[] { Score.MakeScore( -9, -9), Score.MakeScore(-15, -7), Score.MakeScore( 11,-10), Score.MakeScore( 15,  5), Score.MakeScore( 31,  2), Score.MakeScore( 23,  3), Score.MakeScore(  6, -8), Score.MakeScore(-20, -5) },
-        new uint[] { Score.MakeScore( -3,  7), Score.MakeScore(-20,  1), Score.MakeScore(  8, -8), Score.MakeScore( 19, -2), Score.MakeScore( 39,-14), Score.MakeScore( 17,-13), Score.MakeScore(  2,-11), Score.MakeScore( -5, -6) },
-        new uint[] { Score.MakeScore( 11, 12), Score.MakeScore( -4,  6), Score.MakeScore(-11,  2), Score.MakeScore(  2, -6), Score.MakeScore( 11, -5), Score.MakeScore(  0, -4), Score.MakeScore(-12, 14), Score.MakeScore(  5,  9) },
-        new uint[] { Score.MakeScore(  3, 27), Score.MakeScore(-11, 18), Score.MakeScore( -6, 19), Score.MakeScore( 22, 29), Score.MakeScore( -8, 30), Score.MakeScore( -5,  9), Score.MakeScore(-14,  8), Score.MakeScore(-11, 14) },
-        new uint[] { Score.MakeScore( -7, -1), Score.MakeScore(  6,-14), Score.MakeScore( -2, 13), Score.MakeScore(-11, 22), Score.MakeScore(  4, 24), Score.MakeScore(-14, 17), Score.MakeScore( 10,  7), Score.MakeScore( -9,  7) }
+        new uint[] { MakeScore(  2, -8), MakeScore(  4, -6), MakeScore( 11,  9), MakeScore( 18,  5), MakeScore( 16, 16), MakeScore( 21,  6), MakeScore(  9, -6), MakeScore( -3,-18) },
+        new uint[] { MakeScore( -9, -9), MakeScore(-15, -7), MakeScore( 11,-10), MakeScore( 15,  5), MakeScore( 31,  2), MakeScore( 23,  3), MakeScore(  6, -8), MakeScore(-20, -5) },
+        new uint[] { MakeScore( -3,  7), MakeScore(-20,  1), MakeScore(  8, -8), MakeScore( 19, -2), MakeScore( 39,-14), MakeScore( 17,-13), MakeScore(  2,-11), MakeScore( -5, -6) },
+        new uint[] { MakeScore( 11, 12), MakeScore( -4,  6), MakeScore(-11,  2), MakeScore(  2, -6), MakeScore( 11, -5), MakeScore(  0, -4), MakeScore(-12, 14), MakeScore(  5,  9) },
+        new uint[] { MakeScore(  3, 27), MakeScore(-11, 18), MakeScore( -6, 19), MakeScore( 22, 29), MakeScore( -8, 30), MakeScore( -5,  9), MakeScore(-14,  8), MakeScore(-11, 14) },
+        new uint[] { MakeScore( -7, -1), MakeScore(  6,-14), MakeScore( -2, 13), MakeScore(-11, 22), MakeScore(  4, 24), MakeScore(-14, 17), MakeScore( 10,  7), MakeScore( -9,  7) }
     };
 
 
@@ -689,39 +674,39 @@ public class EvaluationData
 {
     public uint[] PieceValues =
     {
-        Score.MakeScore(   0,   0), /* None */
-        Score.MakeScore( 126, 208), /* Pawn */
-        Score.MakeScore( 781, 854), /* Knight */
-        Score.MakeScore( 825, 915), /* Bishop */
-        Score.MakeScore(1276,1380), /* Rook */
-        Score.MakeScore(2538,2682)  /* Queen */
+        MakeScore(   0,   0), /* None */
+        MakeScore( 126, 208), /* Pawn */
+        MakeScore( 781, 854), /* Knight */
+        MakeScore( 825, 915), /* Bishop */
+        MakeScore(1276,1380), /* Rook */
+        MakeScore(2538,2682)  /* Queen */
     };
 
 
     public uint[] PassedPawnBonus = 
     {
-        Score.MakeScore(   +0,   +0),
-        Score.MakeScore(   +2,  +38),
-        Score.MakeScore(  +15,  +36),
-        Score.MakeScore(  +22,  +50),
-        Score.MakeScore(  +64,  +81),
-        Score.MakeScore( +166, +184),
-        Score.MakeScore( +284, +269),
-        Score.MakeScore(   +0,   +0),
+        MakeScore(   +0,   +0),
+        MakeScore(   +2,  +38),
+        MakeScore(  +15,  +36),
+        MakeScore(  +22,  +50),
+        MakeScore(  +64,  +81),
+        MakeScore( +166, +184),
+        MakeScore( +284, +269),
+        MakeScore(   +0,   +0),
     };
 
-    public uint DoubledPawnPenalty = Score.MakeScore(-11, -51);
-    public uint IsolatedPawnPenalty = Score.MakeScore(-1, -20);
-    public uint BackwardPawnPenalty = Score.MakeScore(-6, -10);
+    public uint DoubledPawnPenalty = MakeScore(-11, -51);
+    public uint IsolatedPawnPenalty = MakeScore(-1, -20);
+    public uint BackwardPawnPenalty = MakeScore(-6, -10);
 
     // Not from Stockfish.
-    public uint MaterialImbalancePawnPenaltyPerPawn = Score.MakeScore(-5, -3);
+    public uint MaterialImbalancePawnPenaltyPerPawn = MakeScore(-5, -3);
 
     // Not from Stockfish.
-    public uint KnightPairInOpenPositionBonus = Score.MakeScore(+20, +10);
-    public uint BishopPairInOpenPositionBonus = Score.MakeScore(+60, +40);
-    public uint KnightPairInClosedPositionBonus = Score.MakeScore(+50, +30);
-    public uint BishopPairInClosedPositionBonus = Score.MakeScore(+30, +10);
+    public uint KnightPairInOpenPositionBonus = MakeScore(+20, +10);
+    public uint BishopPairInOpenPositionBonus = MakeScore(+60, +40);
+    public uint KnightPairInClosedPositionBonus = MakeScore(+50, +30);
+    public uint BishopPairInClosedPositionBonus = MakeScore(+30, +10);
 
     // MobilityBonus[PieceType][attacked] contains bonuses for middle and end game,
     // indexed by piece type and number of attacked squares in the mobility area.
@@ -734,33 +719,33 @@ public class EvaluationData
         new uint[] { },
 
         /* Knight */
-        new uint[] { Score.MakeScore(-62,-81), Score.MakeScore(-53,-56), Score.MakeScore(-12,-30), Score.MakeScore( -4,-14), Score.MakeScore(  3,  8), Score.MakeScore( 13, 15), Score.MakeScore( 22, 23), Score.MakeScore( 28, 27), Score.MakeScore( 33, 33) },
+        new uint[] { MakeScore(-62,-81), MakeScore(-53,-56), MakeScore(-12,-30), MakeScore( -4,-14), MakeScore(  3,  8), MakeScore( 13, 15), MakeScore( 22, 23), MakeScore( 28, 27), MakeScore( 33, 33) },
     
         /* Bishop */
-        new uint[] { Score.MakeScore(-48, -59), Score.MakeScore(-20, -23), Score.MakeScore(16, -3), Score.MakeScore(26, 13), Score.MakeScore(38, 24), Score.MakeScore(51, 42), Score.MakeScore(55, 54), Score.MakeScore(63, 57), Score.MakeScore(63, 65), Score.MakeScore(68, 73), Score.MakeScore(81, 78), Score.MakeScore(81, 86), Score.MakeScore(91, 88), Score.MakeScore(98, 97) },
+        new uint[] { MakeScore(-48, -59), MakeScore(-20, -23), MakeScore(16, -3), MakeScore(26, 13), MakeScore(38, 24), MakeScore(51, 42), MakeScore(55, 54), MakeScore(63, 57), MakeScore(63, 65), MakeScore(68, 73), MakeScore(81, 78), MakeScore(81, 86), MakeScore(91, 88), MakeScore(98, 97) },
         
         /* Rook */
-        new uint[] { Score.MakeScore(-58, -76), Score.MakeScore(-27, -18), Score.MakeScore(-15, 28), Score.MakeScore(-10, 55), Score.MakeScore(-5, 69), Score.MakeScore(-2, 82), Score.MakeScore(9, 112), Score.MakeScore(16, 118), Score.MakeScore(30, 132), Score.MakeScore(29, 142), Score.MakeScore(32, 155), Score.MakeScore(38, 165), Score.MakeScore(46, 166), Score.MakeScore(48, 169), Score.MakeScore(58, 171) },
+        new uint[] { MakeScore(-58, -76), MakeScore(-27, -18), MakeScore(-15, 28), MakeScore(-10, 55), MakeScore(-5, 69), MakeScore(-2, 82), MakeScore(9, 112), MakeScore(16, 118), MakeScore(30, 132), MakeScore(29, 142), MakeScore(32, 155), MakeScore(38, 165), MakeScore(46, 166), MakeScore(48, 169), MakeScore(58, 171) },
 
         /* Queen */
-        new uint[] { Score.MakeScore(-39, -36), Score.MakeScore(-21, -15), Score.MakeScore(3, 8), Score.MakeScore(3, 18), Score.MakeScore(14, 34), Score.MakeScore(22, 54), Score.MakeScore(28, 61), Score.MakeScore(41, 73), Score.MakeScore(43, 79), Score.MakeScore(48, 92), Score.MakeScore(56, 94), Score.MakeScore(60, 104), Score.MakeScore(60, 113), Score.MakeScore(66, 120), Score.MakeScore(67, 123), Score.MakeScore(70, 126), Score.MakeScore(71, 133), Score.MakeScore(73, 136), Score.MakeScore(79, 140), Score.MakeScore(88, 143), Score.MakeScore(88, 148), Score.MakeScore(99, 166), Score.MakeScore(102, 170), Score.MakeScore(102, 175), Score.MakeScore(106, 184), Score.MakeScore(109, 191), Score.MakeScore(113, 206), Score.MakeScore(116, 212) },
+        new uint[] { MakeScore(-39, -36), MakeScore(-21, -15), MakeScore(3, 8), MakeScore(3, 18), MakeScore(14, 34), MakeScore(22, 54), MakeScore(28, 61), MakeScore(41, 73), MakeScore(43, 79), MakeScore(48, 92), MakeScore(56, 94), MakeScore(60, 104), MakeScore(60, 113), MakeScore(66, 120), MakeScore(67, 123), MakeScore(70, 126), MakeScore(71, 133), MakeScore(73, 136), MakeScore(79, 140), MakeScore(88, 143), MakeScore(88, 148), MakeScore(99, 166), MakeScore(102, 170), MakeScore(102, 175), MakeScore(106, 184), MakeScore(109, 191), MakeScore(113, 206), MakeScore(116, 212) },
 
         /* King */
         new uint[] { }
     };
 
     // Not from Stockfish.
-    public uint FirstShieldingPawnKingSafetyBonus = Score.MakeScore(+20, +10);
-    public uint SecondShieldingPawnKingSafetyBonus = Score.MakeScore(+10, +5);
+    public uint FirstShieldingPawnKingSafetyBonus = MakeScore(+20, +10);
+    public uint SecondShieldingPawnKingSafetyBonus = MakeScore(+10, +5);
 
     // Not from Stockfish.
-    public uint HalfOpenFileNextToKingPenalty = Score.MakeScore(-20, -30);
-    public uint OpenFileNextToKingPenalty = Score.MakeScore(-40, -50);
+    public uint HalfOpenFileNextToKingPenalty = MakeScore(-20, -30);
+    public uint OpenFileNextToKingPenalty = MakeScore(-40, -50);
 
-    public uint ColorWeaknessPenaltyPerPawn = Score.MakeScore(-3, -8);
+    public uint ColorWeaknessPenaltyPerPawn = MakeScore(-3, -8);
 
-    public uint KnightOutpostBonus = Score.MakeScore(+54, +34);
-    public uint BishopOutpostBonus = Score.MakeScore(+31, +25);
+    public uint KnightOutpostBonus = MakeScore(+54, +34);
+    public uint BishopOutpostBonus = MakeScore(+31, +25);
 
     public EvaluationData()
     {
@@ -768,71 +753,41 @@ public class EvaluationData
     }
 
 
-    //public void InterpolateAll(int gamePhase)
-    //{
-    //    foreach (var value in PieceValues) value.Interpolate(gamePhase);
-    //
-    //    foreach (var bonus in PassedPawnBonus) bonus.Interpolate(gamePhase);
-    //    DoubledPawnPenalty.Interpolate(gamePhase);
-    //    IsolatedPawnPenalty.Interpolate(gamePhase);
-    //    BackwardPawnPenalty.Interpolate(gamePhase);
-    //
-    //    MaterialImbalancePawnPenaltyPerPawn.Interpolate(gamePhase);
-    //
-    //    KnightPairInOpenPositionBonus.Interpolate(gamePhase);
-    //    BishopPairInOpenPositionBonus.Interpolate(gamePhase);
-    //    KnightPairInClosedPositionBonus.Interpolate(gamePhase);
-    //    BishopPairInClosedPositionBonus.Interpolate(gamePhase);
-    //
-    //    MobilityBonusPerSquare.Interpolate(gamePhase);
-    //
-    //    FirstShieldingPawnKingSafetyBonus.Interpolate(gamePhase);
-    //    SecondShieldingPawnKingSafetyBonus.Interpolate(gamePhase);
-    //
-    //    HalfOpenFileNextToKingPenalty.Interpolate(gamePhase);
-    //    OpenFileNextToKingPenalty.Interpolate(gamePhase);
-    //
-    //    ColorWeaknessPenaltyPerPawn.Interpolate(gamePhase);
-    //
-    //    KnightOutpostBonus.Interpolate(gamePhase);
-    //    BishopOutpostBonus.Interpolate(gamePhase);
-    //}
-
     public void ResetAllValues()
     {
         PieceValues = new[]
         {
-            Score.MakeScore(   0,   0), /* None */
-            Score.MakeScore( 126, 208), /* Pawn */
-            Score.MakeScore( 781, 854), /* Knight */
-            Score.MakeScore( 825, 915), /* Bishop */
-            Score.MakeScore(1276,1380), /* Rook */
-            Score.MakeScore(2538,2682)  /* Queen */
+            MakeScore(   0,   0), /* None */
+            MakeScore( 126, 208), /* Pawn */
+            MakeScore( 781, 854), /* Knight */
+            MakeScore( 825, 915), /* Bishop */
+            MakeScore(1276,1380), /* Rook */
+            MakeScore(2538,2682)  /* Queen */
         };
     
     
         PassedPawnBonus = new[]
         {
-            Score.MakeScore(   +0,   +0),
-            Score.MakeScore(   +2,  +38),
-            Score.MakeScore(  +15,  +36),
-            Score.MakeScore(  +22,  +50),
-            Score.MakeScore(  +64,  +81),
-            Score.MakeScore( +166, +184),
-            Score.MakeScore( +284, +269),
-            Score.MakeScore(   +0,   +0),
+            MakeScore(   +0,   +0),
+            MakeScore(   +2,  +38),
+            MakeScore(  +15,  +36),
+            MakeScore(  +22,  +50),
+            MakeScore(  +64,  +81),
+            MakeScore( +166, +184),
+            MakeScore( +284, +269),
+            MakeScore(   +0,   +0),
         };
     
-        DoubledPawnPenalty = Score.MakeScore(-11, -51);
-        IsolatedPawnPenalty = Score.MakeScore(-1, -20);
-        BackwardPawnPenalty = Score.MakeScore(-6, -10);
+        DoubledPawnPenalty = MakeScore(-11, -51);
+        IsolatedPawnPenalty = MakeScore(-1, -20);
+        BackwardPawnPenalty = MakeScore(-6, -10);
     
-        MaterialImbalancePawnPenaltyPerPawn = Score.MakeScore(-5, -3);
+        MaterialImbalancePawnPenaltyPerPawn = MakeScore(-5, -3);
     
-        KnightPairInOpenPositionBonus = Score.MakeScore(+20, +10);
-        BishopPairInOpenPositionBonus = Score.MakeScore(+60, +40);
-        KnightPairInClosedPositionBonus = Score.MakeScore(+50, +30);
-        BishopPairInClosedPositionBonus = Score.MakeScore(+30, +10);
+        KnightPairInOpenPositionBonus = MakeScore(+20, +10);
+        BishopPairInOpenPositionBonus = MakeScore(+60, +40);
+        KnightPairInClosedPositionBonus = MakeScore(+50, +30);
+        BishopPairInClosedPositionBonus = MakeScore(+30, +10);
 
         MobilityBonus = new[]
         {
@@ -843,35 +798,34 @@ public class EvaluationData
             new uint[] { },
 
             /* Knight */
-            new uint[] { Score.MakeScore(-62, -81), Score.MakeScore(-53, -56), Score.MakeScore(-12, -30), Score.MakeScore(-4, -14), Score.MakeScore(3, 8), Score.MakeScore(13, 15), Score.MakeScore(22, 23), Score.MakeScore(28, 27), Score.MakeScore(33, 33) },
+            new uint[] { MakeScore(-62, -81), MakeScore(-53, -56), MakeScore(-12, -30), MakeScore(-4, -14), MakeScore(3, 8), MakeScore(13, 15), MakeScore(22, 23), MakeScore(28, 27), MakeScore(33, 33) },
         
             /* Bishop */
-            new uint[] { Score.MakeScore(-48, -59), Score.MakeScore(-20, -23), Score.MakeScore(16, -3), Score.MakeScore(26, 13), Score.MakeScore(38, 24), Score.MakeScore(51, 42), Score.MakeScore(55, 54), Score.MakeScore(63, 57), Score.MakeScore(63, 65), Score.MakeScore(68, 73), Score.MakeScore(81, 78), Score.MakeScore(81, 86), Score.MakeScore(91, 88), Score.MakeScore(98, 97) },
+            new uint[] { MakeScore(-48, -59), MakeScore(-20, -23), MakeScore(16, -3), MakeScore(26, 13), MakeScore(38, 24), MakeScore(51, 42), MakeScore(55, 54), MakeScore(63, 57), MakeScore(63, 65), MakeScore(68, 73), MakeScore(81, 78), MakeScore(81, 86), MakeScore(91, 88), MakeScore(98, 97) },
             
             /* Rook */
-            new uint[] { Score.MakeScore(-58, -76), Score.MakeScore(-27, -18), Score.MakeScore(-15, 28), Score.MakeScore(-10, 55), Score.MakeScore(-5, 69), Score.MakeScore(-2, 82), Score.MakeScore(9, 112), Score.MakeScore(16, 118), Score.MakeScore(30, 132), Score.MakeScore(29, 142), Score.MakeScore(32, 155), Score.MakeScore(38, 165), Score.MakeScore(46, 166), Score.MakeScore(48, 169), Score.MakeScore(58, 171) },
+            new uint[] { MakeScore(-58, -76), MakeScore(-27, -18), MakeScore(-15, 28), MakeScore(-10, 55), MakeScore(-5, 69), MakeScore(-2, 82), MakeScore(9, 112), MakeScore(16, 118), MakeScore(30, 132), MakeScore(29, 142), MakeScore(32, 155), MakeScore(38, 165), MakeScore(46, 166), MakeScore(48, 169), MakeScore(58, 171) },
 
             /* Queen */
-            new uint[] { Score.MakeScore(-39, -36), Score.MakeScore(-21, -15), Score.MakeScore(3, 8), Score.MakeScore(3, 18), Score.MakeScore(14, 34), Score.MakeScore(22, 54), Score.MakeScore(28, 61), Score.MakeScore(41, 73), Score.MakeScore(43, 79), Score.MakeScore(48, 92), Score.MakeScore(56, 94), Score.MakeScore(60, 104), Score.MakeScore(60, 113), Score.MakeScore(66, 120), Score.MakeScore(67, 123), Score.MakeScore(70, 126), Score.MakeScore(71, 133), Score.MakeScore(73, 136), Score.MakeScore(79, 140), Score.MakeScore(88, 143), Score.MakeScore(88, 148), Score.MakeScore(99, 166), Score.MakeScore(102, 170), Score.MakeScore(102, 175), Score.MakeScore(106, 184), Score.MakeScore(109, 191), Score.MakeScore(113, 206), Score.MakeScore(116, 212) },
+            new uint[] { MakeScore(-39, -36), MakeScore(-21, -15), MakeScore(3, 8), MakeScore(3, 18), MakeScore(14, 34), MakeScore(22, 54), MakeScore(28, 61), MakeScore(41, 73), MakeScore(43, 79), MakeScore(48, 92), MakeScore(56, 94), MakeScore(60, 104), MakeScore(60, 113), MakeScore(66, 120), MakeScore(67, 123), MakeScore(70, 126), MakeScore(71, 133), MakeScore(73, 136), MakeScore(79, 140), MakeScore(88, 143), MakeScore(88, 148), MakeScore(99, 166), MakeScore(102, 170), MakeScore(102, 175), MakeScore(106, 184), MakeScore(109, 191), MakeScore(113, 206), MakeScore(116, 212) },
 
             /* King */
             new uint[] { }
         };
 
-        FirstShieldingPawnKingSafetyBonus = Score.MakeScore(+20, +10);
-        SecondShieldingPawnKingSafetyBonus = Score.MakeScore(+10, +5);
+        FirstShieldingPawnKingSafetyBonus = MakeScore(+20, +10);
+        SecondShieldingPawnKingSafetyBonus = MakeScore(+10, +5);
     
-        HalfOpenFileNextToKingPenalty = Score.MakeScore(-20, -30);
-        OpenFileNextToKingPenalty = Score.MakeScore(-40, -50);
+        HalfOpenFileNextToKingPenalty = MakeScore(-20, -30);
+        OpenFileNextToKingPenalty = MakeScore(-40, -50);
     
-        ColorWeaknessPenaltyPerPawn = Score.MakeScore(-3, -8);
+        ColorWeaknessPenaltyPerPawn = MakeScore(-3, -8);
     
-        KnightOutpostBonus = Score.MakeScore(+54, +34);
-        BishopOutpostBonus = Score.MakeScore(+31, +25);
+        KnightOutpostBonus = MakeScore(+54, +34);
+        BishopOutpostBonus = MakeScore(+31, +25);
     }
 }
 
-//[System.Serializable]
 public struct Score
 {
     // A score is stored in a single unsigned integer,
@@ -884,56 +838,19 @@ public struct Score
         short opening = (short)(score & 0x0000ffff);
         short endgame = (short)(score & 0xffff0000);
 
-        int result = 0;
+        int result;
 
-        if (gamePhase > Evaluation.OpeningPhaseScore) result = opening;
-        else if (gamePhase < Evaluation.EndgamePhaseScore) result = endgame;
+        if (gamePhase > OpeningPhaseScore) result = opening;
+        else if (gamePhase < EndgamePhaseScore) result = endgame;
 
         else
         {
             // Interpolate for middle game
             result = (opening * gamePhase +
-                endgame * (Evaluation.OpeningPhaseScore - gamePhase)
-                ) / Evaluation.OpeningPhaseScore;
+                endgame * (OpeningPhaseScore - gamePhase)
+                ) / OpeningPhaseScore;
         }
 
         return result;
     }
-
-    //public Score(int opening, int endgame)
-    //{
-    //    Opening = opening;
-    //    Endgame = endgame;
-    //}
-    //
-    //
-    //public int Opening { get; private set; }
-    //
-    //public int Endgame { get; private set; }
-    //
-    //public int Value { get; private set; }
-    //
-    //
-    //public int Interpolate(int gamePhase)
-    //{
-    //    if (gamePhase > Evaluation.OpeningPhaseScore) Value = Opening;
-    //    else if (gamePhase < Evaluation.EndgamePhaseScore) Value = Endgame;
-    //
-    //    else
-    //    {
-    //        // Interpolate for middle game
-    //        Value = (Opening * gamePhase +
-    //            Endgame * (Evaluation.OpeningPhaseScore - gamePhase)
-    //            ) / Evaluation.OpeningPhaseScore;
-    //    }
-    //
-    //    return Value;
-    //}
-    //
-    //
-    //public static Score operator +(Score a, Score b) => new(a.Opening + b.Opening, a.Endgame + b.Endgame);
-    //
-    //public static Score operator -(Score a, Score b) => new(a.Opening - b.Opening, a.Endgame - b.Endgame);
-    //
-    //public static Score operator *(Score a, int b) => new(a.Opening * b, a.Endgame * b);
 }

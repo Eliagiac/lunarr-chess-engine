@@ -1,15 +1,17 @@
 ﻿MoveData.ComputeMoveData();
 MoveData.GenerateDirectionalMasks();
 MoveData.ComputeMagicBitboards();
-AIPlayer.Init();
 
 AIPlayer.UseMoveOrdering = true;
 AIPlayer.UseOpeningBook = false;
 AIPlayer.LateMoveReductionMinimumTreshold = 3;
 AIPlayer.LateMoveReductionPercentage = 98;
+AIPlayer.UseTranspositionTable = true;
 AIPlayer.ResetTranspositionTableOnEachSearch = false;
-AIPlayer.ShallowDepthThreshold = 6;
+AIPlayer.ShallowDepthThreshold = 8;
 AIPlayer.UseOpeningBook = false;
+
+AIPlayer.Init();
 
 
 bool start = true;

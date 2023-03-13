@@ -1,10 +1,7 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using static Piece;
+using static Evaluation;
+using static System.Math;
 
 public class AIPlayer
 {
@@ -21,8 +18,8 @@ public class AIPlayer
     public static int _currentSearchNodes;
 
 
-    public static System.Diagnostics.Stopwatch SearchTime = new();
-    public static System.Diagnostics.Stopwatch CurrentSearchTime = new();
+    public static Stopwatch SearchTime = new();
+    public static Stopwatch CurrentSearchTime = new();
     public static float _searchTimeResult;
 
     public static bool AbortSearch { get; set; }
@@ -30,13 +27,13 @@ public class AIPlayer
     // Indexed by LateMoveThreshold[totalMoveCount]
     public static int[] LateMoveThreshold;
 
-    public static readonly int[] _futilityMargin = { 0, Evaluation.StaticPieceValues[Piece.Knight][0], Evaluation.StaticPieceValues[Piece.Rook][0] };
+    public static readonly int[] _futilityMargin = { 0, StaticPieceValues[Knight][0], StaticPieceValues[Rook][0] };
 
-    public static readonly int LimitedRazoringMargin = Evaluation.StaticPieceValues[Piece.Queen][0];
+    public static readonly int LimitedRazoringMargin = StaticPieceValues[Queen][0];
 
     public static bool _nullMoveCheckmateFound;
 
-    public static readonly int[] _extraPromotions = { Piece.Knight, Piece.Rook, Piece.Bishop };
+    public static readonly int[] _extraPromotions = { Knight, Rook, Bishop };
 
     public static float _totalSearchTime;
 
@@ -71,9 +68,6 @@ public class AIPlayer
 
     public static int[] AspirationWindowsMultipliers = { 4, 4 };
 
-    public static ulong _nodeCount;
-    public static Queue<ulong> _nodeCountHistory = new();
-
     public static int[,] HistoryHeuristic = new int[64, 64];
 
     public static int _whiteWinsCount;
@@ -90,6 +84,7 @@ public class AIPlayer
     public static ulong SearchNodes;
     public static List<int> SearchNodesPerDepth;
     public static List<string> BestMovesThisSearch;
+    public static bool UseTranspositionTable;
     public static bool ResetTranspositionTableOnEachSearch;
     public static bool UseOpeningBook;
     public static List<DepthReachedData> DepthReachedData;
@@ -108,7 +103,7 @@ public class AIPlayer
 
     public static void Init()
     {
-        TranspositionTable = new(8_388_608); // 2^23
+        TranspositionTable = new(1_000_000); // 2^23
 
         LateMoveThreshold = Enumerable.Range(0, 300).Select(n => (int)((n + LateMoveReductionMinimumTreshold) - (n * LateMoveReductionPercentage / 100))).ToArray();
 
@@ -116,9 +111,9 @@ public class AIPlayer
         {
             for (int count = 1; count < 64; count++)
             {
-                float d = (float)System.Math.Log(depth);
-                float c = (float)System.Math.Log(count);
-                Reductions[depth, count] = Math.Max((int)Math.Round(d * c / 2f) - 1, 0);
+                float d = (float)Log(depth);
+                float c = (float)Log(count);
+                Reductions[depth, count] = Max((int)Round(d * c / 2f) - 1, 0);
             }
         }
 
@@ -204,6 +199,8 @@ public class AIPlayer
 
     private static void StartSearch()
     {
+        TranspositionTable.Enabled = UseTranspositionTable;
+
         AbortSearch = false;
 
         _progress = 0;
@@ -327,7 +324,6 @@ public class AIPlayer
 
                 DepthReachedData = new(CurrentDepthReachedData);
                 _searchTimeResult = CurrentSearchTime.ElapsedMilliseconds;
-                //Debug.Log($"{depth} : {CurrentSearchTime.Elapsed.ToString()}, ({alpha}, {beta}).");
                 _bestEval = evaluation;
                 BestMovesThisSearch.Add(CurrentMainLine.Move.ToString());
                 MainLine = new(CurrentMainLine);
@@ -335,7 +331,7 @@ public class AIPlayer
                 SearchNodes = (ulong)_currentSearchNodes;
                 SearchNodesPerDepth.Add(_currentSearchNodes);
 
-                Console.WriteLine($"info depth {depth} score cp {(!IsMateScore(evaluation) ? (int)Math.Round(evaluation / 2.6) : $"{((evaluation > 0) ? "+" : "-")}M{((CheckmateScore - Math.Abs(evaluation)) - 1) / 2}")} nodes {SearchNodes} nps {(int)Math.Round(SearchNodes / (double)SearchTime.ElapsedMilliseconds * 1000)} time {SearchTime.ElapsedMilliseconds} pv {MainLine}");
+                Console.WriteLine($"info depth {depth} score cp {(!IsMateScore(evaluation) ? (int)Round(evaluation / 2.6) : $"{((evaluation > 0) ? "+" : "-")}M{((CheckmateScore - Abs(evaluation)) - 1) / 2}")} nodes {SearchNodes} nps {(int)Round(SearchNodes / (double)SearchTime.ElapsedMilliseconds * 1000)} time {SearchTime.ElapsedMilliseconds} pv {MainLine}");
             }
 
             depth++;
@@ -371,8 +367,8 @@ public class AIPlayer
         // Mate distance pruning.
         if (plyFromRoot > 0)
         {
-            alpha = Math.Max(alpha, -CheckmateScore + plyFromRoot);
-            beta = Math.Min(beta, CheckmateScore - plyFromRoot);
+            alpha = Max(alpha, -CheckmateScore + plyFromRoot);
+            beta = Min(beta, CheckmateScore - plyFromRoot);
 
             if (alpha >= beta)
             {
@@ -383,7 +379,7 @@ public class AIPlayer
         int ttVal = TranspositionTable.LookupEvaluation(depth, plyFromRoot, alpha, beta);
 
         // Don't use traspositions at ply from root 0 to analyse possible draws by repetition.
-        if (ttVal != TranspositionTable.lookupFailed && plyFromRoot > 0)
+        if (ttVal != TranspositionTable.LookupFailed && plyFromRoot > 0)
         {
             pvLine = TranspositionTable.GetStoredLine();
             return ttVal;
@@ -393,7 +389,7 @@ public class AIPlayer
 
 
         bool inCheck = Board.IsKingInCheck[Board.CurrentTurn];
-        int staticEvaluation = Evaluation.Evaluate(out int gamePhase, evaluationData);
+        int staticEvaluation = Evaluate(out int gamePhase, evaluationData);
 
         // Razoring.
         // Inspired by Strelka: https://www.chessprogramming.org/Razoring#Strelka.
@@ -402,24 +398,24 @@ public class AIPlayer
         {
             int score = staticEvaluation +
                 (inCheck ? 600 : // Larger margin if we are in check.
-                Evaluation.StaticPieceValues[Piece.Pawn][0]);
+                StaticPieceValues[Pawn][0]);
 
             if (score < beta)
             {
                 if (depth == 1)
                 {
                     int newScore = QuiescenceSearch(alpha, beta, plyFromRoot, evaluationData, out Line _);
-                    return Math.Max(newScore, score);
+                    return Max(newScore, score);
                 }
 
                 score +=
                     inCheck ? 600 : // Larger margin if we are in check.
-                    Evaluation.StaticPieceValues[Piece.Pawn][0];
+                    StaticPieceValues[Pawn][0];
 
                 if (score < beta && depth <= 3)
                 {
                     int newScore = QuiescenceSearch(alpha, beta, plyFromRoot, evaluationData, out Line _);
-                    if (newScore < beta) return Math.Max(newScore, score);
+                    if (newScore < beta) return Max(newScore, score);
                 }
             }
         }
@@ -481,7 +477,7 @@ public class AIPlayer
             if (CurrentDepthReachedData.Any(d => d.Depth == plyFromRoot)) CurrentDepthReachedData.Find(d => d.Depth == plyFromRoot).Count++;
             else CurrentDepthReachedData.Add(new(plyFromRoot));
 
-            return Evaluation.Evaluate(out int _, evaluationData);
+            return Evaluate(out int _, evaluationData);
         }
 
 
@@ -542,8 +538,8 @@ public class AIPlayer
 
 
             bool captureOrPromotion =
-                moves[i].CapturedPieceType != Piece.None ||
-                moves[i].PromotionPiece != Piece.None;
+                moves[i].CapturedPieceType != None ||
+                moves[i].PromotionPiece != None;
 
             bool givesCheck = Board.IsKingInCheck[Board.CurrentTurn];
 
@@ -575,7 +571,6 @@ public class AIPlayer
 
 
             _currentSearchNodes++;
-            _nodeCount++;
 
 
             // Depth reductions/extensions.
@@ -589,13 +584,13 @@ public class AIPlayer
             {
                 // Don't reduce captures, promotions and killer moves, unless we are past the moveCountBasedPruningThreshold (very late moves)
                 if (moveCountBasedPruning ||
-                    (moves[i].CapturedPieceType == Piece.None &&
-                    moves[i].PromotionPiece == Piece.None &&
+                    (moves[i].CapturedPieceType == None &&
+                    moves[i].PromotionPiece == None &&
                     !moves[i].Equals(KillerMoves[0, plyFromRoot]) &&
                     !moves[i].Equals(KillerMoves[1, plyFromRoot])))
                 {
                     LMR = true;
-                    R += Reductions[Math.Min(depth, 63), Math.Min(i, 63)];
+                    R += Reductions[Min(depth, 63), Min(i, 63)];
                 }
             }
 
@@ -615,7 +610,7 @@ public class AIPlayer
 
             // Passed pawn extension.
             if (newExtensions < MaxExtensions &&
-                moves[i].PieceType == Piece.Pawn &&
+                moves[i].PieceType == Pawn &&
                 ((moves[i].TargetSquare & Mask.SeventhRank) != 0))
             {
                 newExtensions++;
@@ -638,7 +633,7 @@ public class AIPlayer
 
 
             // Look for promotions that avoid stalemate.
-            if (moves[i].PromotionPiece != Piece.None && evaluation == 0)
+            if (moves[i].PromotionPiece != None && evaluation == 0)
             {
                 foreach (int promotionPiece in _extraPromotions)
                 {
@@ -666,7 +661,7 @@ public class AIPlayer
                 {
                     TranspositionTable.StoreEvaluation(depth, plyFromRoot, beta, TranspositionTable.LowerBound, new(moves[i]));
 
-                    if (moves[i].CapturedPieceType == Piece.None)
+                    if (moves[i].CapturedPieceType == None)
                     {
                         HistoryHeuristic[BitboardUtility.FirstSquareIndex(moves[i].StartSquare), BitboardUtility.FirstSquareIndex(moves[i].TargetSquare)] += depth * depth;
 
@@ -715,14 +710,14 @@ public class AIPlayer
 
         int ttVal = TranspositionTable.LookupEvaluation(0, plyFromRoot, alpha, beta);
 
-        if (ttVal != TranspositionTable.lookupFailed)
+        if (ttVal != TranspositionTable.LookupFailed)
         {
             pvLine = TranspositionTable.GetStoredLine();
             return ttVal;
         }
 
         // Standing pat.
-        int evaluation = Evaluation.Evaluate(out int gamePhase, evaluationData);
+        int evaluation = Evaluate(out int gamePhase, evaluationData);
         if (evaluation >= beta)
         {
             if (CurrentDepthReachedData.Any(d => d.Depth == plyFromRoot)) CurrentDepthReachedData.Find(d => d.Depth == plyFromRoot).Count++;
@@ -758,7 +753,7 @@ public class AIPlayer
 
         if (UseMoveOrdering) OrderMoves(moves, -1, gamePhase);
 
-        bool isEndGame = gamePhase < Evaluation.EndgamePhaseScore;
+        bool isEndGame = gamePhase < EndgamePhaseScore;
 
         int evalType = TranspositionTable.UpperBound;
 
@@ -766,12 +761,11 @@ public class AIPlayer
         {
             // Delta pruning
             if (!isEndGame)
-                if (Evaluation.GetPieceValue(move.CapturedPieceType) + 200 <= alpha) continue;
+                if (GetPieceValue(move.CapturedPieceType) + 200 <= alpha) continue;
 
             Board.MakeMove(move);
 
             _currentSearchNodes++;
-            _nodeCount++;
 
             evaluation = -QuiescenceSearch(-beta, -alpha, plyFromRoot + 1, evaluationData, out Line nextLine);
 
@@ -825,9 +819,9 @@ public class AIPlayer
             if (move.Equals(hashMove)) moveScoreGuess += 30000;
 
             // Sort captures.
-            else if (move.CapturedPieceType != Piece.None)
+            else if (move.CapturedPieceType != None)
             {
-                moveScoreGuess += 10 * Evaluation.GetPieceValue(move.CapturedPieceType) - Evaluation.GetPieceValue(move.PieceType);
+                moveScoreGuess += 10 * GetPieceValue(move.CapturedPieceType) - GetPieceValue(move.PieceType);
                 moveScoreGuess += 10000;
 
                 // MVV-LVA has poor performance compared to the above code (in terms of nodes searched).
@@ -848,9 +842,9 @@ public class AIPlayer
 
                     moveScoreGuess += HistoryHeuristic[BitboardUtility.FirstSquareIndex(move.StartSquare), targetSquareIndex];
 
-                    //moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == Piece.None ? move.PieceType : move.PromotionPiece, targetSquareIndex, Board.CurrentTurn == 0, gamePhase);
+                    //moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == None ? move.PieceType : move.PromotionPiece, targetSquareIndex, Board.CurrentTurn == 0, gamePhase);
 
-                    moveScoreGuess += Evaluation.GetPieceValue(move.PromotionPiece);
+                    moveScoreGuess += GetPieceValue(move.PromotionPiece);
                     if (Board.PawnAttackersTo(targetSquareIndex, Board.CurrentTurn, Board.OpponentTurn) != 0) moveScoreGuess -= 350;
                 }
             }
@@ -875,7 +869,7 @@ public class AIPlayer
 
     public static bool IsMateScore(int score)
     {
-        return Math.Abs(score) > CheckmateScore - 1000;
+        return Abs(score) > CheckmateScore - 1000;
     }
 
 
@@ -893,64 +887,64 @@ public class AIPlayer
 
     public static Dictionary<int, Dictionary<int, int>> MvvLva = new()
     {
-        [Piece.Pawn] = new()
+        [Pawn] = new()
         {
-            [Piece.Pawn] = 10105,
-            [Piece.Knight] = 10205,
-            [Piece.Bishop] = 10305,
-            [Piece.Rook] = 10405,
-            [Piece.Queen] = 10505,
-            [Piece.King] = 10605
+            [Pawn] = 10105,
+            [Knight] = 10205,
+            [Bishop] = 10305,
+            [Rook] = 10405,
+            [Queen] = 10505,
+            [King] = 10605
         },
 
-        [Piece.Knight] = new()
+        [Knight] = new()
         {
-            [Piece.Pawn] = 10104,
-            [Piece.Knight] = 10204,
-            [Piece.Bishop] = 10304,
-            [Piece.Rook] = 10404,
-            [Piece.Queen] = 10504,
-            [Piece.King] = 10604
+            [Pawn] = 10104,
+            [Knight] = 10204,
+            [Bishop] = 10304,
+            [Rook] = 10404,
+            [Queen] = 10504,
+            [King] = 10604
         },
 
-        [Piece.Bishop] = new()
+        [Bishop] = new()
         {
-            [Piece.Pawn] = 10103,
-            [Piece.Knight] = 10203,
-            [Piece.Bishop] = 10303,
-            [Piece.Rook] = 10403,
-            [Piece.Queen] = 10503,
-            [Piece.King] = 10603
+            [Pawn] = 10103,
+            [Knight] = 10203,
+            [Bishop] = 10303,
+            [Rook] = 10403,
+            [Queen] = 10503,
+            [King] = 10603
         },
 
-        [Piece.Rook] = new()
+        [Rook] = new()
         {
-            [Piece.Pawn] = 10102,
-            [Piece.Knight] = 10202,
-            [Piece.Bishop] = 10302,
-            [Piece.Rook] = 10402,
-            [Piece.Queen] = 10502,
-            [Piece.King] = 10602
+            [Pawn] = 10102,
+            [Knight] = 10202,
+            [Bishop] = 10302,
+            [Rook] = 10402,
+            [Queen] = 10502,
+            [King] = 10602
         },
 
-        [Piece.Queen] = new()
+        [Queen] = new()
         {
-            [Piece.Pawn] = 10101,
-            [Piece.Knight] = 10201,
-            [Piece.Bishop] = 10301,
-            [Piece.Rook] = 10401,
-            [Piece.Queen] = 10501,
-            [Piece.King] = 10601
+            [Pawn] = 10101,
+            [Knight] = 10201,
+            [Bishop] = 10301,
+            [Rook] = 10401,
+            [Queen] = 10501,
+            [King] = 10601
         },
 
-        [Piece.King] = new()
+        [King] = new()
         {
-            [Piece.Pawn] = 10100,
-            [Piece.Knight] = 10200,
-            [Piece.Bishop] = 10300,
-            [Piece.Rook] = 10400,
-            [Piece.Queen] = 10500,
-            [Piece.King] = 10600
+            [Pawn] = 10100,
+            [Knight] = 10200,
+            [Bishop] = 10300,
+            [Rook] = 10400,
+            [Queen] = 10500,
+            [King] = 10600
         },
     };
 
