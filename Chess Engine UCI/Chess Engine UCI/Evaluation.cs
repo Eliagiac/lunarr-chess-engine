@@ -337,6 +337,19 @@ public class Evaluation
         }
     }
 
+    public static int GetEndgamePieceValue(int piece)
+    {
+        switch (piece)
+        {
+            case Piece.Pawn: return StaticPieceValues[Piece.Pawn][1];
+            case Piece.Knight: return StaticPieceValues[Piece.Knight][1];
+            case Piece.Bishop: return StaticPieceValues[Piece.Bishop][1];
+            case Piece.Rook: return StaticPieceValues[Piece.Rook][1];
+            case Piece.Queen: return StaticPieceValues[Piece.Queen][1];
+            default: return 0;
+        }
+    }
+
     public static int GetGamePhase(int whiteMaterial, int blackMaterial, int whitePawnMaterial, int blackPawnMaterial) => 
         (whiteMaterial + blackMaterial) - (whitePawnMaterial + blackPawnMaterial);
 

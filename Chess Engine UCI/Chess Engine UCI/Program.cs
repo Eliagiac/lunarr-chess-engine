@@ -1,15 +1,20 @@
 ﻿MoveData.ComputeMoveData();
 MoveData.GenerateDirectionalMasks();
 MoveData.ComputeMagicBitboards();
-AIPlayer.Init();
 
 AIPlayer.UseMoveOrdering = true;
 AIPlayer.UseOpeningBook = false;
 AIPlayer.LateMoveReductionMinimumTreshold = 3;
 AIPlayer.LateMoveReductionPercentage = 98;
+AIPlayer.UseTranspositionTable = true;
 AIPlayer.ResetTranspositionTableOnEachSearch = false;
-AIPlayer.ShallowDepthThreshold = 6;
+AIPlayer.ShallowDepthThreshold = 10;
 AIPlayer.UseOpeningBook = false;
+AIPlayer.FutilityPruningMaxDepth = 6;
+AIPlayer.NullMovePruningHighDepthThreshold = 8;
+AIPlayer.QuiescenceMoveCountPruningThreshold = 3;
+
+AIPlayer.Init();
 
 
 bool start = true;
@@ -49,6 +54,7 @@ while (true)
                             if (ex is KeyNotFoundException || ex is IndexOutOfRangeException)
                             {
                                 Console.WriteLine("Invalid fen!");
+                                start = true;
                                 return;
                             }
 
@@ -76,6 +82,7 @@ while (true)
                                 catch
                                 {
                                     Console.WriteLine("An error occured while parsing the moves!");
+                                    start = true;
                                 }
                             }
 
@@ -91,17 +98,18 @@ while (true)
                 {
                     case "movetime":
                         AIPlayer.UseTimeLimit = true;
+
                         try
                         {
                             AIPlayer.TimeLimit = float.Parse(commands[2]) / 1000;
+                            AIPlayer.PlayBestMove();
+                            start = false;
                         }
                         catch (FormatException)
                         {
                             Console.WriteLine("Invalid time limit!");
+                            start = true;
                         }
-
-                        AIPlayer.PlayBestMove();
-                        start = false;
 
                         break;
 

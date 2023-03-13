@@ -1073,6 +1073,11 @@ public class Board
             (pieceType.IsSlidingPiece() ? pieceType : Piece.None);
     }
 
+    public static int PieceType(ulong square)
+    {
+        return Squares[BitboardUtility.FirstSquareIndex(square)].PieceType();
+    }
+
     public static int PieceColor(int squareIndex)
     {
         return Squares[squareIndex].PieceColor();
