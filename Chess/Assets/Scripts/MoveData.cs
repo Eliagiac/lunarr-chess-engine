@@ -1,6 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
+using System.Net.NetworkInformation;
 
 public class MoveData
 {
@@ -9,6 +9,10 @@ public class MoveData
     public static ulong[,] Masks;
     public static Dictionary<int, ulong[,]> SpecificMasks;
 
+    public static Dictionary<int, MagicBitboard[]> MagicBitboards;
+
+    private static ulong[] RookTable;
+    private static ulong[] BishopTable;
 
     private static readonly (int direction, int offset)[] BishopDirections = new[] { (7, -1), (-7, 1), (9, 1), (-9, -1) };
     private static readonly (int direction, int offset)[] RookDirections = new[] { (1, 1), (-1, -1), (8, 0), (-8, 0) };
@@ -152,5 +156,119 @@ public class MoveData
                 }
             }
         }
+    }
+
+    public static void ComputeMagicBitboards()
+    {
+        MagicBitboards = new()
+        {
+            [Piece.Rook] = new MagicBitboard[64],
+            [Piece.Bishop] = new MagicBitboard[64]
+        };
+
+        RookTable = new ulong[0x19000];
+        BishopTable = new ulong[0x1480];
+
+        ComputeMagicBitboard(RookTable, MagicBitboards[Piece.Rook], Piece.Rook);
+        ComputeMagicBitboard(BishopTable, MagicBitboards[Piece.Bishop], Piece.Bishop);
+    }
+
+    // Translated from Stockfish.
+    private static void ComputeMagicBitboard(ulong[] table, MagicBitboard[] magics, int pieceType)
+    {
+        ulong[] occupancy = new ulong[4096];
+        ulong[] reference = new ulong[4096];
+        ulong edges;
+        ulong b;
+
+        int[] epoch = new int[4096];
+        int cnt = 0;
+        ulong size = 0;
+
+        for (int s = 0; s < 64; s++)
+        {
+            // Board edges are not considered in the relevant occupancies
+            edges = ((Board.Ranks[0][0] | Board.Ranks[0][7]) & ~Board.Ranks[0][Board.GetRank(s)]) | ((Board.Files[0] | Board.Files[7]) & ~Board.Files[Board.GetFile(s)]);
+
+            // Given a square 's', the mask is the bitboard of sliding attacks from
+            // 's' computed on an empty board. The index must be big enough to contain
+            // all the attacks for each possible subset of the mask and so is 2 power
+            // the number of 1s of the mask. Hence we deduce the size of the shift to
+            // apply to the 64 or 32 bits word to get the index.
+            magics[s] = new(DiagonalAttacks(pieceType, s, 0) & ~edges, table, 0);
+            var m = magics[s];
+
+            // Set the offset for the attacks table of the square. We have individual
+            // table sizes for each square with "Fancy Magic Bitboards".
+            m.Offset = s == 0 ? 0 : magics[s - 1].Offset + size;
+
+            // Use Carry-Rippler trick to enumerate all subsets of masks[s] and
+            // store the corresponding sliding attack bitboard in reference[].
+            b = 0;
+            size = 0;
+            do
+            {
+                occupancy[size] = b;
+                reference[size] = DiagonalAttacks(pieceType, s, b);
+
+                m.Attacks[m.Offset + BitboardUtility.ParallelBitExtract(b, m.Mask)] = reference[size];
+
+                size++;
+                b = (b - m.Mask) & m.Mask;
+            } while (b != 0);
+        }
+
+        ulong DiagonalAttacks(int pieceType, int squareIndex, ulong occupiedSquares)
+        {
+            ulong attacks = 0;
+
+            // Store moves in each direction individually to identify blockers.
+            for (int direction = 0; direction < Moves[pieceType].GetLength(1); direction++)
+            {
+                ulong maskedBlockers = occupiedSquares & Moves[pieceType][squareIndex, direction];
+
+                // Use bitscanning to find first blocker.
+                // Directions at even indexes are always positive, and viceversa.
+                int firstBlockerIndex = direction % 2 == 0 ? BitboardUtility.FirstSquareIndex(maskedBlockers) : BitboardUtility.LastSquareIndex(maskedBlockers);
+
+                // Add moves in this direction.
+                attacks |= Moves[pieceType][squareIndex, direction];
+
+                // Remove moves in the ray from the first blocker in the same direction (only moves between the piece and the first blocker remain).
+                if (maskedBlockers != 0) attacks &= ~Moves[pieceType][firstBlockerIndex, direction];
+            }
+
+            return attacks;
+        }
+    }
+}
+
+public class MagicBitboard
+{
+    public ulong Mask;
+    public ulong[] Attacks;
+    public ulong Offset;
+
+    public MagicBitboard(ulong mask, ulong[] attacks, ulong offset)
+    {
+        Mask = mask;
+        Attacks = attacks;
+        Offset = offset;
+    }
+
+
+    public ulong GetAttacks(ulong occupiedSquares) => Attacks[Offset + BitboardUtility.ParallelBitExtract(occupiedSquares, Mask)];
+
+
+    public static ulong GetAttacks(int pieceType, int squareIndex, ulong occupiedSquares)
+    {
+        if (pieceType == Piece.Rook) return MoveData.MagicBitboards[Piece.Rook][squareIndex].GetAttacks(occupiedSquares);
+        if (pieceType == Piece.Bishop) return MoveData.MagicBitboards[Piece.Bishop][squareIndex].GetAttacks(occupiedSquares);
+
+        if (pieceType == Piece.Queen) return
+                MoveData.MagicBitboards[Piece.Rook][squareIndex].GetAttacks(occupiedSquares) |
+                MoveData.MagicBitboards[Piece.Bishop][squareIndex].GetAttacks(occupiedSquares);
+
+        return 0;
     }
 }

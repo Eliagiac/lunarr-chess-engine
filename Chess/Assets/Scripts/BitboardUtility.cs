@@ -22,4 +22,9 @@ public class BitboardUtility
     {
         return X86.Popcnt.popcnt_u64(bitboard);
     }
+
+    public static ulong ParallelBitExtract(ulong bitboard, ulong mask)
+    {
+        return X86.Bmi2.pext_u64(bitboard, mask);
+    }
 }

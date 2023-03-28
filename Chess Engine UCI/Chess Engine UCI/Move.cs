@@ -31,13 +31,14 @@ public class Move
     }
 
 
-    public bool Equals(Move move)
+    public bool Equals(Move other)
     {
         return
-            move != null &&
-            StartSquare == move.StartSquare &&
-            TargetSquare == move.TargetSquare &&
-            PromotionPiece == move.PromotionPiece;
+            other != null &&
+            PieceType == other.PieceType &&
+            StartSquare == other.StartSquare &&
+            TargetSquare == other.TargetSquare &&
+            PromotionPiece == other.PromotionPiece;
     }
 
     public override string ToString()

@@ -527,6 +527,50 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 285699770}
   m_CullTransparentMesh: 1
+--- !u!1 &301661258
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 301661260}
+  - component: {fileID: 301661259}
+  m_Layer: 0
+  m_Name: Game Handler
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &301661259
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 301661258}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2596c8d221854e64c91d0219aab56202, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!4 &301661260
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 301661258}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: 5
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &341731450
 GameObject:
   m_ObjectHideFlags: 0
@@ -1191,7 +1235,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &551995469
 Transform:
   m_ObjectHideFlags: 0
@@ -1747,12 +1791,12 @@ MonoBehaviour:
   _piecesParent: {fileID: 1232728998}
   _zobristKeyText: {fileID: 1958852806}
   _squarePrefab: {fileID: 8996678357403865778, guid: 60b6a8713df878a4bac7bf3542860c61, type: 3}
-  _whiteColour: {r: 0.9339623, g: 0.8897159, b: 0.8414472, a: 1}
-  _blackColour: {r: 0.5943396, g: 0.42753202, b: 0.35604307, a: 1}
-  _whiteHighlightedColour: {r: 0.8666667, g: 0.34901962, b: 0.34901962, a: 1}
-  _blackHighlightedColour: {r: 0.77254903, g: 0.26666668, b: 0.30980393, a: 1}
-  _whiteSelectedColour: {r: 0.9254902, g: 0.77254903, b: 0.48235294, a: 1}
-  _blackSelectedColour: {r: 0.78431374, g: 0.61960787, b: 0.3137255, a: 1}
+  _whiteColor: {r: 0.93333334, g: 0.84705883, b: 0.7529412, a: 1}
+  _blackColor: {r: 0.67058825, g: 0.47843137, b: 0.39607844, a: 1}
+  _whiteHighlightedColor: {r: 0.8666667, g: 0.34901962, b: 0.34901962, a: 1}
+  _blackHighlightedColor: {r: 0.77254903, g: 0.26666668, b: 0.30980393, a: 1}
+  _whiteSelectedColor: {r: 0.8117647, g: 0.6745098, b: 0.41568628, a: 1}
+  _blackSelectedColor: {r: 0.78431374, g: 0.61960787, b: 0.3137255, a: 1}
   _kingW: {fileID: 8028383441687861003, guid: 08976b688063b1a4298eb443befdf2b3, type: 3}
   _kingB: {fileID: 6691247605398249880, guid: aea204201ede3784fb90fc0997fdea7e, type: 3}
   _queenW: {fileID: 2682560327291955389, guid: 650a6aceaa66dbc4fbf2b355a604d159, type: 3}
@@ -1801,7 +1845,6 @@ MonoBehaviour:
   _transpositionCounter: 
   _depthReached: 0
   SelectedPiece: -1
-  _positionHistory: 
 --- !u!114 &664474571
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1841,165 +1884,6 @@ MonoBehaviour:
   _futilityPrunes: 0
   _moveCountBasedPrunes: 0
   _searchNodesPerDepth: 
-  _depthReached: []
-  version1:
-    PieceValues:
-    - _opening: 0
-      _endgame: 0
-    - _opening: 126
-      _endgame: 208
-    - _opening: 781
-      _endgame: 854
-    - _opening: 825
-      _endgame: 915
-    - _opening: 1276
-      _endgame: 1380
-    - _opening: 2538
-      _endgame: 2682
-    PassedPawnBonus:
-    - _opening: 0
-      _endgame: 0
-    - _opening: 2
-      _endgame: 38
-    - _opening: 15
-      _endgame: 36
-    - _opening: 22
-      _endgame: 50
-    - _opening: 64
-      _endgame: 81
-    - _opening: 166
-      _endgame: 184
-    - _opening: 284
-      _endgame: 269
-    - _opening: 0
-      _endgame: 0
-    DoubledPawnPenalty:
-      _opening: -11
-      _endgame: -51
-    IsolatedPawnPenalty:
-      _opening: -1
-      _endgame: -20
-    BackwardPawnPenalty:
-      _opening: -6
-      _endgame: -10
-    MaterialImbalancePawnPenaltyPerPawn:
-      _opening: -5
-      _endgame: -3
-    KnightPairInOpenPositionBonus:
-      _opening: 20
-      _endgame: 10
-    BishopPairInOpenPositionBonus:
-      _opening: 60
-      _endgame: 40
-    KnightPairInClosedPositionBonus:
-      _opening: 50
-      _endgame: 30
-    BishopPairInClosedPositionBonus:
-      _opening: 30
-      _endgame: 10
-    MobilityBonusPerSquare:
-      _opening: 5
-      _endgame: 3
-    FirstShieldingPawnKingSafetyBonus:
-      _opening: 20
-      _endgame: 10
-    SecondShieldingPawnKingSafetyBonus:
-      _opening: 10
-      _endgame: 5
-    HalfOpenFileNextToKingPenalty:
-      _opening: -20
-      _endgame: -30
-    OpenFileNextToKingPenalty:
-      _opening: -40
-      _endgame: -50
-    ColourWeaknessPenaltyPerPawn:
-      _opening: -3
-      _endgame: -8
-    KnightOutpostBonus:
-      _opening: 54
-      _endgame: 34
-    BishopOutpostBonus:
-      _opening: 31
-      _endgame: 25
-  version2:
-    PieceValues:
-    - _opening: 0
-      _endgame: 0
-    - _opening: 126
-      _endgame: 208
-    - _opening: 781
-      _endgame: 854
-    - _opening: 825
-      _endgame: 915
-    - _opening: 1276
-      _endgame: 1380
-    - _opening: 2538
-      _endgame: 2682
-    PassedPawnBonus:
-    - _opening: 0
-      _endgame: 0
-    - _opening: 2
-      _endgame: 38
-    - _opening: 15
-      _endgame: 36
-    - _opening: 22
-      _endgame: 50
-    - _opening: 64
-      _endgame: 81
-    - _opening: 166
-      _endgame: 184
-    - _opening: 284
-      _endgame: 269
-    - _opening: 0
-      _endgame: 0
-    DoubledPawnPenalty:
-      _opening: -11
-      _endgame: -51
-    IsolatedPawnPenalty:
-      _opening: -1
-      _endgame: -20
-    BackwardPawnPenalty:
-      _opening: -6
-      _endgame: -10
-    MaterialImbalancePawnPenaltyPerPawn:
-      _opening: -5
-      _endgame: -3
-    KnightPairInOpenPositionBonus:
-      _opening: 20
-      _endgame: 10
-    BishopPairInOpenPositionBonus:
-      _opening: 60
-      _endgame: 40
-    KnightPairInClosedPositionBonus:
-      _opening: 50
-      _endgame: 30
-    BishopPairInClosedPositionBonus:
-      _opening: 30
-      _endgame: 10
-    MobilityBonusPerSquare:
-      _opening: 5
-      _endgame: 3
-    FirstShieldingPawnKingSafetyBonus:
-      _opening: 20
-      _endgame: 10
-    SecondShieldingPawnKingSafetyBonus:
-      _opening: 10
-      _endgame: 5
-    HalfOpenFileNextToKingPenalty:
-      _opening: -20
-      _endgame: -30
-    OpenFileNextToKingPenalty:
-      _opening: -40
-      _endgame: -50
-    ColourWeaknessPenaltyPerPawn:
-      _opening: -3
-      _endgame: -8
-    KnightOutpostBonus:
-      _opening: 54
-      _endgame: 34
-    BishopOutpostBonus:
-      _opening: 31
-      _endgame: 25
 --- !u!1 &701279192
 GameObject:
   m_ObjectHideFlags: 0

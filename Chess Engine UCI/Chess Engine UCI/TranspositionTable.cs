@@ -1,21 +1,21 @@
 ﻿public class TranspositionTable {
 
-	public const int LookupFailed = int.MinValue;
+	public const int LookupFailed = 32003;
 
 	// The value for this position is the exact evaluation.
-	public const int Exact = 0;
+	public const int Exact = 3;
 
 	// A move was found during the search that was too good, meaning the opponent will play a different move earlier on,
 	// not allowing the position where this move was available to be reached. Because the search cuts off at
 	// this point (beta cut-off), an even better move may exist. This means that the evaluation for the
 	// position could be even higher, making the stored value the lower bound of the actual value.
-	public const int LowerBound = 1;
+	public const int LowerBound = 2;
 
 	// No move during the search resulted in a position that was better than the current player could get from playing a
 	// different move in an earlier position (i.e eval was <= alpha for all moves in the position).
 	// Due to the way alpha-beta search works, the value we get here won't be the exact evaluation of the position,
 	// but rather the upper bound of the evaluation. This means that the evaluation is, at most, equal to this value.
-	public const int UpperBound = 2;
+	public const int UpperBound = 1;
 
 	public Entry[] Entries;
 
@@ -47,7 +47,17 @@
 
     public Line GetStoredLine() => Entries[Index].Line;
 
-    public int LookupEvaluation (int depth, int plyFromRoot, int alpha, int beta) 
+    public Entry GetStoredEntry(out bool ttHit)
+    {
+        Entry entry = Entries[Index];
+
+        if (entry.Key == Board.ZobristKey) ttHit = true;
+        else ttHit = false;
+
+        return entry;
+    }
+
+    public int LookupEvaluation(int depth, int plyFromRoot, int alpha, int beta) 
 	{
 		if (!Enabled) return LookupFailed;
 
@@ -56,9 +66,9 @@
 		if (entry.Key == Board.ZobristKey) 
 		{
 			// Only use stored evaluation if it has been searched to at least the same depth as would be searched now
-			if (entry.Depth >= depth) 
+			if (entry.Depth >= depth && depth != AI.Null && entry.Evaluation != LookupFailed) 
 			{
-				int correctedScore = CorrectRetrievedMateScore (entry.Value, plyFromRoot);
+				int correctedScore = CorrectRetrievedMateScore (entry.Evaluation, plyFromRoot);
 
 				// We have stored the exact evaluation for this position, so return it
 				if (entry.Bound == Exact) 
@@ -85,14 +95,14 @@
 		return LookupFailed;
 	}
 
-	public void StoreEvaluation (int depth, int numPlySearched, int eval, int evalType, Line line) 
+	public void StoreEvaluation(int depth, int numPlySearched, int eval, int evalType, Line line, int staticEvaluation) 
 	{
 		if (!Enabled) return;
 
         ulong index = Index;
 		if (depth >= Entries[index].Depth) 
 		{
-			Entry entry = new Entry(Board.ZobristKey, CorrectMateScoreForStorage (eval, numPlySearched), (byte)depth, (byte)evalType, line);
+			Entry entry = new Entry(Board.ZobristKey, CorrectMateScoreForStorage(eval, numPlySearched), (byte)depth, (byte)evalType, line, staticEvaluation);
 			Entries[index] = entry;
 		}
 	}
@@ -103,22 +113,22 @@
     }
 
 
-	int CorrectMateScoreForStorage (int score, int numPlySearched) 
+	public int CorrectMateScoreForStorage(int score, int numPlySearched) 
 	{
-		if (AIPlayer.IsMateScore (score)) 
+		if (AI.IsMateScore(score)) 
 		{
-			int sign = Math.Sign (score);
+			int sign = Math.Sign(score);
 			return (score * sign + numPlySearched) * sign;
 		}
 
 		return score;
 	}
 
-	int CorrectRetrievedMateScore (int score, int numPlySearched) 
+    public int CorrectRetrievedMateScore(int score, int numPlySearched) 
 	{
-		if (AIPlayer.IsMateScore (score)) 
+		if (AI.IsMateScore(score)) 
 		{
-			int sign = Math.Sign (score);
+			int sign = Math.Sign(score);
 			return (score * sign - numPlySearched) * sign;
 		}
 
@@ -126,26 +136,27 @@
 	}
 
 
-	public struct Entry {
+	public struct Entry 
+	{
 
 		public readonly ulong Key;
-		public readonly int Value;
+		public readonly int Evaluation;
 		public readonly Line Line;
 		public readonly byte Depth;
 		public readonly byte Bound;
+        public readonly int StaticEvaluation;
 
-		//	public readonly byte gamePly;
-
-		public Entry (ulong key, int value, byte depth, byte bound, Line line) 
+        public Entry(ulong key, int evaluation, byte depth, byte bound, Line line, int staticEvaluation) 
 		{
 			Key = key;
-			Value = value;
-			Depth = depth; // depth is how many ply were searched ahead from this position
+            Evaluation = evaluation;
+			Depth = depth;
 			Bound = bound;
 			Line = line;
-		}
+			StaticEvaluation = staticEvaluation;
+        }
 
-		public static int GetSize () 
+		public static int GetSize() 
 		{
 			return System.Runtime.InteropServices.Marshal.SizeOf<Entry> ();
 		}

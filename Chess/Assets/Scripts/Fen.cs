@@ -51,10 +51,10 @@ public class Fen : MonoBehaviour
                 }
                 else
                 {
-                    Colour pieceColour = (char.IsUpper(symbol)) ? Colour.White : Colour.Black;
+                    int pieceColour = (char.IsUpper(symbol)) ? Piece.White : Piece.Black;
                     int pieceType = pieceTypeFromSymbol[char.ToLower(symbol)];
 
-                    Board.Pieces[pieceType][pieceColour == Colour.White ? 0 : 1] |= 1UL << (rank * 8 + file);
+                    Board.Pieces[pieceType][pieceColour == Piece.White ? 0 : 1] |= 1UL << (rank * 8 + file);
 
                     file++;
 
@@ -85,8 +85,6 @@ public class Fen : MonoBehaviour
 
         Board.UpdateAllOccupiedSquares();
         Board.UpdateBoardInformation();
-        Board.GenerateAttackedSquares();
         Board.UpdateBoardInformation();
-        Board.ZobristKey = Zobrist.CalculateZobristKey();
     }
 }

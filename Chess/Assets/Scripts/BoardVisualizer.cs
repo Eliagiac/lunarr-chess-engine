@@ -22,19 +22,19 @@ public class BoardVisualizer : MonoBehaviour
     [SerializeField]
     private GameObject _squarePrefab;
 
-    [Header("Colours")]
+    [Header("Colors")]
     [SerializeField]
-    private Color _whiteColour;
+    private Color _whiteColor;
     [SerializeField]
-    private Color _blackColour;
+    private Color _blackColor;
     [SerializeField]
-    private Color _whiteHighlightedColour;
+    private Color _whiteHighlightedColor;
     [SerializeField]
-    private Color _blackHighlightedColour;
+    private Color _blackHighlightedColor;
     [SerializeField]
-    private Color _whiteSelectedColour;
+    private Color _whiteSelectedColor;
     [SerializeField]
-    private Color _blackSelectedColour;
+    private Color _blackSelectedColor;
 
     [Header("Pieces")]
     [SerializeField]
@@ -151,7 +151,7 @@ public class BoardVisualizer : MonoBehaviour
     public Stack<Move> _movesHistory;
     public Stack<Move> _undoneMovesHistory;
 
-    public List<ulong> _positionHistory;
+    public bool updateBoard;
 
 
     private void Awake()
@@ -173,8 +173,8 @@ public class BoardVisualizer : MonoBehaviour
             {
                 var square = Instantiate(_squarePrefab, new(file - 3.5f, rank - 3.5f), Quaternion.identity, _squaresParent);
 
-                if ((file + rank) % 2 == 0) square.GetComponent<SpriteRenderer>().color = _blackColour;
-                else square.GetComponent<SpriteRenderer>().color = _whiteColour;
+                if ((file + rank) % 2 == 0) square.GetComponent<SpriteRenderer>().color = _blackColor;
+                else square.GetComponent<SpriteRenderer>().color = _whiteColor;
             }
         }
 
@@ -186,43 +186,6 @@ public class BoardVisualizer : MonoBehaviour
     {
         _zobristKeyText.text = Convert.ToString((long)Board.ZobristKey, 2);
 
-        _generatePseudoLegalMovesForLegalMoves      = Board.GeneratePseudoLegalMovesForLegalMovesTimer.Elapsed.ToString();
-        _generatePseudoLegalMovesForAttacks         = Board.GeneratePseudoLegalMovesForAttacksTimer.Elapsed.ToString();
-        _printPerft                                 = Board.PrintPerftTimer.Elapsed.ToString();
-        _generateLegalMovesForList                  = Board.GenerateLegalMovesForListTimer.Elapsed.ToString();
-        _generateAllLegalMoves                      = Board.GenerateAllLegalMovesTimer.Elapsed.ToString();
-        _makeMove                                   = Board.MakeMoveTimer.Elapsed.ToString();
-        _unmakeMove                                 = Board.UnmakeMoveTimer.Elapsed.ToString();
-        _findPins                                   = Board.FindPinsTimer.Elapsed.ToString();
-        _calculatePins                              = Board.CalculatePinsTimer.Elapsed.ToString();
-        _updateAttackedSquares                      = Board.UpdateAttackedSquaresTimer.Elapsed.ToString();
-        _updatePreviousAttacks                      = Board.UpdatePreviousAttackersTimer.Elapsed.ToString();
-        _findPreviousAttacks                        = Board.FindPreviousAttackersTimer.Elapsed.ToString();
-        _search                                     = Board.SearchTimer.Elapsed.ToString();
-        _generateDiagonalMoves                      = Board.GenerateDiagonalMovesTimer.Elapsed.ToString();
-        _generateDiagonalMovesStep1                 = Board.GenerateDiagonalMovesStep1Timer.Elapsed.ToString();
-        _generateDiagonalMovesStep2                 = Board.GenerateDiagonalMovesStep2Timer.Elapsed.ToString();
-        _generateDiagonalMovesStep3                 = Board.GenerateDiagonalMovesStep3Timer.Elapsed.ToString();
-        _generateDiagonalMovesStep4                 = Board.GenerateDiagonalMovesStep4Timer.Elapsed.ToString();
-        _getOccupiedSquares                         = Board.GetOccupiedSquaresTimer.Elapsed.ToString();
-        _quiescenceSearch                           = Board.QuiescenceSearchTimer.Elapsed.ToString();
-        _getType                                    = Board.GetTypeTimer.Elapsed.ToString();
-        _evaluation                                 = Board.EvaluationTimer.Elapsed.ToString();
-        _orderMoves                                 = Board.OrderMovesTimer.Elapsed.ToString();
-        _generateLegalMoves                         = Board.GenerateLegalMovesTimer.Elapsed.ToString();
-        _getStoredMoveTimer                         = Board.GetStoredMoveTimer.Elapsed.ToString();
-        _storeEvaluationTimer                       = Board.StoreEvaluationTimer.Elapsed.ToString();
-        _lookupEvaluationTimer                      = Board.LookupEvaluationTimer.Elapsed.ToString();
-        _detectDrawByRepetitionTimer                = Board.DetectDrawByRepetitionTimer.Elapsed.ToString();
-        _evaluatePieceSquareTablesTimer             = Board.EvaluatePieceSquareTablesTimer.Elapsed.ToString();
-
-        _generatePseudoLegalMovesForAttacksCounter  = Board.GeneratePseudoLegalMovesForAttacksCounter.ToString();
-        _makeMoveCounter                            = Board.MakeMoveCounter.ToString();
-        _evaluationCounter                          = Board.EvaluationCounter.ToString();
-        _transpositionCounter                       = Board.TranspositionCounter.ToString();
-
-        _depthReached                               = Board.DepthReached;
-
         if (_promotingPiece != -1)
         {
             int promotion = Piece.None;
@@ -232,7 +195,7 @@ public class BoardVisualizer : MonoBehaviour
             else if (Input.GetKeyDown(KeyCode.Alpha4)) promotion = Piece.Knight;
             if (promotion != Piece.None)
             {
-                Board.Squares[_promotingPiece] = promotion | (Board.CurrentTurn == 0 ? (int)Colour.Black : (int)Colour.White);
+                Board.Squares[_promotingPiece] = promotion | (Board.CurrentTurn == 0 ? (int)Piece.Black : (int)Piece.White);
                 Board.UpdateBitboards();
                 UpdateBoard();
                 _promotingPiece = -1;
@@ -261,10 +224,10 @@ public class BoardVisualizer : MonoBehaviour
                 {
                     if (((Board.Pawns[Board.CurrentTurn] & (1UL << SelectedPiece)) != 0) &&
                         (Board.CurrentTurn == 0 ? (Board.GetRank(targetSquare) == 7) : (Board.GetRank(targetSquare) == 0))) _promotingPiece = targetSquare;
-                    Move move = new(Board.Squares[SelectedPiece].PieceType(), 1UL << SelectedPiece, 1UL << targetSquare, Board.PieceType(targetSquare, Board.OpponentTurn));
+                    Move move = new(Board.PieceType(SelectedPiece), 1UL << SelectedPiece, 1UL << targetSquare, Board.PieceType(targetSquare));
                     _movesHistory.Push(move);
                     Board.MakeMove(move);
-                    _positionHistory.Add(Board.ZobristKey);
+                    GameHandler.MakeMove(move.ToString());
                     Board.UpdateSquares();
                     UpdateBoard();
                 }
@@ -277,9 +240,9 @@ public class BoardVisualizer : MonoBehaviour
 
             // Display selected piece
             _squaresParent.GetChild(SelectedPiece).GetComponent<SpriteRenderer>().color =
-                        ((Board.GetFile(SelectedPiece) + Board.GetRank(SelectedPiece)) % 2 == 0) ? _blackSelectedColour : _whiteSelectedColour;
+                        ((Board.GetFile(SelectedPiece) + Board.GetRank(SelectedPiece)) % 2 == 0) ? _blackSelectedColor : _whiteSelectedColor;
 
-            _legalMoves = Board.GenerateLegalMoves(1UL << SelectedPiece);
+            _legalMoves = Board.GenerateLegalMovesBitboard(1UL << SelectedPiece);
             ulong bit = 1;
             int index = 0;
 
@@ -288,7 +251,7 @@ public class BoardVisualizer : MonoBehaviour
                 // Display legal moves
                 if ((_legalMoves & bit) != 0) 
                     _squaresParent.GetChild(index).GetComponent<SpriteRenderer>().color = 
-                        ((Board.GetFile(index) + Board.GetRank(index)) % 2 == 0) ? _blackHighlightedColour : _whiteHighlightedColour;
+                        ((Board.GetFile(index) + Board.GetRank(index)) % 2 == 0) ? _blackHighlightedColor : _whiteHighlightedColor;
 
                 bit <<= 1;
                 index++;
@@ -303,53 +266,58 @@ public class BoardVisualizer : MonoBehaviour
         {
             //AI.Instance.PlayBestMove();
         }
+
+        if (updateBoard) UpdateBoard();
     }
 
     public void UpdateBoard()
     {
-        foreach (Transform piece in _piecesParent) Destroy(piece.gameObject);
+        while (_piecesParent.childCount > 0)
+        {
+            DestroyImmediate(_piecesParent.GetChild(0).gameObject);
+        }
 
         for (int i = 0; i < 64; i++)
         {
             Vector3 position = new(Board.GetFile(i) - 3.5f, Board.GetRank(i) - 3.5f);
 
-            switch (Board.Squares[i].PieceType())
+            switch (Board.PieceType(i))
             {
                 case Piece.None:
                     continue;
 
                 case Piece.King:
-                    if (Board.Squares[i].PieceColour() == Colour.White) 
+                    if (Board.Squares[i].PieceColor() == Piece.White) 
                         Instantiate(_kingW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_kingB, position, Quaternion.identity, _piecesParent);
                     break;
 
                 case Piece.Pawn:
-                    if (Board.Squares[i].PieceColour() == Colour.White)
+                    if (Board.Squares[i].PieceColor() == Piece.White)
                         Instantiate(_pawnW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_pawnB, position, Quaternion.identity, _piecesParent);
                     break;
 
                 case Piece.Knight:
-                    if (Board.Squares[i].PieceColour() == Colour.White)
+                    if (Board.Squares[i].PieceColor() == Piece.White)
                         Instantiate(_knightW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_knightB, position, Quaternion.identity, _piecesParent);
                     break;
 
                 case Piece.Bishop:
-                    if (Board.Squares[i].PieceColour() == Colour.White)
+                    if (Board.Squares[i].PieceColor() == Piece.White)
                         Instantiate(_bishopW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_bishopB, position, Quaternion.identity, _piecesParent);
                     break;
 
                 case Piece.Rook:
-                    if (Board.Squares[i].PieceColour() == Colour.White)
+                    if (Board.Squares[i].PieceColor() == Piece.White)
                         Instantiate(_rookW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_rookB, position, Quaternion.identity, _piecesParent);
                     break;
 
                 case Piece.Queen:
-                    if (Board.Squares[i].PieceColour() == Colour.White)
+                    if (Board.Squares[i].PieceColor() == Piece.White)
                         Instantiate(_queenW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_queenB, position, Quaternion.identity, _piecesParent);
                     break;
@@ -366,8 +334,8 @@ public class BoardVisualizer : MonoBehaviour
             {
                 var square = _squaresParent.GetChild(index);
 
-                if ((file + rank) % 2 == 0) square.GetComponent<SpriteRenderer>().color = _blackColour;
-                else square.GetComponent<SpriteRenderer>().color = _whiteColour;
+                if ((file + rank) % 2 == 0) square.GetComponent<SpriteRenderer>().color = _blackColor;
+                else square.GetComponent<SpriteRenderer>().color = _whiteColor;
 
                 index++;
             }
@@ -379,7 +347,6 @@ public class BoardVisualizer : MonoBehaviour
         var move = _movesHistory.Pop();
         _undoneMovesHistory.Push(move);
         Board.UnmakeMove(move);
-        _positionHistory.RemoveAt(_positionHistory.Count - 1);
         Board.UpdateSquares();
         UpdateBoard();
     }
@@ -389,7 +356,6 @@ public class BoardVisualizer : MonoBehaviour
         var move = _undoneMovesHistory.Pop();
         _movesHistory.Push(move);
         Board.MakeMove(move);
-        _positionHistory.Add(Board.ZobristKey);
         Board.UpdateSquares();
         UpdateBoard();
     }
