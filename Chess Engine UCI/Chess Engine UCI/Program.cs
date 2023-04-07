@@ -12,6 +12,9 @@ AI.UseTranspositionTable = true;
 AI.ResetTranspositionTableOnEachSearch = false;
 AI.ShallowDepthThreshold = 8;
 AI.UseOpeningBook = false;
+AI.InternalIterativeDeepeningDepthReduction = 5;
+AI.ProbCutDepthReduction = 4;
+AI.MultiPvCount = 1;
 
 AI.Init();
 
@@ -19,6 +22,9 @@ Fen.ConvertFromFen(Fen.StartingFen);
 
 
 Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
+
+//Fen.ConvertFromFen("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
+//Console.WriteLine(AI.Perft(4, 4));
 
 
 bool wait = false;
@@ -115,6 +121,8 @@ while (true)
 
         case "go":
 
+            if (commands.Contains("multipv")) AI.MultiPvCount = int.Parse(commands[Array.IndexOf(commands, "multipv") + 1]);
+
             switch (commands[1])
             {
                 case "movetime":
@@ -137,6 +145,16 @@ while (true)
                     AI.UseTimeLimit = false;
                     AI.UseTimeManagement = false;
                     AI.TimeLimit = 64; // Max depth.
+
+                    AI.PlayBestMove();
+
+                    break;
+
+                case "depth":
+                    AI.UseTimeLimit = false;
+                    AI.UseTimeManagement = false;
+
+                    AI.TimeLimit = float.Parse(commands[2]); // Max depth.
 
                     AI.PlayBestMove();
 

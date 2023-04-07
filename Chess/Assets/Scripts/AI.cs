@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using System.Linq;
 using TMPro;
 
 public class AI : MonoBehaviour
@@ -77,9 +76,27 @@ public class AI : MonoBehaviour
     {
         Instance = this;
 
+        Zobrist.Init();
+
         MoveData.ComputeMoveData();
         MoveData.GenerateDirectionalMasks();
         MoveData.ComputeMagicBitboards();
+
+        Engine.UseMoveOrdering = true;
+        Engine.UseOpeningBook = false;
+        Engine.LateMoveReductionMinimumTreshold = 1;
+        Engine.LateMoveReductionPercentage = 100;
+        Engine.UseTranspositionTable = true;
+        Engine.ResetTranspositionTableOnEachSearch = false;
+        Engine.ShallowDepthThreshold = 8;
+        Engine.UseOpeningBook = false;
+        Engine.InternalIterativeDeepeningDepthReduction = 5;
+        Engine.ProbCutDepthReduction = 4;
+        Engine.MultiPvCount = 1;
+        
+        Engine.Init();
+
+        //Fen.ConvertFromFen(Fen.StartingFen);
 
         //AIPlayer.LateMoveReductionMinimumTreshold   = _lateMoveReductionMinimumTreshold;
         //AIPlayer.LateMoveReductionPercentage        = _lateMoveReductionPercentage;
@@ -99,6 +116,8 @@ public class AI : MonoBehaviour
 
     private void Update()
     {
+        _searchSpeedText.text = $"Speed: {Engine.NodesPerSecond} kN/s";
+
         //Arrow.ClearArrows();
         //if (AIPlayer.MainLine?.Move != null && AIPlayer._evaluation != "Book") Arrow.DrawArrow2D(
         //    new(-3.5f + Board.GetFile(BitboardUtility.FirstSquareIndex(AIPlayer.MainLine.Move.StartSquare)), -3.5f + Board.GetRank(BitboardUtility.FirstSquareIndex(AIPlayer.MainLine.Move.StartSquare))),
@@ -106,9 +125,9 @@ public class AI : MonoBehaviour
         //    Color.yellow, zPos: -1);
         //
         //if (!AIPlayer.IsMateScore(AIPlayer._bestEval)) _evaluationText.text = $"Evaluation: {AIPlayer._evaluation}";
-        //_depthReachedText.text = $"Depth: {Board.DepthReached} ({(AIPlayer._searchTimeResult / 1000).ToString("0.00")}s, tot: {(AIPlayer._totalSearchTime / 1000).ToString("0.00")}s)";
+        _depthReachedText.text = $"Depth: {Engine.Depth} ({(Engine._searchTimeResult / 1000).ToString("0.00")}s, tot: {(Engine._totalSearchTime / 1000).ToString("0.00")}s)";
         //
-        //_searchTimeText.text = $"Time: {(AIPlayer.SearchTime.ElapsedMilliseconds / 1000f).ToString("0.00")}s";
+        _searchTimeText.text = $"Time: {(Engine.SearchTime.ElapsedMilliseconds / 1000f).ToString("0.00")}s";
         //
         //if (AIPlayer.MainLine != null) _mainLineText.text = $"Main Line: {AIPlayer.MainLine}";
         //
@@ -179,16 +198,6 @@ public class AI : MonoBehaviour
         //            AIPlayer.PlayBestMove(Board.CurrentTurn == 0 ? version1 : version2);
         //        }
         //    }
-        //}
-    }
-
-    private void FixedUpdate()
-    {
-        //AIPlayer._nodeCountHistory.Enqueue(AIPlayer._nodeCount);
-        //
-        //if (AIPlayer._nodeCountHistory.Count >= (1 / Time.fixedDeltaTime))
-        //{
-        //    _searchSpeedText.text = $"Speed: {(AIPlayer._nodeCount - AIPlayer._nodeCountHistory.Dequeue()) / 1000f} kN/s";
         //}
     }
 

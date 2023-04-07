@@ -54,6 +54,7 @@ public class Fen
         Board.OpponentTurn = Board.CurrentTurn ^ 1;
 
         string castlingRights = (sections.Length > 2) ? sections[2] : "KQkq";
+        Board.CastlingRights &= 0;
         Board.CastlingRights |= Mask.WhiteKingsideCastling & (castlingRights.Contains("K") ? ulong.MaxValue : 0);
         Board.CastlingRights |= Mask.WhiteQueensideCastling & (castlingRights.Contains("Q") ? ulong.MaxValue : 0);
         Board.CastlingRights |= Mask.BlackKingsideCastling & (castlingRights.Contains("k") ? ulong.MaxValue : 0);

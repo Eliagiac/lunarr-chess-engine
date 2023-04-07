@@ -40,10 +40,11 @@
 	// Use the first 28 bits of the key to get the index of the entry.
 	// This number was tweaked for the best performance.
 	// It may need to be updated after changing the size of the transposition table.
-	public ulong Index => (Board.ZobristKey >> 36) % Size;
+	// Note: the method on the right isn't used for worse performance on size 100000.
+	public ulong Index => (Board.ZobristKey >> 36) % Size;//(((UInt32)Board.ZobristKey * (UInt64)Size) >> 32);
 
 
-	public Move GetStoredMove() => Entries[Index].Line?.Move;
+    public Move GetStoredMove() => Entries[Index].Line?.Move;
 
     public Line GetStoredLine() => Entries[Index].Line;
 

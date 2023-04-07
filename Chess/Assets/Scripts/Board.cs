@@ -1,7 +1,7 @@
-using static BitboardUtility;
+using System.Collections.Generic;
 using static Piece;
 using static Mask;
-using System.Collections.Generic;
+using static Utilities.Bitboard;
 
 public class Board
 {
@@ -335,6 +335,9 @@ public class Board
         AddPiece(move.TargetSquare, pieceTypeOrPromotion, CurrentTurn);
 
 
+        // Remove old en passant square.
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
+
         bool enPassant = false;
         ulong enPassantTargetBackup = 0;
         // Special pawn moves.
@@ -346,6 +349,9 @@ public class Board
             EnPassantTarget &= 0;
             EnPassantSquare &= 0;
         }
+
+        // Update en passant square.
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
 
         // Save the current castling rights
@@ -367,7 +373,7 @@ public class Board
         // If the king is castling, the rook should follow it.
         if (move.PieceType == King)
         {
-            // Queenside castling
+            // Queenside castling.
             if (move.StartSquare >> 2 == move.TargetSquare)
             {
                 // Add rook on the target square.
@@ -379,7 +385,7 @@ public class Board
                 RemovePiece(castledRookSquare, Rook, CurrentTurn);
             }
 
-            // Kingside castling
+            // Kingside castling.
             else if (move.StartSquare << 2 == move.TargetSquare)
             {
                 // Add rook on the target square.
@@ -395,10 +401,17 @@ public class Board
 
         uint newCastlingRights = FourBitCastlingRights();
 
+        if (newCastlingRights != oldCastlingRights)
+        {
+            ZobristKey ^= Zobrist.castlingRights[oldCastlingRights];
+            ZobristKey ^= Zobrist.castlingRights[newCastlingRights];
+        }
+
         UpdateBoardInformation(move.StartSquare, move.TargetSquare, enPassant, enPassantTargetBackup, castledRookSquare != 0, castledRookSquare, castledRookTarget);
 
         CurrentTurn ^= 1;
         OpponentTurn ^= 1;
+        ZobristKey ^= Zobrist.sideToMove;
 
         PositionHistory.Push(ZobristKey);
 
@@ -458,6 +471,7 @@ public class Board
         // Restore current turn before anything else.
         CurrentTurn ^= 1;
         OpponentTurn ^= 1;
+        ZobristKey ^= Zobrist.sideToMove;
 
         // Reset castling rights.
         ulong oldCastlingRights = FourBitCastlingRights();
@@ -465,6 +479,12 @@ public class Board
         CastlingRights = move.CastlingRightsBackup;
 
         ulong newCastlingRights = FourBitCastlingRights();
+
+        if (newCastlingRights != oldCastlingRights)
+        {
+            ZobristKey ^= Zobrist.castlingRights[oldCastlingRights];
+            ZobristKey ^= Zobrist.castlingRights[newCastlingRights];
+        }
 
 
         // Place moved piece back on the start square.
@@ -477,9 +497,15 @@ public class Board
         if (move.CapturedPieceType != None) AddPiece(move.TargetSquare, move.CapturedPieceType, OpponentTurn);
 
 
+        // Remove old en passant square.
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
+
         // Reset en passant data.
         EnPassantSquare = move.EnPassantSquareBackup;
         EnPassantTarget = move.EnPassantTargetBackup;
+
+        // Add new en passant square.
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
 
         bool enPassant = false;
@@ -548,6 +574,12 @@ public class Board
             SlidingPieces[colorIndex] |= square;
             AllSlidingPieces |= square;
         }
+
+        // Update the Zobrist key.
+        ZobristKey ^= Zobrist.piecesArray[pieceType, colorIndex, squareIndex];
+
+        // Update piesce square tables score.
+        PsqtScore[colorIndex] += PieceSquareTables.ReadScore(pieceType, squareIndex, colorIndex == 0);
     }
 
     private static void RemovePiece(ulong square, int pieceType, int colorIndex)
@@ -568,6 +600,12 @@ public class Board
             SlidingPieces[colorIndex] &= ~square;
             AllSlidingPieces &= ~square;
         }
+
+        // Update the Zobrist key.
+        ZobristKey ^= Zobrist.piecesArray[pieceType, colorIndex, squareIndex];
+
+        // Update piesce square tables score.
+        PsqtScore[colorIndex] -= PieceSquareTables.ReadScore(pieceType, squareIndex, colorIndex == 0);
     }
 
     private static uint FourBitCastlingRights()
@@ -586,8 +624,16 @@ public class Board
         move.EnPassantSquareBackup = EnPassantSquare;
         move.EnPassantTargetBackup = EnPassantTarget;
 
+        // Remove old en passant square.
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
+
         EnPassantSquare = 0;
         EnPassantTarget = 0;
+
+        // Add new en passant square.
+        ZobristKey ^= Zobrist.enPassantFile[0];
+
+        ZobristKey ^= Zobrist.sideToMove;
 
         CurrentTurn ^= 1;
         OpponentTurn ^= 1;
@@ -595,23 +641,21 @@ public class Board
 
     public static void UnmakeNullMove(NullMove move)
     {
+        // Remove old en passant square.
+        ZobristKey ^= Zobrist.enPassantFile[0];
+
         EnPassantSquare = move.EnPassantSquareBackup;
         EnPassantTarget = move.EnPassantTargetBackup;
+
+        // Add new en passant square.
+        ZobristKey ^= Zobrist.enPassantFile[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
+
+        ZobristKey ^= Zobrist.sideToMove;
 
         CurrentTurn ^= 1;
         OpponentTurn ^= 1;
     }
 
-
-    public static ulong GenerateLegalMovesBitboard(ulong square)
-    {
-        ulong moves = 0;
-        foreach (var move in GeneratePseudoLegalMoves(square))
-        {
-            if (IsLegal(move)) moves |= move.TargetSquare;
-        }
-        return moves;
-    }
 
     public static List<Move> GenerateAllLegalMoves(int promotionMode = 0, bool capturesOnly = false)
     {
@@ -735,7 +779,8 @@ public class Board
                 }
             }
 
-            ulong slidingAttackers = SlidingAttackersTo(startSquareIndex, CurrentTurn, OpponentTurn, AllOccupiedSquares);
+            ulong slidingAttackers = SlidingAttackersTo(startSquareIndex, CurrentTurn, OpponentTurn,
+                AllOccupiedSquares & ~(pieceType == Pawn && move.TargetSquare == EnPassantSquare ? EnPassantTarget : 0) /* In case the move is en passant, remove the en passant target from the occupied squares map to calculate pins correctly. */);
             while (slidingAttackers != 0)
             {
                 int attackerIndex = FirstSquareIndex(slidingAttackers);
@@ -743,7 +788,9 @@ public class Board
 
 
                 ulong attackRayToKing = MoveData.SpecificMasks[attackerType][attackerIndex, KingPosition[CurrentTurn]];
-                if (attackRayToKing != 0 && (move.TargetSquare & attackRayToKing) == 0)
+                if (attackRayToKing != 0 &&
+                    (move.StartSquare & attackRayToKing) != 0 /* The moving piece is in the ray of attack. */ &&
+                    (move.TargetSquare & attackRayToKing) == 0 /* The target is not on the ray. If the piece is pinned this move is illegal. */)
                 {
                     if (OccupiedSquaresCount(AllOccupiedSquares & attackRayToKing) == 3) return false;
 

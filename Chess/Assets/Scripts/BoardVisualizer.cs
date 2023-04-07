@@ -3,11 +3,18 @@ using System.Collections.Generic;
 using UnityEngine;
 using System;
 using TMPro;
+using System.Linq;
+using static Utilities.Fen;
+using static Utilities.Bitboard;
 
 public class BoardVisualizer : MonoBehaviour
 {
     public static BoardVisualizer Instance;
-    
+    public static float Height;
+    public static float Width;
+
+    public static List<int> DisplayedBoardSquares;
+
     [Header("Parents")]
     [SerializeField]
     private Transform _squaresParent;
@@ -144,14 +151,24 @@ public class BoardVisualizer : MonoBehaviour
     [HideInInspector]
     public int SelectedPiece = -1;
 
-    private ulong _legalMoves;
+    private Stack<Move> _legalMoves;
 
     private int _promotingPiece = -1;
 
     public Stack<Move> _movesHistory;
     public Stack<Move> _undoneMovesHistory;
 
-    public bool updateBoard;
+    private bool _isBoardUpdateNeeded;
+    public bool IsBoardUpdateNeeded 
+    {
+        get => _isBoardUpdateNeeded;
+
+        set
+        {
+            _isBoardUpdateNeeded = value;
+            DisplayedBoardSquares = new(Board.Squares);
+        } 
+    }
 
 
     private void Awake()
@@ -163,6 +180,10 @@ public class BoardVisualizer : MonoBehaviour
 
         MoveData.ComputeMoveData();
         MoveData.GenerateDirectionalMasks();
+
+
+        Height  = Camera.main.ScreenToWorldPoint(new(0, Screen.height, -100)).y * 2;
+        Width   = Camera.main.ScreenToWorldPoint(new(Screen.width, 0, -100)).x * 2;
     }
 
     private void Start()
@@ -178,12 +199,15 @@ public class BoardVisualizer : MonoBehaviour
             }
         }
 
-        Fen.ConvertFromFen(StartingFen);
+        ConvertFromFen(StartingFen);
         UpdateBoard();
     }
 
     private void Update()
     {
+        if (IsBoardUpdateNeeded) UpdateBoard(false);
+
+
         _zobristKeyText.text = Convert.ToString((long)Board.ZobristKey, 2);
 
         if (_promotingPiece != -1)
@@ -220,16 +244,12 @@ public class BoardVisualizer : MonoBehaviour
             {
                 int targetSquare = (int)((selectedSquarePosition.x + 3.5f) + (selectedSquarePosition.y + 3.5f) * 8);
 
-                if ((_legalMoves & (1UL << targetSquare)) != 0)
+                if (_legalMoves.Any(m => m.TargetSquare == 1UL << targetSquare))
                 {
                     if (((Board.Pawns[Board.CurrentTurn] & (1UL << SelectedPiece)) != 0) &&
                         (Board.CurrentTurn == 0 ? (Board.GetRank(targetSquare) == 7) : (Board.GetRank(targetSquare) == 0))) _promotingPiece = targetSquare;
                     Move move = new(Board.PieceType(SelectedPiece), 1UL << SelectedPiece, 1UL << targetSquare, Board.PieceType(targetSquare));
-                    _movesHistory.Push(move);
-                    Board.MakeMove(move);
-                    GameHandler.MakeMove(move.ToString());
-                    Board.UpdateSquares();
-                    UpdateBoard();
+                    GameHandler.MakeMove(move);
                 }
 
                 SelectedPiece = -1;
@@ -242,19 +262,13 @@ public class BoardVisualizer : MonoBehaviour
             _squaresParent.GetChild(SelectedPiece).GetComponent<SpriteRenderer>().color =
                         ((Board.GetFile(SelectedPiece) + Board.GetRank(SelectedPiece)) % 2 == 0) ? _blackSelectedColor : _whiteSelectedColor;
 
-            _legalMoves = Board.GenerateLegalMovesBitboard(1UL << SelectedPiece);
-            ulong bit = 1;
-            int index = 0;
 
-            while (bit != 0)
+            foreach (var move in (_legalMoves = Board.GeneratePseudoLegalMoves(1UL << SelectedPiece)))
             {
-                // Display legal moves
-                if ((_legalMoves & bit) != 0) 
-                    _squaresParent.GetChild(index).GetComponent<SpriteRenderer>().color = 
-                        ((Board.GetFile(index) + Board.GetRank(index)) % 2 == 0) ? _blackHighlightedColor : _whiteHighlightedColor;
+                int index = FirstSquareIndex(move.TargetSquare);
 
-                bit <<= 1;
-                index++;
+                _squaresParent.GetChild(index).GetComponent<SpriteRenderer>().color = 
+                    ((Board.GetFile(index) + Board.GetRank(index)) % 2 == 0) ? _blackHighlightedColor : _whiteHighlightedColor;
             }
 
         }
@@ -266,58 +280,60 @@ public class BoardVisualizer : MonoBehaviour
         {
             //AI.Instance.PlayBestMove();
         }
-
-        if (updateBoard) UpdateBoard();
     }
 
-    public void UpdateBoard()
+    public void UpdateBoard(bool useStaticBoardSquares = true)
     {
+        IsBoardUpdateNeeded = false;
+
         while (_piecesParent.childCount > 0)
         {
             DestroyImmediate(_piecesParent.GetChild(0).gameObject);
         }
 
+        if (useStaticBoardSquares) DisplayedBoardSquares = new(Board.Squares);
+
         for (int i = 0; i < 64; i++)
         {
             Vector3 position = new(Board.GetFile(i) - 3.5f, Board.GetRank(i) - 3.5f);
 
-            switch (Board.PieceType(i))
+            switch (DisplayedBoardSquares[i].PieceType())
             {
                 case Piece.None:
                     continue;
 
                 case Piece.King:
-                    if (Board.Squares[i].PieceColor() == Piece.White) 
+                    if (DisplayedBoardSquares[i].PieceColor() == Piece.White) 
                         Instantiate(_kingW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_kingB, position, Quaternion.identity, _piecesParent);
                     break;
 
                 case Piece.Pawn:
-                    if (Board.Squares[i].PieceColor() == Piece.White)
+                    if (DisplayedBoardSquares[i].PieceColor() == Piece.White)
                         Instantiate(_pawnW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_pawnB, position, Quaternion.identity, _piecesParent);
                     break;
 
                 case Piece.Knight:
-                    if (Board.Squares[i].PieceColor() == Piece.White)
+                    if (DisplayedBoardSquares[i].PieceColor() == Piece.White)
                         Instantiate(_knightW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_knightB, position, Quaternion.identity, _piecesParent);
                     break;
 
                 case Piece.Bishop:
-                    if (Board.Squares[i].PieceColor() == Piece.White)
+                    if (DisplayedBoardSquares[i].PieceColor() == Piece.White)
                         Instantiate(_bishopW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_bishopB, position, Quaternion.identity, _piecesParent);
                     break;
 
                 case Piece.Rook:
-                    if (Board.Squares[i].PieceColor() == Piece.White)
+                    if (DisplayedBoardSquares[i].PieceColor() == Piece.White)
                         Instantiate(_rookW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_rookB, position, Quaternion.identity, _piecesParent);
                     break;
 
                 case Piece.Queen:
-                    if (Board.Squares[i].PieceColor() == Piece.White)
+                    if (DisplayedBoardSquares[i].PieceColor() == Piece.White)
                         Instantiate(_queenW, position, Quaternion.identity, _piecesParent);
                     else Instantiate(_queenB, position, Quaternion.identity, _piecesParent);
                     break;

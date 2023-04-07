@@ -778,7 +778,8 @@ public class Board
                 }
             }
 
-            ulong slidingAttackers = SlidingAttackersTo(startSquareIndex, CurrentTurn, OpponentTurn, AllOccupiedSquares);
+            ulong slidingAttackers = SlidingAttackersTo(startSquareIndex, CurrentTurn, OpponentTurn, 
+                AllOccupiedSquares & ~(pieceType == Pawn && move.TargetSquare == EnPassantSquare ? EnPassantTarget : 0) /* In case the move is en passant, remove the en passant target from the occupied squares map to calculate pins correctly. */);
             while (slidingAttackers != 0)
             {
                 int attackerIndex = FirstSquareIndex(slidingAttackers);
@@ -786,7 +787,9 @@ public class Board
 
 
                 ulong attackRayToKing = MoveData.SpecificMasks[attackerType][attackerIndex, KingPosition[CurrentTurn]];
-                if (attackRayToKing != 0 && (move.TargetSquare & attackRayToKing) == 0)
+                if (attackRayToKing != 0 && 
+                    (move.StartSquare & attackRayToKing) != 0 /* The moving piece is in the ray of attack. */ && 
+                    (move.TargetSquare & attackRayToKing) == 0 /* The target is not on the ray. If the piece is pinned this move is illegal. */)
                 {
                     if (OccupiedSquaresCount(AllOccupiedSquares & attackRayToKing) == 3) return false;
 

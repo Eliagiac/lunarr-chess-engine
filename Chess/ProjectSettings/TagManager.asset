@@ -47,3 +47,9 @@ TagManager:
   - name: Pieces
     uniqueID: 79233403
     locked: 0
+  - name: Nodes BG
+    uniqueID: 4153203735
+    locked: 0
+  - name: Nodes
+    uniqueID: 961325993
+    locked: 0

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using static Utilities.Bitboard;
 
 public class Move
 {
@@ -42,7 +43,7 @@ public class Move
 
     public override string ToString()
     {
-        return $"{(Square)BitboardUtility.FirstSquareIndex(StartSquare)}{(Square)BitboardUtility.FirstSquareIndex(TargetSquare)}{new[] { "", "p", "n", "b", "r", "q", "k" }[PromotionPiece]}";
+        return $"{(Square)FirstSquareIndex(StartSquare)}{(Square)FirstSquareIndex(TargetSquare)}{new[] { "", "p", "n", "b", "r", "q", "k" }[PromotionPiece]}";
     }
 
     private string PieceTypeString()
@@ -82,7 +83,7 @@ public class Move
         StartSquare = 1UL << (moveValue & 0b0000000000111111);
         TargetSquare = 1UL << ((moveValue & 0b0000111111000000) >> 6);
 
-        PieceType = Board.PieceType(BitboardUtility.FirstSquareIndex(StartSquare));
+        PieceType = Board.PieceType(FirstSquareIndex(StartSquare));
 
         if ((moveValue >> 12) == 3) PromotionPiece = Piece.Queen;
         if ((moveValue >> 12) == 4) PromotionPiece = Piece.Knight;
@@ -95,8 +96,8 @@ public class Move
         get
         {
             return
-                (ushort)(BitboardUtility.FirstSquareIndex(StartSquare) |
-                BitboardUtility.FirstSquareIndex(TargetSquare) << 6 |
+                (ushort)(FirstSquareIndex(StartSquare) |
+                FirstSquareIndex(TargetSquare) << 6 |
                 (PromotionPiece == Piece.Queen ? 3 :
                 PromotionPiece == Piece.Knight ? 4 :
                 PromotionPiece == Piece.Rook ? 5 :
