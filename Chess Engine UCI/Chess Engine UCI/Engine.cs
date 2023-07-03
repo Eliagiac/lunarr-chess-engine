@@ -1,42 +1,29 @@
 using System.Diagnostics;
+using static Utilities.Bitboard;
+using static System.Math;
 using static Piece;
 using static Evaluation;
-using static System.Math;
 using static TranspositionTable;
-using static System.Formats.Asn1.AsnWriter;
-using System.Text.RegularExpressions;
 
-public class AI
+public class Engine
 {
-    public static TranspositionTable TranspositionTable;
-
-    public static string _moves;
-
     public const int Null = 32002;
-    public const int PositiveInfinity = 32001;
-    public const int NegativeInfinity = -PositiveInfinity;
+    public const int Infinity = 32001;
     public const int Checkmate = 32000;
     public const int Draw = 0;
 
-    public static int _bestEval;
 
-    public static int _currentSearchNodes;
+    public static Stopwatch SearchStopwatch = new();
 
+    public static bool WasSearchAborted;
 
-    public static Stopwatch SearchTime = new();
-    public static Stopwatch CurrentSearchTime = new();
-    public static float _searchTimeResult;
+    // Indexed by [totalMoveCount].
+    private static int[] _lateMoveThresholds;
 
-    public static bool AbortSearch { get; set; }
-
-    // Indexed by LateMoveThreshold[totalMoveCount]
-    public static int[] LateMoveThreshold;
-
-    public static readonly int[] _futilityMargin = { 0, StaticPieceValues[Knight][0], StaticPieceValues[Rook][0] };
+    // Indexed by [improving(0/1)][depth].
+    private static int[][] _futilityMargin;
 
     public static readonly int LimitedRazoringMargin = StaticPieceValues[Queen][0];
-
-    public static bool _nullMoveCheckmateFound;
 
     public static readonly int[] _extraPromotions = { Knight, Rook, Bishop };
 
@@ -54,16 +41,12 @@ public class AI
     // Set to twice the search depth.
     public static int MaxExtensions;
 
-    public static EvaluationData evaluationData;
-
     public static Line MainLine;
     public static Line CurrentMainLine;
 
     public static CancellationTokenSource cancelSearchTimer;
 
     public static Action OnSearchComplete;
-
-    public static bool MoveFound;
 
     public static string _evaluation;
 
@@ -73,7 +56,7 @@ public class AI
 
     public static int[] AspirationWindowsMultipliers = { 4, 4 };
 
-    // Indexed by History[colorIndex][startSquareIndex][targetSquareIndex]
+    // Indexed by [colorIndex][startSquareIndex][targetSquareIndex].
     public static int[][,] History;
 
     public static int _whiteWinsCount;
@@ -87,15 +70,16 @@ public class AI
     public static bool UseTimeManagement;
     public static bool UseMoveOrdering;
     public static int LateMoveReductionMinimumTreshold;
-    public static float LateMoveReductionPercentage;
+    public static double LateMoveReductionPercentage;
     public static ulong SearchNodes;
     public static List<int> SearchNodesPerDepth;
     public static List<string> BestMovesThisSearch;
     public static bool UseTranspositionTable;
     public static bool ResetTranspositionTableOnEachSearch;
     public static bool UseOpeningBook;
-    public static List<DepthReachedData> DepthReachedData;
-    public static List<DepthReachedData> CurrentDepthReachedData;
+    public static int InternalIterativeDeepeningDepthReduction;
+    public static int ProbCutDepthReduction;
+    public static int VerificationSearchMinimumDepth;
     public static int NullMovePrunes;
     public static int MaxDepthReachedCount;
     public static int FutilityPrunes;
@@ -109,12 +93,19 @@ public class AI
 
     public static int SelectiveDepth;
 
+    public static Node RootNode;
+
+    public static int MultiPvCount;
+
+    public static List<Move> ExcludedRootMoves;
+
+
+    private static int _totalSearchNodes;
+
 
     public static void Init()
     {
-        TranspositionTable = new(100_000); // 2^23
-
-        LateMoveThreshold = Enumerable.Range(0, 300).Select(n => (int)((n + LateMoveReductionMinimumTreshold) - (n * LateMoveReductionPercentage / 100))).ToArray();
+        ResizeTranspositionTable(8);
 
         for (int depth = 1; depth < 64; depth++)
         {
@@ -126,262 +117,288 @@ public class AI
             }
         }
 
+        _lateMoveThresholds =
+        Enumerable.Range(0, 300).Select(totalMoveCount => (int)(
+        (totalMoveCount + LateMoveReductionMinimumTreshold) - (totalMoveCount * LateMoveReductionPercentage))).ToArray();
+
+        _futilityMargin = new[] {
+            Enumerable.Range(0, 64).Select(depth => 165 * depth).ToArray(),
+            Enumerable.Range(0, 64).Select(depth => 165 * (depth - 1)).ToArray(),
+        };
+
         OnSearchComplete += FinishSearch;
     }
 
 
     public static int Perft(int depth, int startingDepth, Move previousMove = null, Move ancestorMove = null)
     {
-        if (depth == startingDepth - 1 && depth == 0)
-        {
-            _moves += previousMove + ": 1\n";
-            Console.WriteLine(previousMove + ": 1");
-        }
-
-        //if (depth == startingDepth - 1 && depth == 0 && ancestorMove.ToString() == "b2b3")
-        //{
-        //    _moves += previousMove + ": 1\n";
-        //    Console.WriteLine(previousMove + ": 1");
-        //}
-
         if (depth == 0)
         {
+            if (startingDepth == 1)
+                Console.WriteLine($"{previousMove} : 1");
+
             return 1;
         }
 
         var moves = Board.GenerateAllLegalMoves(promotionMode: 0);
 
         int numPositions = 0;
-
         foreach (var move in moves)
         {
-            //if (depth == startingDepth && move.ToString() == "b2b3")
-            //{
-            //    int a = 0;
-            //}
-
             Board.MakeMove(move);
             numPositions += Perft(depth - 1, startingDepth, move, previousMove);
             Board.UnmakeMove(move);
         }
 
         if (depth == startingDepth - 1)
-        {
-            _moves += previousMove + ": " + numPositions + "\n";
-            Console.WriteLine(previousMove + ": " + numPositions);
-        }
+            Console.WriteLine($"{previousMove}: {numPositions}");
 
         return numPositions;
     }
 
 
-    public static void PlayBestMove(EvaluationData evaluationData)
+    public static void FindBestMove()
     {
-        AI.evaluationData = evaluationData;
-        PlayBestMove();
-    }
-
-    public static void PlayBestMove()
-    {
-        evaluationData = new();
-
-        MoveFound = false;
-
-
-        Task.Factory.StartNew(() => StartSearch(), TaskCreationOptions.LongRunning);
+        Task.Factory.StartNew(
+            StartSearch, TaskCreationOptions.LongRunning);
 
         cancelSearchTimer = new();
-        if (UseTimeLimit) Task.Delay((int)(TimeLimit * 1000), cancelSearchTimer.Token).ContinueWith((t) => StopSearch());
+        if (UseTimeLimit) Task.Delay((int)(TimeLimit * 1000), cancelSearchTimer.Token).ContinueWith((t) => AbortSearch());
     }
 
-    public static void StopSearch()
+    public static void AbortSearch()
     {
-        AbortSearch = true;
+        WasSearchAborted = true;
     }
 
     public static void FinishSearch()
     {
         cancelSearchTimer?.Cancel();
-        MoveFound = true;
+
+        Console.WriteLine($"bestmove {MainLine.Move}");
+
         //Board.MakeMove(MainLine.Move);
+
+        //using (StreamWriter writer = File.CreateText(@"C:\RootNode.txt"))
+        //{
+        //    Console.WriteLine($"Started Saving...");
+        //    writer.Write(RootNode.ToString());
+        //}
+        //Console.WriteLine($"Saved Successfully!");
+        //Console.WriteLine($"{RootNode}");
     }
 
     private static void StartSearch()
     {
-        TranspositionTable.Enabled = UseTranspositionTable;
-
-        AbortSearch = false;
-
-        _progress = 0;
-        SearchNodes = 0;
-        _currentSearchNodes = 0;
-
-        DepthReachedData = new();
-
-        SearchNodesPerDepth = new();
-
-        Board.PositionHistory = new();
-
-        MainLine = new();
-        CurrentMainLine = new();
-
-        BestMovesThisSearch = new();
-
-        if (ResetTranspositionTableOnEachSearch) TranspositionTable.Clear();
-
-        // Opening book not available in UCI mode.
-
-        SearchTime.Restart();
-        int depth = 1;
-
-        int evaluation;
-
-        int alpha = NegativeInfinity;
-        int beta = PositiveInfinity;
-
-        int alphaWindow = 25;
-        int betaWindow = 25;
-        do
+        try
         {
-            // Reset on each iteration because of better performance.
-            // This behaviour is not expected and further research is required.
-            KillerMoves = new Move[_maxKillerMoves, MaxPly];
-            History = new[] { new int[64, 64], new int[64, 64] };
+            TranspositionTable.IsEnabled = UseTranspositionTable;
 
-            CurrentSearchTime.Restart();
+            WasSearchAborted = false;
+
             _progress = 0;
+            SearchNodes = 0;
+            _totalSearchNodes = 0;
 
-            SelectiveDepth = 0;
-            CurrentDepthReachedData = new();
+            SearchNodesPerDepth = new();
 
-            // Maximum amount of searhc extensions inside any given branch.
-            // MaxExtensions = depth -> the SelDepth may be up to twice the depth.
-            // Further testing is needed to find the perfect value here.
-            MaxExtensions = depth;
+            Board.PositionHistory = new();
 
+            MainLine = new();
+            CurrentMainLine = new();
 
-            evaluation = Search(depth, 0, alpha, beta, 0, evaluationData, out CurrentMainLine);
+            BestMovesThisSearch = new();
 
-            bool searchFailed = false;
-            if (evaluation <= alpha)
+            if (ResetTranspositionTableOnEachSearch) TranspositionTable.Clear();
+
+            // Opening book not available in UCI mode.
+
+            SearchStopwatch.Restart();
+            int depth = 1;
+
+            int evaluation;
+            do
             {
-                alphaWindow *= AspirationWindowsMultipliers[0];
-                searchFailed = true;
+                ExcludedRootMoves = new();
+
+                for (int pvIndex = 0; pvIndex < MultiPvCount; pvIndex++)
+                {
+                    int alpha = -Infinity;
+                    int beta = Infinity;
+
+                    int alphaWindow = 25;
+                    int betaWindow = 25;
+
+                    while (true)
+                    {
+                        // Reset on each iteration because of better performance.
+                        // This behaviour is not expected and further research is required.
+                        KillerMoves = new Move[_maxKillerMoves, MaxPly];
+                        History = new[] { new int[64, 64], new int[64, 64] };
+
+                        _progress = 0;
+
+                        SelectiveDepth = 0;
+
+                        // Maximum amount of search extensions inside any given branch.
+                        // MaxExtensions = depth -> the SelDepth may be up to twice the depth.
+                        // Further testing is needed to find the perfect value here.
+                        MaxExtensions = depth;
+
+
+                        RootNode = new(0, SearchType.Normal);
+                        evaluation = Search(RootNode, depth, alpha, beta, out CurrentMainLine);
+
+                        bool searchFailed = false;
+                        if (evaluation <= alpha)
+                        {
+                            alphaWindow *= AspirationWindowsMultipliers[0];
+                            searchFailed = true;
+                        }
+
+                        if (evaluation >= beta)
+                        {
+                            betaWindow *= AspirationWindowsMultipliers[1];
+                            searchFailed = true;
+                        }
+
+                        alpha = Max(evaluation - alphaWindow, -Infinity);
+                        beta = Min(evaluation + betaWindow, Infinity);
+
+                        if (!searchFailed) break;
+                    }
+
+
+                    // The "Focused Search" technique is an idea I came up with that involves
+                    // performing a search at a reduced depth at the end of the main line found by the computer,
+                    // to get a more realistic representation of the final evaluation.
+                    // A new search is then done using these new values to "verify" the line,
+                    // and if a different move is returned the whole process is repeated.
+                    // For more information: https://www.reddit.com/r/ComputerChess/comments/1192dur/engine_optimization_idea_focused_search/?utm_source=share&utm_medium=web2x&context=3
+                    // Disabled because of inconsintent performance and results.
+                    // Further research will need to be done.
+                    #region Focused Search
+                    if (CurrentMainLine != null && !CurrentMainLine.Cleanup())
+                    {
+                        //    // To make sure we are not overlooking some of the opponent's responses to our chosen line,
+                        //    // do a new search at the end of the line with a reduced depth.
+                        //    // The new results will be stored in the transposition table, and looked up
+                        //    // by another full search done afterwards.
+                        //    // This should not slow down the search because of the limited depth for the new search
+                        //    // and the quick transposition lookup times.
+                        //    // The process is repeated until the line is found to be the best even after the verification.
+                        //
+                        //    Line newMainLine;
+                        //
+                        //    while (true)
+                        //    {
+                        //        CurrentMainLine.MakeMoves(removeEntries: true);
+                        //        Line test;
+                        //        int eval = Search(depth / 2, 0, NegativeInfinity, PositiveInfinity, 0, evaluationData, out test);
+                        //        CurrentMainLine.UnmakeMoves();
+                        //
+                        //        evaluation = Search(depth, 0, alpha, beta, 0, evaluationData, out newMainLine);
+                        //
+                        //        if (newMainLine != null && !newMainLine.Cleanup())
+                        //        {
+                        //            Debug.Log($"{CurrentMainLine.Length()} {newMainLine.Length()} {test.Length()}");
+                        //
+                        //            if (newMainLine.Move.Equals(CurrentMainLine.Move)) break;
+                        //
+                        //            CurrentMainLine = new(newMainLine);
+                        //        }
+                        //
+                        //        else break;
+                        //
+                        //        Debug.Log($"Skipped move {CurrentMainLine.Move.ToString()} at depth {depth} with aspiration windows of ({alpha}, {beta}).");
+                        //    }
+                        //
+                        //    CurrentMainLine = newMainLine;
+                    }
+                    #endregion
+
+                    if (!WasSearchAborted)
+                    {
+                        _totalSearchTime = SearchStopwatch.ElapsedMilliseconds;
+
+                        RootNode.SetScore(evaluation);
+
+                        //DepthReachedData = new(CurrentDepthReachedData);
+                        //BestMovesThisSearch.Add(CurrentMainLine.Move.ToString());
+                        MainLine = new(CurrentMainLine);
+                        _evaluation = (evaluation * (Board.CurrentTurn == 1 ? -0.01f : 0.01f)).ToString("0");
+                        SearchNodes = (ulong)_totalSearchNodes;
+                        SearchNodesPerDepth.Add(_totalSearchNodes);
+
+                        Console.WriteLine($"info " +
+                            $"depth {depth} " +
+                            $"seldepth {SelectiveDepth + 1} " +
+                            $"multipv {pvIndex + 1} " +
+                            $"score " +
+                                (!IsMateScore(evaluation) ?
+                                $"cp {evaluation} " :
+                                $"mate {((evaluation > 0) ? "+" : "-")}{Ceiling((Checkmate - Abs(evaluation)) / 2.0)} ") +
+                            $"nodes {SearchNodes} " +
+                            $"nps {(int)Round(SearchNodes / (double)SearchStopwatch.ElapsedMilliseconds * 1000)} " +
+                            $"time {SearchStopwatch.ElapsedMilliseconds} " +
+                            $"pv {MainLine}");
+
+                        ExcludedRootMoves.Add(MainLine?.Move);
+
+                        //Stream stream = new FileStream(AppDomain.CurrentDomain.BaseDirectory + "RootNode.txt", FileMode.Create, FileAccess.Write);
+                        //
+                        //JsonSerializer.Serialize(stream, RootNode);
+                        //stream.Close();
+                    }
+
+                    else break;
+
+                    if (ExcludedRootMoves.Count >= Board.GenerateAllLegalMoves(promotionMode: 2).Count) break;
+                }
+
+                depth++;
             }
+            while (
+            !WasSearchAborted &&
+            (!UseTimeManagement || SearchStopwatch.ElapsedMilliseconds <= OptimumTime) &&
+            (UseTimeLimit || depth <= TimeLimit /* Time limit also represents the max depth. */));
 
-            if (evaluation >= beta)
-            {
-                betaWindow *= AspirationWindowsMultipliers[1];
-                searchFailed = true;
-            }
-
-            alpha = evaluation - alphaWindow;
-            beta = evaluation + betaWindow;
-
-            if (searchFailed)
-            {
-                CurrentSearchTime.Stop();
-                continue;
-            }
-
-
-            // The "Focused Search" technique is an idea I came up with that involves
-            // performing a search at a reduced depth at the end of the main line found by the computer,
-            // to get a more realistic representation of the final evaluation.
-            // A new search is then done using these new values to "verify" the line,
-            // and if a different move is returned the whole process is repeated.
-            // For more information: https://www.reddit.com/r/ComputerChess/comments/1192dur/engine_optimization_idea_focused_search/?utm_source=share&utm_medium=web2x&context=3
-            // Disabled because of inconsintent performance and results.
-            // Further research will need to be done.
-            #region Focused Search
-            if (!CurrentMainLine.Cleanup() && CurrentMainLine != null)
-            {
-                //    // To make sure we are not overlooking some of the opponent's responses to our chosen line,
-                //    // do a new search at the end of the line with a reduced depth.
-                //    // The new results will be stored in the transposition table, and looked up
-                //    // by another full search done afterwards.
-                //    // This should not slow down the search because of the limited depth for the new search
-                //    // and the quick transposition lookup times.
-                //    // The process is repeated until the line is found to be the best even after the verification.
-                //
-                //    Line newMainLine;
-                //
-                //    while (true)
-                //    {
-                //        CurrentMainLine.MakeMoves(removeEntries: true);
-                //        Line test;
-                //        int eval = Search(depth / 2, 0, NegativeInfinity, PositiveInfinity, 0, evaluationData, out test);
-                //        CurrentMainLine.UnmakeMoves();
-                //
-                //        evaluation = Search(depth, 0, alpha, beta, 0, evaluationData, out newMainLine);
-                //
-                //        if (newMainLine != null && !newMainLine.Cleanup())
-                //        {
-                //            Debug.Log($"{CurrentMainLine.Length()} {newMainLine.Length()} {test.Length()}");
-                //
-                //            if (newMainLine.Move.Equals(CurrentMainLine.Move)) break;
-                //
-                //            CurrentMainLine = new(newMainLine);
-                //        }
-                //
-                //        else break;
-                //
-                //        Debug.Log($"Skipped move {CurrentMainLine.Move.ToString()} at depth {depth} with aspiration windows of ({alpha}, {beta}).");
-                //    }
-                //
-                //    CurrentMainLine = newMainLine;
-            }
-            #endregion
-
-            CurrentSearchTime.Stop();
-
-            if (!AbortSearch)
-            {
-                _totalSearchTime = SearchTime.ElapsedMilliseconds;
-
-                //DepthReachedData = new(CurrentDepthReachedData);
-                _searchTimeResult = CurrentSearchTime.ElapsedMilliseconds;
-                _bestEval = evaluation;
-                //BestMovesThisSearch.Add(CurrentMainLine.Move.ToString());
-                MainLine = new(CurrentMainLine);
-                _evaluation = (evaluation * (Board.CurrentTurn == 1 ? -0.01f : 0.01f)).ToString("0");
-                SearchNodes = (ulong)_currentSearchNodes;
-                SearchNodesPerDepth.Add(_currentSearchNodes);
-
-                Console.WriteLine($"info depth {depth} seldepth {SelectiveDepth + 1} score cp {(!IsMateScore(evaluation) ? evaluation : $"{((evaluation > 0) ? "+" : "-")}M{((Checkmate - Abs(evaluation)) - 1) / 2}")} nodes {SearchNodes} nps {(int)Round(SearchNodes / (double)SearchTime.ElapsedMilliseconds * 1000)} time {SearchTime.ElapsedMilliseconds} pv {MainLine}");
-            }
-
-            depth++;
+            SearchStopwatch.Stop();
+            OnSearchComplete.Invoke();
         }
-        while (
-        !AbortSearch &&
-        (!UseTimeManagement || SearchTime.ElapsedMilliseconds <= OptimumTime) &&
-        (UseTimeLimit || depth <= TimeLimit /* Time limit also represents the max depth. */));
-        SearchTime.Stop();
-
-        OnSearchComplete.Invoke();
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
     }
 
 
-    // The Search function goes through every legal move,
-    // then recursively calls itself on each of the opponent's responses
-    // until the depth reaches 0. Finally, the positions reached are evaluated.
-    // The path that leads to the best "forced evaluation" is then chosoen.
-    // The greater the depth, the further into the future the computer will be able to see,
-    // possibly finding more advanced tactics and better moves.
-
-    // The search tree is made up of search nodes.
-    // Each node represents a certain position on the board,
-    // reached after a specific sequence of moves (called a line).
-    // The parent of a node is the node above it in the tree, closer to the root.
-    // The grandparent of a node is the parent of the parent of the node.
-    // The children of a node are all the nodes reached my making a move from the current position of the node.
-    // The grandchildren of a node are the children of the children of the node.
-    // Sibling nodes are nodes at the same distance from the root.
-    // A branch is what links a child node to the parent. 
-    // Pruning a branch means returning the search early in a certain node, speeding up the search in the parent node.
-    public static int Search(int depth, int ply, int alpha, int beta, int extensions, EvaluationData evaluationData, out Line pvLine, bool useNullMovePruning = true, int nullMoveSearchPlyFromRoot = 0, ulong previousCapture = 0, bool useMultiCut = true, int parentStaticEvaluation = Null, int grandparentStaticEvaluation = Null)
+    /// <summary>
+    /// The Search function goes through every legal move,
+    /// then recursively calls itself on each of the opponent's responses
+    /// until the depth reaches 0. <br /> Finally, the positions reached are evaluated.
+    /// The path that leads to the best "forced evaluation" is then chosoen. <br />
+    /// The greater the depth, the further into the future the computer will be able to see,
+    /// possibly finding more advanced tactics and better moves.
+    /// </summary>
+    /// <remarks>
+    /// The search tree is made up of search nodes.
+    /// Each node represents a certain position on the board,
+    /// reached after a specific sequence of moves (called a line). <br />
+    /// The parent of a node is the node above it in the tree, closer to the root.
+    /// The children of a node are all the nodes reached after 1 move, the grandchildren after 2 moves and so on. <br />
+    /// Sibling nodes are nodes at the same distance from the root (or <c>ply</c>). <br />
+    /// Pruning a branch means returning the search early in a node, speeding up the search in the parent node.
+    /// </remarks>
+    /// <param name="depth">The remaining depth to search before evaluating the positions reached.</param>
+    /// <param name="alpha">The lower bound of the evaluation</param>
+    public static int Search(Node node, int depth, int alpha, int beta, out Line pvLine, bool useNullMovePruning = true, ulong previousCapture = 0, bool useMultiCut = true)
     {
+        int ply = node.Ply;
+        ref int extensions = ref node.Extensions;
+
+        SearchType parentSearchType = node.SearchType;
+
         // pvLine == null -> branch was pruned.
         // pvLine == empty -> node is an All-Node.
         pvLine = null;
@@ -389,7 +406,7 @@ public class AI
         bool rootNode = ply == 0;
 
 
-        if (AbortSearch) return Null;
+        if (WasSearchAborted) return Null;
 
         // Detect draws by repetition.
         if (IsDrawByRepetition(Board.ZobristKey)) return Draw;
@@ -398,13 +415,16 @@ public class AI
 
 
         // Return the static evaluation immediately if the max ply was reached.
-        if (WasMaxPlyReached()) return Evaluate(out int _, evaluationData);
+        if (WasMaxPlyReached()) return Evaluate(out int _);
 
 
         // Once the depth reaches 0, keep searching until no more captures
         // are available using the QuiescenceSearch function.
         if (depth <= 0)
-            return QuiescenceSearch(alpha, beta, ply, evaluationData, out pvLine);
+        {
+            node.SearchType = SearchType.Quiescence;
+            return QuiescenceSearch(node, alpha, beta, out pvLine);
+        }
 
 
         if (ply > SelectiveDepth) SelectiveDepth = ply;
@@ -416,7 +436,7 @@ public class AI
         if (MateDistancePruning()) return alpha;
 
 
-        #region Store Transposition Data
+        #region Lookup Transposition Data
         // Was this position searched before?
         bool ttHit;
 
@@ -449,37 +469,48 @@ public class AI
         bool inCheck = Board.IsKingInCheck[Board.CurrentTurn];
 
         // Evaluation of the current position.
-        int staticEvaluation;
+        ref int staticEvaluation = ref node.StaticEvaluation;
 
         // Has the static evaluation improved since our last turn?
         bool hasStaticEvaluationImproved;
 
         // Approximation of the actual evaluation.
         // Found using the transposition table in case of a ttHit, otherwise evaluation = staticEvaluation.
-        int evaluation;
+        // Note: might use results of lower depth searches. 
+        ref int evaluation = ref node.Evaluation;
 
-        StoreStaticEvaluation();
+        StoreStaticEvaluation(ref staticEvaluation, ref evaluation);
         #endregion
 
 
         #region Early Pruning
         // Razoring:
-        // If the evaluation is too much lower than beta, prune this branch.
+        // If the evaluation is too much lower than beta, jump straight into the quiescence search.
         // Inspired by Strelka: https://www.chessprogramming.org/Razoring#Strelka.
         // As implemented in Wukong JS: https://github.com/maksimKorzh/wukongJS/blob/main/wukong.js#L1575-L1591.
-        if (Razoring(out int razoringScore)) return razoringScore;
+        if (Razoring(ref evaluation, out int razoringScore)) return razoringScore;
 
 
         // Futility Pruning:
         // When close to the horizon, if it's unlikely that alpha will be raised, most moves are skipped.
         // For more details: https://www.chessprogramming.org/Futility_Pruning.
-        bool useFutilityPruning = UseFutilityPruning();
+        bool useFutilityPruning = UseFutilityPruning(ref evaluation);
 
 
         // Null Move Pruning:
         // Explained here: https://www.chessprogramming.org/Null_Move_Pruning.
-        if (NullMovePruning(out int nullMovePruningScore)) return nullMovePruningScore;
+        if (NullMovePruning(ref evaluation, out int nullMovePruningScore)) return nullMovePruningScore;
+
+
+        if (ProbCut(ref staticEvaluation, ref pvLine, out int probCutScore)) return probCutScore;
         #endregion
+
+        // Reset search type after pruning.
+        node.SearchType = parentSearchType;
+
+        // If the position is not in the transposition table,
+        // save it with a reduced depth search for better move ordering.
+        InternalIterativeDeepening();
 
 
         // Generate a list of all the moves currently available.
@@ -493,7 +524,6 @@ public class AI
             // Checkmate.
             if (Board.IsKingInCheck[Board.CurrentTurn])
             {
-                if (!useNullMovePruning && nullMoveSearchPlyFromRoot == 0) _nullMoveCheckmateFound = true;
                 return -(Checkmate - ply); // Mated in [ply].
             }
 
@@ -508,7 +538,7 @@ public class AI
 
 
         // Extend the search when in check.
-        CheckExtension();
+        CheckExtension(ref extensions);
 
         // Extend if only one legal move is available.
         // TODO: Further research needed. May need to limit one reply extensions to only when in check.
@@ -541,16 +571,31 @@ public class AI
         //    }
         //}
 
+        // The current node's extensions count will now be used to store its children's count.
+        // This value will be used at each iteration of the moves loop to restore it.
+        int extensionsBackup = extensions;
+
 
         // evaluationType == UpperBound -> node is an All-Node. All nodes were searched and none reached alpha. Alpha is returned.
         // evaluationType == Exact -> node is a PV-Node. All nodes were searched and some reached alpha. The new alpha is returned.
         // evaluationType == LowerBound -> node is a Cut-Node. Not all nodes were searched, because a beta cutoff occured. Beta is returned.
-        int evaluationType = UpperBound;
+        EvaluationType evaluationType = EvaluationType.UpperBound;
+        node.NodeType = NodeType.AllNode;
 
         // Moves Loop:
         // Iterate through all legal moves and perform a depth - 1 search on each one.
         for (int i = 0; i < moves.Count; i++)
         {
+            // Skip PV lines that have already been explored.
+            if (rootNode && ExcludedRootMoves.Any(m => m.Equals(moves[i]))) continue;
+
+            // Restore this node's extension count.
+            // The value is modified for each child node,
+            // so it needs to be reset here.
+            // Note: should be reset before pruning to ensure the proper value is used on each node.
+            extensions = extensionsBackup;
+
+
             // Make the move on the board.
             // The move must be unmade before moving onto the next one.
             Board.MakeMove(moves[i]);
@@ -577,14 +622,11 @@ public class AI
 
 
             // Update node count after pruning.
-            _currentSearchNodes++;
+            _totalSearchNodes++;
 
 
             // Depth reduction.
             int R = 1;
-
-            // Used to store the extension count in the child node.
-            int newExtensions = extensions;
 
             // Were late move reductions used on this move?
             bool usedLmr;
@@ -593,17 +635,24 @@ public class AI
             ReduceDepth();
 
             // Extend the depth of the next search if it is likely to be interesting.
-            ExtendDepth();
+            ExtendDepth(ref extensions);
 
 
             // Permorm a search on the new position with a depth reduced by R.
             // Note: the bounds need to be inverted (alpha = -beta, beta = -alpha), because what was previously the ceiling is now the score to beat, and viceversa.
             // Note: the score needs to be negated, because the evaluation in the point of view of the opponent is opposite to ours.
-            int score = -Search(depth - R, ply + 1, -beta, -alpha, newExtensions, evaluationData, out Line nextLine, previousCapture: moves[i].CapturedPieceType != None ? moves[i].TargetSquare : 0);
+            node.SearchType = SearchType.LateMoveReductionsNormal;
+            int score = -Search(node + 1, depth - R, -beta, -alpha, out Line nextLine);
+            node.Child.SetScore(score);
 
             // In case late move reductions were used and the score exceeded alpha,
             // a re-search at full depth is needed to verify the score.
-            if (usedLmr && score > alpha) score = -Search(depth - 1, ply + 1, -beta, -alpha, newExtensions, evaluationData, out nextLine, previousCapture: moves[i].CapturedPieceType != None ? moves[i].TargetSquare : 0);
+            if (usedLmr && score > alpha)
+            {
+                node.SearchType = SearchType.Normal;
+                score = -Search(node + 1, depth - 1, -beta, -alpha, out nextLine);
+                node.Child.SetScore(score);
+            }
 
 
             // Look for promotions that avoid a draw.
@@ -616,12 +665,36 @@ public class AI
 
 
             // If the search was aborted, don't return incorrect values.
-            if (AbortSearch) return Null;
+            if (WasSearchAborted) return Null;
 
             // A new best move was found!
             if (score > alpha)
             {
-                evaluationType = Exact;
+                // Verification Search:
+                // When a new best move is found at a high depth, and the score
+                // is significantly higher than the previous best score,
+                // the best line found should be verified at a slightly deeper depth.
+                //if (depth >= VerificationSearchMinimumDepth &&
+                //    score - alpha >= 1 && !nextLine.Cleanup())
+                //{
+                //    var old = Board.ZobristKey;
+                //    // Reach the end of the computer's "plan".
+                //    nextLine.MakeMoves();
+                //
+                //    Search(node.Child, depth - R, -beta, -alpha, evaluationData, out Line newNextLine);
+                //
+                //    nextLine.UnmakeMoves();
+                //    if (Board.ZobristKey != old)
+                //    {
+                //        Console.WriteLine("!!!");
+                //    }
+                //
+                //    nextLine = newNextLine;
+                //}
+
+
+                evaluationType = EvaluationType.Exact;
+                node.NodeType = NodeType.PVNode;
 
                 alpha = score;
 
@@ -630,17 +703,22 @@ public class AI
 
                 // Fail-High:
                 // If the score is higher than beta, it means the move is
-                // too good for the opponent and the parent node will be avoided.
-                // There's no need to look at any other moves since we already know that this one is worse than we can afford.
-                // Note: beta is either negativeInfinity or -alpha of the parent node.
-                // This means that no cutoffs can occur until the first branch of the root has been explored fully.
+                // too good for the opponent and this node will be avoided.
+                // There's no need to look at any other moves since we already know this one is worse than we can afford.
+                // Note: beta is usually either negativeInfinity or -alpha of the parent node.
+                // This means that no cutoffs can occur until the first branch of the root has been explored up to a leaf node.
                 if (score >= beta)
                 {
-                    TranspositionTable.StoreEvaluation(depth, ply, beta, LowerBound, pvLine, staticEvaluation);
+                    evaluationType = EvaluationType.LowerBound;
+                    node.NodeType = NodeType.CutNode;
+
+                    TranspositionTable.StoreEvaluation(depth, ply, beta, evaluationType, pvLine, staticEvaluation);
 
                     // If a quiet move caused a beta cutoff, update it's stats.
                     if (!isCapture) UpdateQuietMoveStats();
 
+                    // Reset search type before returning.
+                    node.SearchType = parentSearchType;
                     return beta;
                 }
             }
@@ -649,6 +727,9 @@ public class AI
             if (rootNode)
             {
                 _progress = (float)i / moves.Count * 100;
+
+
+                //Console.WriteLine($"info tree {RootNode}");
             }
 
 
@@ -670,8 +751,8 @@ public class AI
             bool LateMovePruning()
             {
                 useLateMovePruning = !rootNode &&
-                depth < ShallowDepthThreshold &&
-                i > LateMovePruningThreshold(depth);
+                    depth < ShallowDepthThreshold &&
+                    i > LateMovePruningThreshold(depth);
 
                 if (useLateMovePruning &&
                     !isCaptureOrPromotion && !givesCheck)
@@ -692,7 +773,7 @@ public class AI
                 // Reduce quite moves towards the end of the ordered moves list.
                 usedLmr = false;
                 // Only reduce if we aren't in check and the move doesn't give check to the opponent.
-                if (i > LateMoveThreshold[moves.Count] && !inCheck && !givesCheck)
+                if (!rootNode && i > _lateMoveThresholds[moves.Count] && !inCheck && !givesCheck)
                 {
                     // Don't reduce captures, promotions and killer moves,
                     // unless we are past the moveCountBasedPruningThreshold (very late moves).
@@ -708,7 +789,7 @@ public class AI
                 }
             }
 
-            void ExtendDepth()
+            void ExtendDepth(ref int extensions)
             {
                 //if (newExtensions >= MaxExtensions) return;
 
@@ -728,13 +809,13 @@ public class AI
                 //    R--;
                 //}
 
-                if (newExtensions >= MaxExtensions) return;
+                if (extensions >= MaxExtensions) return;
 
                 // Passed pawn extension.
                 if (moves[i].PieceType == Pawn &&
                     ((moves[i].TargetSquare & Mask.SeventhRank) != 0))
                 {
-                    newExtensions++;
+                    extensions++;
                     R--;
                 }
 
@@ -770,7 +851,8 @@ public class AI
                         // Store the score of the new promotion.
                         // Note: because it's a rare edge case, reductions are not used here. 
                         // If this is found to be a bottleneck in the program, it could easily be optimized.
-                        score = -Search(depth - 1, ply + 1, -beta, -alpha, newExtensions, evaluationData, out nextLine, previousCapture: moves[i].CapturedPieceType != None ? moves[i].TargetSquare : 0);
+                        score = -Search(node + 1, depth - 1, -beta, -alpha, out nextLine);
+                        node.Child.SetScore(score);
 
                         // If a better promotion was found, exit the loop.
                         if (score > Draw) break;
@@ -782,7 +864,7 @@ public class AI
             void UpdateQuietMoveStats()
             {
                 // Moves with the same start and target square will be boosted in move ordering.
-                History[Board.CurrentTurn][BitboardUtility.FirstSquareIndex(moves[i].StartSquare), BitboardUtility.FirstSquareIndex(moves[i].TargetSquare)] += depth * depth;
+                History[Board.CurrentTurn][FirstSquareIndex(moves[i].StartSquare), FirstSquareIndex(moves[i].TargetSquare)] += depth * depth;
 
                 // 
                 StoreKillerMove(moves[i], ply);
@@ -795,13 +877,16 @@ public class AI
         // In case of an all-node, the pvLine will have a null move.
         //if (pvLine.Move?.CapturedPieceType == Piece.None)
         //{
-        //    History[BitboardUtility.FirstSquareIndex(pvLine.Move.StartSquare), BitboardUtility.FirstSquareIndex(pvLine.Move.TargetSquare)] += depth * depth;
+        //    History[FirstSquareIndex(pvLine.Move.StartSquare), FirstSquareIndex(pvLine.Move.TargetSquare)] += depth * depth;
         //
         //    StoreKillerMove(pvLine.Move, ply);
         //}
 
         // Once all legal moves have been searched, save the best score found in the transposition table and return it.
         TranspositionTable.StoreEvaluation(depth, ply, alpha, evaluationType, pvLine, staticEvaluation);
+
+        // Reset search type before returning.
+        node.SearchType = parentSearchType;
         return alpha;
 
 
@@ -824,27 +909,29 @@ public class AI
         {
             pvLine = null;
 
-            if (ttHit && ttEntry.Depth >= depth && ttEval != LookupFailed)
+            if (!rootNode && ttHit && ttEntry.Depth >= depth && ttEval != LookupFailed)
             {
                 // Update quiet move stats.
                 if (!ttMoveIsCapture)
                 {
                     if (ttEval >= beta)
                     {
-                        History[Board.CurrentTurn][BitboardUtility.FirstSquareIndex(ttMove.StartSquare), BitboardUtility.FirstSquareIndex(ttMove.TargetSquare)] += depth * depth;
+                        History[Board.CurrentTurn][FirstSquareIndex(ttMove.StartSquare), FirstSquareIndex(ttMove.TargetSquare)] += depth * depth;
 
                         StoreKillerMove(ttMove, ply);
                     }
                 }
 
                 pvLine = TranspositionTable.GetStoredLine();
+
+                node.NodeType = NodeType.TranspositionTableCutoffNode;
                 return true;
             }
 
             return false;
         }
 
-        void StoreStaticEvaluation()
+        void StoreStaticEvaluation(ref int staticEvaluation, ref int evaluation)
         {
             // When in check, early pruning is disabled,
             // so the static evaluation is not used.
@@ -856,7 +943,7 @@ public class AI
                 if (ttEntry.StaticEvaluation != Null)
                     staticEvaluation = ttEntry.StaticEvaluation;
 
-                else staticEvaluation = Evaluate(out int _, evaluationData);
+                else staticEvaluation = Evaluate(out int _);
 
                 if (ttEval != Null) evaluation = ttEval;
                 else evaluation = staticEvaluation;
@@ -866,42 +953,55 @@ public class AI
             // calculate the static evaluation.
             else
             {
-                staticEvaluation = evaluation = Evaluate(out int _, evaluationData);
+                staticEvaluation = evaluation = Evaluate(out int _);
 
                 // TODO: Save static evaluation in the transposition table.
                 //TranspositionTable.StoreEvaluation(Null, Null, LookupFailed, Null, null, staticEvaluation);
             }
 
-            hasStaticEvaluationImproved = !inCheck && (grandparentStaticEvaluation == Null ||
-            staticEvaluation > grandparentStaticEvaluation);
+            hasStaticEvaluationImproved = !inCheck && (node.Grandparent == null || node.Grandparent.StaticEvaluation == Null ||
+            staticEvaluation > node.Grandparent.StaticEvaluation);
         }
 
 
-        bool Razoring(out int razoringScore)
+        bool Razoring(ref int evaluation, out int razoringScore)
         {
             if (!rootNode && !inCheck)
             {
                 int score = evaluation + StaticPieceValues[Pawn][0];
 
+                // If the evaluation is too much lower than beta,
+                // either return the quiescence search score immediately at depth 1
+                // or verify it first at depths up to 3.
                 if (score < beta)
                 {
                     if (depth == 1)
                     {
-                        int newScore = QuiescenceSearch(alpha, beta, ply, evaluationData, out Line _);
+                        node.SearchType = SearchType.RazoringQuiescence;
+                        int newScore = QuiescenceSearch(node, alpha, beta, out Line _);
+                        node.SetScore(newScore);
 
                         razoringScore = Max(newScore, score);
+
+                        node.NodeType = NodeType.PrunedNode;
                         return true;
                     }
 
+                    // Increase margin for higher depths.
                     score += StaticPieceValues[Pawn][0];
 
                     if (score < beta && depth <= 3)
                     {
-                        int newScore = QuiescenceSearch(alpha, beta, ply, evaluationData, out Line _);
+                        node.SearchType = SearchType.RazoringQuiescence;
+                        int newScore = QuiescenceSearch(node, alpha, beta, out Line _);
+                        node.SetScore(newScore);
 
+                        // Verify the new score before returning it.
                         if (newScore < beta)
                         {
                             razoringScore = Max(newScore, score);
+
+                            node.NodeType = NodeType.PrunedNode;
                             return true;
                         }
                     }
@@ -912,14 +1012,14 @@ public class AI
             return false;
         }
 
-        bool UseFutilityPruning()
+        bool UseFutilityPruning(ref int evaluation)
         {
-            if (!rootNode && !inCheck && depth < 3)
+            if (!rootNode && !inCheck && depth <= 3)
             {
                 // Should also check if eval is a mate score, 
                 // otherwise the engine will be blind to certain checkmates.
 
-                if (evaluation + _futilityMargin[depth] <= alpha)
+                if (evaluation + _futilityMargin[hasStaticEvaluationImproved ? 1 : 0][Min(depth, 63)] <= alpha)
                 {
                     return true;
                 }
@@ -928,7 +1028,7 @@ public class AI
             return false;
         }
 
-        bool NullMovePruning(out int nullMovePruningScore)
+        bool NullMovePruning(ref int evaluation, out int nullMovePruningScore)
         {
             nullMovePruningScore = Null;
 
@@ -944,17 +1044,18 @@ public class AI
                 // After the current turn is skipped, perform a reduced depth search.
                 const int R = 3;
 
-                int score = -Search(depth - R, ply, -beta, -beta + 1 /* We are only interested to know if the score can reach beta. */,
-                    extensions, evaluationData, out Line _, useNullMovePruning: false, nullMoveSearchPlyFromRoot: 0);
+                node.SearchType = SearchType.NullMovePruningNormal;
+                int score = -Search(node + 1, depth - R, -beta, -beta + 1 /* We are only interested to know if the score can reach beta. */, out Line _, useNullMovePruning: false);
+                node.Child.SetScore(score);
 
 
                 Board.UnmakeNullMove(move);
 
-                if (AbortSearch) return false;
+                if (WasSearchAborted) return false;
                 if (score >= beta)
                 {
                     // Note: score is not always equal to beta here because of,
-                    // for example, a reduced depth of 0, where the static evaluation is returned.)
+                    // for example, a reduced depth of 0, where the static evaluation is returned.
 
                     // Avoid returning unproven wins.
                     if (IsMateScore(score)) score = beta;
@@ -962,23 +1063,89 @@ public class AI
                     NullMovePrunes++;
 
                     nullMovePruningScore = score;
+
+                    node.NodeType = NodeType.PrunedNode;
                     return true;
                 }
+            }
 
-                // Checkmate threat extension.
-                if (extensions < MaxExtensions && _nullMoveCheckmateFound)
+            return false;
+        }
+
+        // Following the Stockfish implementation.
+        bool ProbCut(ref int staticEvaluation, ref Line pvLine, out int probCutScore)
+        {
+            probCutScore = Null;
+
+            if (!rootNode && depth > ProbCutDepthReduction && !IsMateScore(beta))
+            {
+                // Value from Stockfish.
+                int probCutBeta = beta + 191 - 54 * (hasStaticEvaluationImproved ? 1 : 0);
+
+                // Note: should only generate moves with SEE score > probCutBeta - staticEvaluation.
+                var moves = Board.GenerateAllLegalMoves(capturesOnly: true, promotionMode: 2);
+                if (UseMoveOrdering) OrderMoves(moves, -1);
+
+                for (int i = 0; i < moves.Count; i++)
                 {
-                    extensions++;
-                    depth++;
+                    Board.MakeMove(moves[i]);
+
+                    // Perform a preliminary qsearch to verify that the move holds.
+                    node.SearchType = SearchType.ProbCutQuiescence;
+                    probCutScore = -QuiescenceSearch(node + 1, -probCutBeta, -probCutBeta + 1, out Line probCutLine);
+                    node.Child.SetScore(probCutScore);
+
+                    // If the qsearch held, perform the regular search.
+                    if (probCutScore >= probCutBeta)
+                    {
+                        node.SearchType = SearchType.ProbCutNormal;
+                        probCutScore = -Search(node + 1, depth - ProbCutDepthReduction, -probCutBeta, -probCutBeta + 1, out probCutLine);
+                        node.Child.SetScore(probCutScore);
+                    }
+
+                    Board.UnmakeMove(moves[i]);
+
+                    if (probCutScore >= probCutBeta)
+                    {
+                        pvLine.Move = moves[i];
+                        pvLine.Next = probCutLine;
+
+                        // Save ProbCut data into transposition table.
+                        TranspositionTable.StoreEvaluation(depth - (ProbCutDepthReduction - 1 /* Here the effective depth is 1 higher than the reduced prob cut depth. */),
+                            ply, probCutScore, EvaluationType.LowerBound, pvLine, staticEvaluation);
+
+                        node.NodeType = NodeType.PrunedNode;
+                        return true;
+                    }
                 }
-                _nullMoveCheckmateFound = false;
             }
 
             return false;
         }
 
 
-        void CheckExtension()
+        void InternalIterativeDeepening()
+        {
+            // If no move is stored in the transposition table for this position,
+            // perform a reduced depth search and update the transposition values.
+            if (!rootNode /* Cannot use at the root because of MultiPV */ &&
+                depth > InternalIterativeDeepeningDepthReduction && ttMove == null)
+            {
+                node.SearchType = SearchType.InternalIterativeDeepeningNormal;
+                int score = Search(node, depth - InternalIterativeDeepeningDepthReduction, alpha, beta, out Line _);
+                node.SetScore(score);
+
+                ttEntry = TranspositionTable.GetStoredEntry(out ttHit);
+                ttEval = TranspositionTable.LookupEvaluation(depth, ply, alpha, beta);
+
+                ttLine = ttHit ? ttEntry.Line : null;
+                ttMove = ttLine?.Move;
+                ttMoveIsCapture = IsCaptureOrPromotion(ttMove);
+            }
+        }
+
+
+        void CheckExtension(ref int extensions)
         {
             if (!rootNode && extensions < MaxExtensions && inCheck)
             {
@@ -1002,7 +1169,7 @@ public class AI
             return false;
         }
 
-        void OneReplyExtension()
+        void OneReplyExtension(ref int extensions)
         {
             if (!rootNode && extensions < MaxExtensions && moves.Count == 1)
             {
@@ -1012,8 +1179,13 @@ public class AI
         }
     }
 
-    public static int QuiescenceSearch(int alpha, int beta, int ply, EvaluationData evaluationData, out Line pvLine)
+    /// <summary>
+    /// The QuiescenceSearch function extends the normal Search, evaluating all legal captures.
+    /// </summary>
+    public static int QuiescenceSearch(Node node, int alpha, int beta, out Line pvLine)
     {
+        int ply = node.Ply;
+
         // pvLine == null -> branch was pruned.
         // pvLine == empty -> node is an All-Node.
         pvLine = null;
@@ -1021,7 +1193,7 @@ public class AI
         bool rootNode = ply == 0;
 
 
-        if (AbortSearch) return Null;
+        if (WasSearchAborted) return Null;
 
         // Note: draws by repetition are not possible when all moves are captures.
 
@@ -1029,7 +1201,7 @@ public class AI
 
 
         // Return the static evaluation immediately if the max ply was reached.
-        if (WasMaxPlyReached()) return Evaluate(out int _, evaluationData);
+        if (WasMaxPlyReached()) return Evaluate(out int _);
 
 
         //if (ply > SelectiveDepth) SelectiveDepth = ply;
@@ -1075,6 +1247,7 @@ public class AI
 
         // Approximation of the actual evaluation.
         // Found using the transposition table in case of a ttHit, otherwise evaluation = staticEvaluation.
+        // Note: might use results of lower depth searches. 
         int evaluation;
 
         StoreStaticEvaluation();
@@ -1082,13 +1255,12 @@ public class AI
 
 
         // Standing Pat:
-        // Stop the search immediately if the static evaluation is above beta.
+        // Stop the search immediately if the evaluation estimate is above beta.
         // Based on the assumpion that there's at least one move that will improve the position,
         // so unless the position is a Zugzwang (which is a pretty rare case)
-        // there's no way to get a value below beta.
+        // there's no way for the actual evaluation to be below beta.
         // For more information: https://www.chessprogramming.org/Quiescence_Search#Standing_Pat.
-        if (evaluation != Null /* Possible when in check. */ &&
-            evaluation >= beta)
+        if (evaluation >= beta)
         {
             // TODO: Save the static evaluation in the transposition table.
 
@@ -1115,7 +1287,8 @@ public class AI
         // evaluationType == UpperBound -> node is an All-Node. All nodes were searched and none reached alpha. Alpha is returned.
         // evaluationType == Exact -> node is a PV-Node. All nodes were searched and some reached alpha. The new alpha is returned.
         // evaluationType == LowerBound -> node is a Cut-Node. Not all nodes were searched, because a beta cutoff occured. Beta is returned.
-        int evaluationType = UpperBound;
+        EvaluationType evaluationType = EvaluationType.UpperBound;
+        node.NodeType = NodeType.AllNode;
 
         for (int i = 0; i < moves.Count; i++)
         {
@@ -1125,9 +1298,11 @@ public class AI
 
             Board.MakeMove(moves[i]);
 
-            _currentSearchNodes++;
+            _totalSearchNodes++;
 
-            int score = -QuiescenceSearch(-beta, -alpha, ply + 1, evaluationData, out Line nextLine);
+            node.SearchType = SearchType.Quiescence;
+            int score = -QuiescenceSearch(node + 1, -beta, -alpha, out Line nextLine);
+            node.Child.SetScore(score);
 
             Board.UnmakeMove(moves[i]);
 
@@ -1135,7 +1310,8 @@ public class AI
             // A new best move was found!
             if (score > alpha)
             {
-                evaluationType = Exact;
+                evaluationType = EvaluationType.Exact;
+                node.NodeType = NodeType.PVNode;
 
                 alpha = score;
 
@@ -1150,7 +1326,10 @@ public class AI
                 // This means that no cutoffs can occur until the first branch of the root has been explored fully.
                 if (score >= beta)
                 {
-                    TranspositionTable.StoreEvaluation(0, ply, beta, LowerBound, pvLine, staticEvaluation);
+                    evaluationType = EvaluationType.LowerBound;
+                    node.NodeType = NodeType.CutNode;
+
+                    TranspositionTable.StoreEvaluation(0, ply, beta, evaluationType, pvLine, staticEvaluation);
 
                     return beta;
                 }
@@ -1169,6 +1348,8 @@ public class AI
             if (ttHit && ttEval != LookupFailed)
             {
                 pvLine = TranspositionTable.GetStoredLine();
+
+                node.NodeType = NodeType.TranspositionTableCutoffNode;
                 return true;
             }
 
@@ -1179,7 +1360,13 @@ public class AI
         {
             // When in check, early pruning is disabled,
             // so the static evaluation is not used.
-            if (inCheck) staticEvaluation = evaluation = Null;
+            if (inCheck)
+            {
+                staticEvaluation = Null;
+
+                // In quiescence search, evaluation must never be set to Null to avoid issues with standing pat.
+                evaluation = -Infinity;
+            }
 
             // If this position was already evaluated, use the stored value.
             else if (ttHit)
@@ -1187,7 +1374,7 @@ public class AI
                 if (ttEntry.StaticEvaluation != Null)
                     staticEvaluation = ttEntry.StaticEvaluation;
 
-                else staticEvaluation = Evaluate(out int _, evaluationData);
+                else staticEvaluation = Evaluate(out int _);
 
                 if (ttEval != Null) evaluation = ttEval;
                 else evaluation = staticEvaluation;
@@ -1197,7 +1384,7 @@ public class AI
             // calculate the static evaluation.
             else
             {
-                staticEvaluation = evaluation = Evaluate(out int _, evaluationData);
+                staticEvaluation = evaluation = Evaluate(out int _);
 
                 // TODO: Save static evaluation in the transposition table.
                 //TranspositionTable.StoreEvaluation(Null, Null, LookupFailed, Null, null, staticEvaluation);
@@ -1277,14 +1464,14 @@ public class AI
                 // Sort non-killer quiet moves by history heuristic.
                 else
                 {
-                    int targetSquareIndex = BitboardUtility.FirstSquareIndex(move.TargetSquare);
+                    int targetSquareIndex = FirstSquareIndex(move.TargetSquare);
 
                     //if (History.Cast<int>().Any(x => x != 0))
                     //{
                     //    int a = 0;
                     //}
 
-                    moveScore += History[Board.CurrentTurn][BitboardUtility.FirstSquareIndex(move.StartSquare), targetSquareIndex];
+                    moveScore += History[Board.CurrentTurn][FirstSquareIndex(move.StartSquare), targetSquareIndex];
 
                     //moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == None ? move.PieceType : move.PromotionPiece, targetSquareIndex, Board.CurrentTurn == 0, gamePhase);
                     //moveScore += GetPieceValue(move.PromotionPiece);
@@ -1312,7 +1499,7 @@ public class AI
 
     public static bool IsMateScore(int score)
     {
-        return Abs(score) > Checkmate - 1000;
+        return score != Null && Abs(score) >= Checkmate - MaxPly;
     }
 
 
@@ -1324,12 +1511,12 @@ public class AI
     public static bool IsDrawByInsufficientMaterial()
     {
         return
-            BitboardUtility.OccupiedSquaresCount(Board.AllOccupiedSquares) == 2 || /* King vs king. */
-            (BitboardUtility.OccupiedSquaresCount(Board.OccupiedSquares[0]) == 2 && (Board.Bishops[0] != 0 || Board.Knights[0] != 0)) || /* King and bishop vs king or king and knight vs king. */
-            (BitboardUtility.OccupiedSquaresCount(Board.OccupiedSquares[1]) == 2 && (Board.Bishops[1] != 0 || Board.Knights[1] != 0)) || /* King vs king and bishop or king vs king and knight. */
-            ((BitboardUtility.OccupiedSquaresCount(Board.OccupiedSquares[0]) == 2 && BitboardUtility.OccupiedSquaresCount(Board.Bishops[0]) == 1) &&
-            (BitboardUtility.OccupiedSquaresCount(Board.OccupiedSquares[1]) == 2 && BitboardUtility.OccupiedSquaresCount(Board.Bishops[1]) == 1) &&
-            BitboardUtility.FirstSquareIndex(Board.Bishops[0]) % 2 == BitboardUtility.FirstSquareIndex(Board.Bishops[1]) % 2); /* King and bishop vs king and bishop with bishops of the same color. */
+            PieceCount(Board.AllOccupiedSquares) == 2 || /* King vs king. */
+            (PieceCount(Board.OccupiedSquares[0]) == 2 && (Board.Bishops[0] != 0 || Board.Knights[0] != 0)) || /* King and bishop vs king or king and knight vs king. */
+            (PieceCount(Board.OccupiedSquares[1]) == 2 && (Board.Bishops[1] != 0 || Board.Knights[1] != 0)) || /* King vs king and bishop or king vs king and knight. */
+            ((PieceCount(Board.OccupiedSquares[0]) == 2 && PieceCount(Board.Bishops[0]) == 1) &&
+            (PieceCount(Board.OccupiedSquares[1]) == 2 && PieceCount(Board.Bishops[1]) == 1) &&
+            FirstSquareIndex(Board.Bishops[0]) % 2 == FirstSquareIndex(Board.Bishops[1]) % 2); /* King and bishop vs king and bishop with bishops of the same color. */
     }
 
     public static bool IsCapture(Move move) =>
@@ -1404,25 +1591,6 @@ public class AI
     private static int LateMovePruningThreshold(int depth) => (3 + depth * depth) / 2;
 }
 
-[System.Serializable]
-public class DepthReachedData
-{
-    public int Depth;
-    public int Count;
-
-    public DepthReachedData(int depth)
-    {
-        Depth = depth;
-        Count = 1;
-    }
-
-    public DepthReachedData(DepthReachedData depthReachedData)
-    {
-        Depth = depthReachedData.Depth;
-        Count = depthReachedData.Count;
-    }
-}
-
 public class Line
 {
     public Move Move;
@@ -1441,12 +1609,12 @@ public class Line
         Next = other.Next != null ? new(other.Next) : null;
     }
 
-    //public void MakeMoves(bool removeEntries = false)
-    //{
-    //    Board.MakeMove(Move);
-    //    if (removeEntries) AI.TranspositionTable.ClearEntry();
-    //    if (Next != null) Next.MakeMoves(removeEntries);
-    //}
+    public void MakeMoves(bool removeEntries = false)
+    {
+        Board.MakeMove(Move);
+        if (removeEntries) TranspositionTable.ClearCurrentEntry();
+        if (Next != null) Next.MakeMoves(removeEntries);
+    }
 
     public void UnmakeMoves()
     {
@@ -1485,4 +1653,165 @@ public class Line
     {
         return 1 + (Next != null ? Next.Length() : 0);
     }
+}
+
+
+/// <summary>
+/// The Node class holds all useful information about a node in the search tree.
+/// Given a reference to the root node of a tree, the entire tree can be accessed.
+/// </summary>
+public class Node
+{
+    /// <summary>
+    /// Depth navigated along this node's branch.
+    /// </summary>
+    public int Ply;
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public SearchType SearchType;
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public NodeType NodeType;
+
+
+    /// <summary>
+    /// Extension count from the root to this node.
+    /// </summary>
+    public int Extensions;
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public int Evaluation;
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public int StaticEvaluation;
+
+    public int Score;
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public Node Parent;
+    /// <summary>
+    /// 
+    /// </summary>
+    public List<Node> Children;
+
+    private int CurrentChildIndex;
+
+
+    public Node(int ply, SearchType searchType, Node parent = null)
+    {
+        Ply = ply;
+        SearchType = searchType;
+        Parent = parent;
+        Children = new();
+        CurrentChildIndex = 0;
+    }
+
+
+    /// <summary>
+    /// The last child that was added.
+    /// </summary>
+    public Node Child => Children.Last();
+
+    public Node Grandparent => Parent?.Parent;
+
+    public List<Node> Grandchildren => Children.SelectMany(c => c.Children).ToList();
+
+
+    public static Node operator -(Node node, int index)
+    {
+        Node result = node;
+        for (int i = 0; i < index; i++)
+        {
+            result = result.Parent;
+            if (result == null) break;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Navigate down the tree from <paramref name="node"/> following the current path <paramref name="depth"/> times. <br />
+    /// Any missing children will be added as necessary. <br />
+    /// Note: the behaviour changes if the required child is missing at the end: the CurrentChildIndex of the parent of the last node will increase by 1. <br />
+    /// Note: an alternative approach may be to use recursion.
+    /// </summary>
+    /// <param name="node"></param>
+    /// <param name="depth"></param>
+    /// <returns></returns>
+    public static Node operator +(Node node, int depth)
+    {
+        Node result = node;
+        for (int i = 0; i < depth; i++)
+        {
+            // Select the current child.
+            if (result.Children.Count > result.CurrentChildIndex)
+                result = result.Children[result.CurrentChildIndex];
+
+            // Add a new child node.
+            else
+            {
+                result.Children.Add(new(result.Ply + 1, result.SearchType, result) { Extensions = result.Extensions });
+
+                // Update the reference,
+                // then increment the CurrentChildIndex if the max depth was reached.
+                int childIndex = result.CurrentChildIndex;
+                if ((i == depth - 1)) result.CurrentChildIndex++;
+
+                result = result.Children[childIndex];
+
+            }
+        }
+
+        return result;
+    }
+
+    public override string ToString()
+    {
+        return
+            $"{Ply}," +
+            $"{Enum.GetName(typeof(SearchType), SearchType)}," +
+            $"{Enum.GetName(typeof(NodeType), NodeType)}," +
+            $"{(Children != null && Children.Count > 0 ? $"[{string.Join(";", Children)};]" : "[]")}";
+    }
+
+    public Node GetRoot()
+    {
+        Node result = this;
+        while (result != null && result.Ply > 0) result -= 1;
+        return result;
+    }
+
+    public void SetScore(int score) => Score = score;
+}
+
+public enum NodeType
+{
+    LeafNode,
+    PVNode,
+    CutNode,
+    AllNode,
+    PrunedNode,
+    TranspositionTableCutoffNode,
+}
+
+public enum SearchType
+{
+    Normal,
+    LateMoveReductionsNormal,
+    Quiescence,
+    RazoringQuiescence,
+    NullMovePruningNormal,
+    ProbCutQuiescence,
+    ProbCutNormal,
+    InternalIterativeDeepeningNormal,
 }

@@ -1,35 +1,43 @@
 ﻿using System.Diagnostics;
 
+using static Utilities.Fen;
+using static Engine;
+
+
+Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
+
 MoveData.ComputeMoveData();
 MoveData.GenerateDirectionalMasks();
 MoveData.ComputeMagicBitboards();
 
-AI.UseMoveOrdering = true;
-AI.UseOpeningBook = false;
-AI.LateMoveReductionMinimumTreshold = 1;
-AI.LateMoveReductionPercentage = 100;
-AI.UseTranspositionTable = true;
-AI.ResetTranspositionTableOnEachSearch = false;
-AI.ShallowDepthThreshold = 8;
-AI.UseOpeningBook = false;
+UseMoveOrdering = true;
+UseOpeningBook = false;
+LateMoveReductionMinimumTreshold = 1;
+LateMoveReductionPercentage = 1.0;
+UseTranspositionTable = true;
+ResetTranspositionTableOnEachSearch = false;
+ShallowDepthThreshold = 8;
+UseOpeningBook = false;
+InternalIterativeDeepeningDepthReduction = 5;
+ProbCutDepthReduction = 4;
+VerificationSearchMinimumDepth = 6;
+MultiPvCount = 1;
 
-AI.Init();
-
-Fen.ConvertFromFen(Fen.StartingFen);
+Init();
 
 
-Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
+ConvertFromFen(StartingFen);
 
 
 bool wait = false;
 while (true)
 {
-    if (AI.MoveFound)
-    {
-        Console.WriteLine($"bestmove {AI.MainLine.Move}");
-        AI.MoveFound = false;
-        wait = false;
-    }
+    //if (BestMoveFound)
+    //{
+    //    Console.WriteLine($"bestmove {MainLine.Move}");
+    //    BestMoveFound = false;
+    //    wait = false;
+    //}
 
     if (wait) continue;
 
@@ -43,22 +51,22 @@ while (true)
             {
                 // Load the starting position.
                 case "startpos":
-                    Fen.ConvertFromFen(Fen.StartingFen);
+                    ConvertFromFen(StartingFen);
                     break;
 
                 // Load an opening position.
                 case "opening":
-                    Fen.ConvertFromFen("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10 ");
+                    ConvertFromFen("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10 ");
                     break;
 
                 // Load a middlegame position.
                 case "midgame":
-                    Fen.ConvertFromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+                    ConvertFromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
                     break;
 
                 // Load an endgame position.
                 case "endgame":
-                    Fen.ConvertFromFen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - ");
+                    ConvertFromFen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - ");
                     break;
 
                 default:
@@ -71,16 +79,21 @@ while (true)
 
                     try
                     {
-                        Fen.ConvertFromFen(commands[1]);
+                        ConvertFromFen(commands[1]);
                     }
                     catch (Exception ex)
                     {
                         if (ex is KeyNotFoundException || ex is IndexOutOfRangeException)
                         {
                             Console.WriteLine("Invalid fen!");
+                            Console.WriteLine(ex);
                         }
 
-                        else throw;
+                        else
+                        {
+                            Console.WriteLine(ex);
+                            throw;
+                        }
                     }
 
                     break;
@@ -98,12 +111,13 @@ while (true)
                             {
                                 int startIndex = (int)Enum.Parse(typeof(Square), commands[i].Substring(0, 2));
                                 int targetIndex = (int)Enum.Parse(typeof(Square), commands[i].Substring(2, 2));
-                                int promotionType = commands[i].Length == 5 ? Array.IndexOf(new[] { "", "p", "n", "b", "r", "q", "k" }, commands[i]) : 0;
+                                int promotionType = commands[i].Length == 5 ? Array.IndexOf(new[] { "", "p", "n", "b", "r", "q", "k" }, commands[i].Substring(4, 1)) : 0;
                                 Board.MakeMove(new(Board.PieceType(startIndex), 1UL << startIndex, 1UL << targetIndex, Board.PieceType(targetIndex), promotionType));
                             }
-                            catch
+                            catch (Exception ex)
                             {
                                 Console.WriteLine("An error occured while parsing the moves!");
+                                Console.WriteLine(ex);
                             }
                         }
 
@@ -115,36 +129,49 @@ while (true)
 
         case "go":
 
+            if (commands.Contains("multipv")) MultiPvCount = int.Parse(commands[Array.IndexOf(commands, "multipv") + 1]);
+
             switch (commands[1])
             {
                 case "movetime":
-                    AI.UseTimeLimit = true;
-                    AI.UseTimeManagement = false;
+                    UseTimeLimit = true;
+                    UseTimeManagement = false;
                     try
                     {
-                        AI.TimeLimit = float.Parse(commands[2]) / 1000;
+                        TimeLimit = float.Parse(commands[2]) / 1000;
                     }
-                    catch (FormatException)
+                    catch (FormatException ex)
                     {
                         Console.WriteLine("Invalid time limit!");
+                        Console.WriteLine(ex);
                     }
 
-                    AI.PlayBestMove();
+                    FindBestMove();
 
                     break;
 
                 case "infinite":
-                    AI.UseTimeLimit = false;
-                    AI.UseTimeManagement = false;
-                    AI.TimeLimit = 64; // Max depth.
+                    UseTimeLimit = false;
+                    UseTimeManagement = false;
+                    TimeLimit = 64; // Max depth.
 
-                    AI.PlayBestMove();
+                    FindBestMove();
+
+                    break;
+
+                case "depth":
+                    UseTimeLimit = false;
+                    UseTimeManagement = false;
+
+                    TimeLimit = float.Parse(commands[2]); // Max depth.
+
+                    FindBestMove();
 
                     break;
 
                 default:
-                    AI.UseTimeLimit = true;
-                    AI.UseTimeManagement = true;
+                    UseTimeLimit = true;
+                    UseTimeManagement = true;
 
                     int movesToGo = 0;
                     int totTime = 0;
@@ -177,8 +204,8 @@ while (true)
                     }
 
                     // From Stockfish.
-                    AI.OptimumTime = (Math.Max(totTime, 10));
-                    AI.MaximumTime = (Math.Max(totTime, 10));
+                    OptimumTime = (Math.Max(totTime, 10));
+                    MaximumTime = (Math.Max(totTime, 10));
 
                     int hypMyTime = 0;
 
@@ -192,16 +219,16 @@ while (true)
 
                         hypMyTime = Math.Max(hypMyTime, 0);
 
-                        int t1 = 10 + Remaining(hypMyTime, hypMTG, AI.Ply, 0);
-                        int t2 = 10 + Remaining(hypMyTime, hypMTG, AI.Ply, 1);
+                        int t1 = 10 + Remaining(hypMyTime, hypMTG, Ply, 0);
+                        int t2 = 10 + Remaining(hypMyTime, hypMTG, Ply, 1);
 
-                        AI.OptimumTime = Math.Min(t1, AI.OptimumTime);
-                        AI.MaximumTime = Math.Min(t2, AI.MaximumTime);
+                        OptimumTime = Math.Min(t1, OptimumTime);
+                        MaximumTime = Math.Min(t2, MaximumTime);
                     }
 
-                    AI.TimeLimit = (AI.MaximumTime - 10) / 1000f;
+                    TimeLimit = (MaximumTime - 10) / 1000f;
 
-                    AI.PlayBestMove();
+                    FindBestMove();
 
                     break;
             }
@@ -221,7 +248,7 @@ while (true)
             break;
 
         case "stop":
-            AI.StopSearch();
+            AbortSearch();
             wait = true;
             break;
 
@@ -246,7 +273,7 @@ int Remaining(int myTime, int movesToGo, int ply, int T)
     double ratio1 = (TMaxRatio * moveImportance) / (TMaxRatio * moveImportance + otherMovesImportance);
     double ratio2 = (moveImportance + TStealRatio * otherMovesImportance) / (moveImportance + otherMovesImportance);
 
-    return (int)(myTime * Math.Min(ratio1, ratio2));
+    return (int)(myTime * Math.Min(ratio1, ratio2)); // Halve the time (for lack of better implementation).
 }
 
 // MoveImportance() is a skew-logistic function based on naive statistical

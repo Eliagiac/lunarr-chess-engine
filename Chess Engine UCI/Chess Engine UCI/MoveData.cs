@@ -1,7 +1,4 @@
-using System.Collections;
-using System.Collections.Generic;
-using System.Net.NetworkInformation;
-using System.Reflection.PortableExecutable;
+using static Utilities.Bitboard;
 
 public class MoveData
 {
@@ -212,7 +209,7 @@ public class MoveData
                 occupancy[size] = b;
                 reference[size] = DiagonalAttacks(pieceType, s, b);
 
-                m.Attacks[m.Offset + BitboardUtility.ParallelBitExtract(b, m.Mask)] = reference[size];
+                m.Attacks[m.Offset + ParallelBitExtract(b, m.Mask)] = reference[size];
 
                 size++;
                 b = (b - m.Mask) & m.Mask;
@@ -230,7 +227,7 @@ public class MoveData
 
                 // Use bitscanning to find first blocker.
                 // Directions at even indexes are always positive, and viceversa.
-                int firstBlockerIndex = direction % 2 == 0 ? BitboardUtility.FirstSquareIndex(maskedBlockers) : BitboardUtility.LastSquareIndex(maskedBlockers);
+                int firstBlockerIndex = direction % 2 == 0 ? FirstSquareIndex(maskedBlockers) : LastSquareIndex(maskedBlockers);
 
                 // Add moves in this direction.
                 attacks |= Moves[pieceType][squareIndex, direction];
@@ -258,7 +255,7 @@ public class MagicBitboard
     }
 
 
-    public ulong GetAttacks(ulong occupiedSquares) => Attacks[Offset + BitboardUtility.ParallelBitExtract(occupiedSquares, Mask)];
+    public ulong GetAttacks(ulong occupiedSquares) => Attacks[Offset + ParallelBitExtract(occupiedSquares, Mask)];
 
 
     public static ulong GetAttacks(int pieceType, int squareIndex, ulong occupiedSquares)

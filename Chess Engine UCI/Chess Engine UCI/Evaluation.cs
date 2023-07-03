@@ -1,34 +1,120 @@
+using static Utilities.Bitboard;
 using static Score;
 using static Piece;
 using static Evaluation;
-using static BitboardUtility;
 
 public class Evaluation
 {
-    //public static readonly int[][] PawnValue = { new int[] { 89, 92 }, new int[] { 96, 102 } };
-    //public static readonly int[][] KnightValue = { new int[] { 308, 307 }, new int[] { 319, 318 } };
-    //public static readonly int[][] BishopValue = { new int[] { 319, 323 }, new int[] { 331, 334 } };
-    //public static readonly int[][] RookValue = { new int[] { 488, 492 }, new int[] { 497, 501 } };
-    //public static readonly int[][] QueenValue = { new int[] { 888, 888 }, new int[] { 853, 845 } };
-    //public static readonly int[][] KingValue = { new int[] { 20001, 20002 }, new int[] { 19998, 20000 } };
-
-
-    public static readonly int[][] StaticPieceValues =
+    /// <summary>The static value of each piece type, based on gamephase.</summary>
+    /// <remarks>Used to count material when gamephase information isn't yet available. <br />
+    /// Indexed by [PieceType][GamePhase].
+    /// </remarks>
+    public static short[][] StaticPieceValues =
     {
-        new[] {   0,   0}, /* None */
-        new[] { 126, 208}, /* Pawn */
-        new[] { 781, 854}, /* Knight */
-        new[] { 825, 915}, /* Bishop */
-        new[] {1276,1380}, /* Rook */
-        new[] {2538,2682}  /* Queen */
+        new short[] {    0,    0 }, /* None */
+        new short[] {  126,  208 }, /* Pawn */
+        new short[] {  781,  854 }, /* Knight */
+        new short[] {  825,  915 }, /* Bishop */
+        new short[] { 1276, 1380 }, /* Rook */
+        new short[] { 2538, 2682 }  /* Queen */
     };
+
+    /// <summary>The default value of each piece type.</summary>
+    /// <remarks>Indexed by [PieceType].</remarks>
+    public static uint[] PieceValues =
+        StaticPieceValues.Select(s => S(s[0], s[1])).ToArray();
+
+
+    /// <summary>Bonus given to pawns that are not blocked by enemy pawns.</summary>
+    /// <remarks>The pawn has a clear path to promotion, and should be valued and protected.<br />
+    /// Indexed by [RankIndex].</remarks>
+    public static uint[] PassedPawnBonus =
+    {
+        S(   +0,   +0),
+        S(   +2,  +38),
+        S(  +15,  +36),
+        S(  +22,  +50),
+        S(  +64,  +81),
+        S( +166, +184),
+        S( +284, +269),
+        S(   +0,   +0),
+    };
+
+    /// <summary>Penalty for two or more pawns (of the same color) on one file.</summary>
+    /// <remarks>The pawns are less effective because they block each other's movement.</remarks>
+    public static uint DoubledPawnPenalty = S(-11, -51);
+
+    /// <summary>Penalty for a pawn with no friendly pawns on neighbouring files.</summary>
+    /// <remarks>The pawn is more vulnerable, as well as less useful to other pawns.</remarks>
+    public static uint IsolatedPawnPenalty = S(-1, -20);
+
+    /// <summary>Penalty for a pawn whose stop square is controlled by an enemy pawn, and not defended by any friendly pawns.</summary>
+    /// <remarks>The pawn is likely to never be able to make progress.</remarks>
+    public static uint BackwardPawnPenalty = S(-6, -10);
+
+    /// <summary>Penalty for all pawns based on material imbalance.</summary>
+    /// <remarks>If one side is up material, pieces gain importance.</remarks>
+    public static uint MaterialImbalancePawnPenalty = S(-5, -3);
+
+    /// <summary>Bonus for having two or more knights.</summary>
+    /// <remarks>The knights gain strength when both are available.<br />
+    /// Indexed by [OpenPosition]</remarks>
+    public static uint[] KnightPairBonus = { S(+50, +30), S(+20, +10) };
+
+    /// <summary>Bonus for having two or more bishops.</summary>
+    /// <remarks>The bishops gain strength when both are available.<br />
+    /// Indexed by [OpenPosition]</remarks>
+    public static uint[] BishopPairBonus = { S(+30, +10), S(+60, +40) };
+
+    /// <summary>Bonus based on how much mobility a piece has.</summary>
+    /// <remarks>Pieces are likely to be stronger if they control many squares.<br />
+    /// Indexed by [PieceType][ControlledSquares]</remarks>
+    public static uint[][] MobilityBonus =
+    {
+        /* None */
+        new uint[] { },
+
+        /* Pawn */
+        new uint[] { },
+
+        /* Knight */
+        new uint[] { S(-62,-81), S(-53,-56), S(-12,-30), S( -4,-14), S(  3,  8), S( 13, 15), S( 22, 23), S( 28, 27), S( 33, 33) },
+    
+        /* Bishop */
+        new uint[] { S(-48, -59), S(-20, -23), S(16, -3), S(26, 13), S(38, 24), S(51, 42), S(55, 54), S(63, 57), S(63, 65), S(68, 73), S(81, 78), S(81, 86), S(91, 88), S(98, 97) },
+        
+        /* Rook */
+        new uint[] { S(-58, -76), S(-27, -18), S(-15, 28), S(-10, 55), S(-5, 69), S(-2, 82), S(9, 112), S(16, 118), S(30, 132), S(29, 142), S(32, 155), S(38, 165), S(46, 166), S(48, 169), S(58, 171) },
+
+        /* Queen */
+        new uint[] { S(-39, -36), S(-21, -15), S(3, 8), S(3, 18), S(14, 34), S(22, 54), S(28, 61), S(41, 73), S(43, 79), S(48, 92), S(56, 94), S(60, 104), S(60, 113), S(66, 120), S(67, 123), S(70, 126), S(71, 133), S(73, 136), S(79, 140), S(88, 143), S(88, 148), S(99, 166), S(102, 170), S(102, 175), S(106, 184), S(109, 191), S(113, 206), S(116, 212) },
+
+        /* King */
+        new uint[] { }
+    };
+
+    /// <summary>Bonus for pawns protecting the castled king.</summary>
+    /// <remarks>Either directly in front of the king or one square further.<br />
+    /// Indexed by [DistanceFromKing]</remarks>
+    public static uint[] ShieldingPawnBonus = { S(+20, +10), S(+10, +5) };
+
+    /// <summary>Penalty for an exposed king.</summary>
+    /// <remarks>A king is more open to attacks if no friendly pawns are in front of it (half-open file), 
+    /// and even worse if there are also no enemy pawns in front of it (open file).<br />
+    /// Indexed by [OpenFile]</remarks>
+    public static uint[] OpenFileNextToKingPenalty = { S(-20, -30), S(-40, -50) };
+
+    public static uint ColorWeaknessPenaltyPerPawn = S(-3, -8);
+
+    public static uint KnightOutpostBonus = S(+54, +34);
+    public static uint BishopOutpostBonus = S(+31, +25);
 
 
     public const int OpeningPhaseScore = 15258;
     public const int EndgamePhaseScore = 3915;
 
 
-    public static int Evaluate(out int gamePhase, EvaluationData evaluationData)
+    public static int Evaluate(out int gamePhase)
     {
         short whiteEarlygameMaterial = EarlygameMaterial(0, out int whitePawnMaterial, out int whitePawnCount, out int whiteKnightCount, out int whiteBishopCount);
         short blackEarlygameMaterial = EarlygameMaterial(1, out int blackPawnMaterial, out int blackPawnCount, out int blackKnightCount, out int blackBishopCount);
@@ -40,7 +126,7 @@ public class Evaluation
         gamePhase = GetGamePhase(whiteEarlygameMaterial, blackEarlygameMaterial, whitePawnMaterial, blackPawnMaterial);
 
 
-        //evaluationData.InterpolateAll(gamePhase);
+        //InterpolateAll(gamePhase);
 
 
         uint whiteEval = 0;
@@ -50,8 +136,8 @@ public class Evaluation
         //int whiteMaterial = Interpolate(gamePhase, whiteEarlygameMaterial, whiteLategameMaterial);
         //int blackMaterial = Interpolate(gamePhase, blackEarlygameMaterial, blackLategameMaterial);
 
-        whiteEval += MakeScore(whiteEarlygameMaterial, whiteLategameMaterial);
-        blackEval += MakeScore(blackEarlygameMaterial, blackLategameMaterial);
+        whiteEval += S(whiteEarlygameMaterial, whiteLategameMaterial);
+        blackEval += S(blackEarlygameMaterial, blackLategameMaterial);
 
 
         // Offset the evaluation towards better endgame tactics.
@@ -71,43 +157,43 @@ public class Evaluation
         blackEval += PassedPawnsBonus(1, Board.Pawns[1], Board.Pawns[0]);
 
         // Give a penalty to doubled pawns.
-        whiteEval += evaluationData.DoubledPawnPenalty * DoubledPawnsCount(Board.Pawns[0]);
-        blackEval += evaluationData.DoubledPawnPenalty * DoubledPawnsCount(Board.Pawns[1]);
+        whiteEval += DoubledPawnPenalty * DoubledPawnsCount(Board.Pawns[0]);
+        blackEval += DoubledPawnPenalty * DoubledPawnsCount(Board.Pawns[1]);
 
         // Give a penalty to isolated pawns.
-        whiteEval += evaluationData.IsolatedPawnPenalty * IsolatedPawnsCount(Board.Pawns[0]);
-        blackEval += evaluationData.IsolatedPawnPenalty * IsolatedPawnsCount(Board.Pawns[1]);
+        whiteEval += IsolatedPawnPenalty * IsolatedPawnsCount(Board.Pawns[0]);
+        blackEval += IsolatedPawnPenalty * IsolatedPawnsCount(Board.Pawns[1]);
 
         // Give a penalty to backward pawns.
-        whiteEval += evaluationData.BackwardPawnPenalty * BackwardPawnsCount(0, 1, Board.Pawns[0]);
-        blackEval += evaluationData.BackwardPawnPenalty * BackwardPawnsCount(1, 0, Board.Pawns[1]);
+        whiteEval += BackwardPawnPenalty * BackwardPawnsCount(0, 1, Board.Pawns[0]);
+        blackEval += BackwardPawnPenalty * BackwardPawnsCount(1, 0, Board.Pawns[1]);
 
 
         // Reduce the values of pawns in case of material imbalance.
         float materialImbalance = Math.Abs(whiteEarlygameMaterial - blackEarlygameMaterial) / 100;
         uint whiteMaterialImbalanceMultiplier = (uint)(materialImbalance * whitePawnCount);
         uint blackMaterialImbalanceMultiplier = (uint)(materialImbalance * blackPawnCount);
-        whiteEval += evaluationData.MaterialImbalancePawnPenaltyPerPawn * whiteMaterialImbalanceMultiplier;
-        blackEval += evaluationData.MaterialImbalancePawnPenaltyPerPawn * blackMaterialImbalanceMultiplier;
+        whiteEval += MaterialImbalancePawnPenalty * whiteMaterialImbalanceMultiplier;
+        blackEval += MaterialImbalancePawnPenalty * blackMaterialImbalanceMultiplier;
 
 
-        // Give a bonus to bishop/knight pairs depending on wheter the position is open or closed.
+        // Give a bonus to bishop/knight pairs depending on whether the position is open or closed.
         if (IsPositionOpen())
         {
-            if (whiteKnightCount == 2) whiteEval += evaluationData.KnightPairInOpenPositionBonus;
-            if (whiteBishopCount == 2) whiteEval += evaluationData.BishopPairInOpenPositionBonus;
-
-            if (blackKnightCount == 2) blackEval += evaluationData.KnightPairInOpenPositionBonus;
-            if (blackBishopCount == 2) blackEval += evaluationData.BishopPairInOpenPositionBonus;
+            if (whiteKnightCount == 2) whiteEval += KnightPairBonus[1];
+            if (whiteBishopCount == 2) whiteEval += BishopPairBonus[1];
+                                                                    
+            if (blackKnightCount == 2) blackEval += KnightPairBonus[1];
+            if (blackBishopCount == 2) blackEval += BishopPairBonus[1];
         }
 
         else
         {
-            if (whiteKnightCount == 2) whiteEval += evaluationData.KnightPairInClosedPositionBonus;
-            if (whiteBishopCount == 2) whiteEval += evaluationData.BishopPairInClosedPositionBonus;
-
-            if (blackKnightCount == 2) blackEval += evaluationData.KnightPairInClosedPositionBonus;
-            if (blackBishopCount == 2) blackEval += evaluationData.BishopPairInClosedPositionBonus;
+            if (whiteKnightCount == 2) whiteEval += KnightPairBonus[0];
+            if (whiteBishopCount == 2) whiteEval += BishopPairBonus[0];
+                                                                    
+            if (blackKnightCount == 2) blackEval += KnightPairBonus[0];
+            if (blackBishopCount == 2) blackEval += BishopPairBonus[0];
         }
 
 
@@ -127,12 +213,12 @@ public class Evaluation
 
 
         // Give a bonus to knights defended by a pawn in the opponent's half of the board.
-        whiteEval += evaluationData.KnightOutpostBonus * KnightOutpostsCount(Board.PawnAttackedSquares[0], Board.PawnAttackedSquares[1], Board.Knights[0], Mask.BlackHalf);
-        blackEval += evaluationData.KnightOutpostBonus * KnightOutpostsCount(Board.PawnAttackedSquares[1], Board.PawnAttackedSquares[0], Board.Knights[1], Mask.WhiteHalf);
+        whiteEval += KnightOutpostBonus * KnightOutpostsCount(Board.PawnAttackedSquares[0], Board.PawnAttackedSquares[1], Board.Knights[0], Mask.BlackHalf);
+        blackEval += KnightOutpostBonus * KnightOutpostsCount(Board.PawnAttackedSquares[1], Board.PawnAttackedSquares[0], Board.Knights[1], Mask.WhiteHalf);
 
         // Give a bonus to knights defended by a pawn in the opponent's half of the board.
-        whiteEval += evaluationData.BishopOutpostBonus * BishopOutpostsCount(Board.PawnAttackedSquares[0], Board.PawnAttackedSquares[1], Board.Bishops[0], Mask.BlackHalf);
-        blackEval += evaluationData.BishopOutpostBonus * BishopOutpostsCount(Board.PawnAttackedSquares[1], Board.PawnAttackedSquares[0], Board.Bishops[1], Mask.WhiteHalf);
+        whiteEval += BishopOutpostBonus * BishopOutpostsCount(Board.PawnAttackedSquares[0], Board.PawnAttackedSquares[1], Board.Bishops[0], Mask.BlackHalf);
+        blackEval += BishopOutpostBonus * BishopOutpostsCount(Board.PawnAttackedSquares[1], Board.PawnAttackedSquares[0], Board.Bishops[1], Mask.WhiteHalf);
 
 
         int eval = Interpolate(whiteEval - blackEval, gamePhase) * (Board.CurrentTurn == 0 ? 1 : -1);
@@ -143,28 +229,28 @@ public class Evaluation
         {
             short material = 0;
 
-            pawnCount = OccupiedSquaresCount(Board.Pawns[turnIndex]);
+            pawnCount = PieceCount(Board.Pawns[turnIndex]);
             material += (short)(pawnMaterial = pawnCount * StaticPieceValues[Pawn][0]);
 
-            knightCount = OccupiedSquaresCount(Board.Knights[turnIndex]);
+            knightCount = PieceCount(Board.Knights[turnIndex]);
             material += (short)(knightCount * StaticPieceValues[Knight][0]);
 
-            bishopCount = OccupiedSquaresCount(Board.Bishops[turnIndex]);
+            bishopCount = PieceCount(Board.Bishops[turnIndex]);
             material += (short)(bishopCount * StaticPieceValues[Bishop][0]);
 
-            material += (short)(OccupiedSquaresCount(Board.Rooks[turnIndex]) * StaticPieceValues[Rook][0]);
-            material += (short)(OccupiedSquaresCount(Board.Queens[turnIndex]) * StaticPieceValues[Queen][0]);
+            material += (short)(PieceCount(Board.Rooks[turnIndex]) * StaticPieceValues[Rook][0]);
+            material += (short)(PieceCount(Board.Queens[turnIndex]) * StaticPieceValues[Queen][0]);
             return material;
         }
 
         short LategameMaterial(int turnIndex)
         {
             short material = 0;
-            material += (short)(OccupiedSquaresCount(Board.Pawns[turnIndex]) * StaticPieceValues[Pawn][1]);
-            material += (short)(OccupiedSquaresCount(Board.Knights[turnIndex]) * StaticPieceValues[Knight][1]);
-            material += (short)(OccupiedSquaresCount(Board.Bishops[turnIndex]) * StaticPieceValues[Bishop][1]);
-            material += (short)(OccupiedSquaresCount(Board.Rooks[turnIndex]) * StaticPieceValues[Rook][1]);
-            material += (short)(OccupiedSquaresCount(Board.Queens[turnIndex]) * StaticPieceValues[Queen][1]);
+            material += (short)(PieceCount(Board.Pawns[turnIndex]) * StaticPieceValues[Pawn][1]);
+            material += (short)(PieceCount(Board.Knights[turnIndex]) * StaticPieceValues[Knight][1]);
+            material += (short)(PieceCount(Board.Bishops[turnIndex]) * StaticPieceValues[Bishop][1]);
+            material += (short)(PieceCount(Board.Rooks[turnIndex]) * StaticPieceValues[Rook][1]);
+            material += (short)(PieceCount(Board.Queens[turnIndex]) * StaticPieceValues[Queen][1]);
             return material;
         }
 
@@ -185,7 +271,7 @@ public class Evaluation
                         if ((Board.Fills[colorIndex, pawn] & pawns) == 0) count++;
                 }
 
-                bonus += evaluationData.PassedPawnBonus[i] * count;
+                bonus += PassedPawnBonus[i] * count;
             }
             return bonus;
         }
@@ -197,7 +283,7 @@ public class Evaluation
             {
                 // If there are multiple pawns on this file,
                 // they are considered "doubled pawns".
-                count += (uint)Math.Max(0, OccupiedSquaresCount(pawns & Board.Files[i]) - 1);
+                count += (uint)Math.Max(0, PieceCount(pawns & Board.Files[i]) - 1);
             }
             return count;
         }
@@ -229,7 +315,7 @@ public class Evaluation
         }
 
 
-        bool IsPositionOpen() => OccupiedSquaresCount(Board.AllOccupiedSquares) < 24;
+        bool IsPositionOpen() => PieceCount(Board.AllOccupiedSquares) < 24;
 
 
         uint MobilityScore(int colorIndex)
@@ -250,7 +336,7 @@ public class Evaluation
             {
                 foreach (var piece in Board.GetIndexes(Board.Pieces[pieceType][colorIndex]))
                 {
-                    score += evaluationData.MobilityBonus[pieceType][OccupiedSquaresCount(
+                    score += MobilityBonus[pieceType][PieceCount(
                         Board.AttacksFrom(piece, pieceType, Board.AllOccupiedSquares) & mobilityArea)];
                 }
             }
@@ -265,8 +351,8 @@ public class Evaluation
             if ((Board.Kings[colorIndex] & (colorIndex == 0 ? Mask.WhiteCastledKingPosition : Mask.BlackCastledKingPosition)) != 0)
             {
                 score +=
-                    evaluationData.FirstShieldingPawnKingSafetyBonus * (uint)OccupiedSquaresCount(friendlyPawns & Board.FirstShieldingPawns[Board.KingPosition[colorIndex]]) +
-                    evaluationData.SecondShieldingPawnKingSafetyBonus * (uint)OccupiedSquaresCount(friendlyPawns & Board.SecondShieldingPawns[Board.KingPosition[colorIndex]]);
+                    ShieldingPawnBonus[0] * (uint)PieceCount(friendlyPawns & Board.FirstShieldingPawns[Board.KingPosition[colorIndex]]) +
+                    ShieldingPawnBonus[1] * (uint)PieceCount(friendlyPawns & Board.SecondShieldingPawns[Board.KingPosition[colorIndex]]);
             }
 
             int kingFile = Board.GetFile(Board.KingPosition[colorIndex]);
@@ -274,13 +360,13 @@ public class Evaluation
 
             foreach (var file in kingFiles)
             {
-                int friendlyPawnsCount = OccupiedSquaresCount(friendlyPawns & file);
-                int opponentPawnsCount = OccupiedSquaresCount(opponentPawns & file);
+                int friendlyPawnsCount = PieceCount(friendlyPawns & file);
+                int opponentPawnsCount = PieceCount(opponentPawns & file);
 
                 if (friendlyPawnsCount == 0)
                 {
-                    if (opponentPawnsCount != 0) score += evaluationData.HalfOpenFileNextToKingPenalty;
-                    else score += evaluationData.OpenFileNextToKingPenalty;
+                    if (opponentPawnsCount != 0) score += OpenFileNextToKingPenalty[0];
+                    else score += OpenFileNextToKingPenalty[1];
                 }
             }
 
@@ -291,17 +377,17 @@ public class Evaluation
         {
             uint score = 0;
 
-            int lightPawnsCount = OccupiedSquaresCount(pawns & Mask.LightSquares);
-            int darkPawnsCount = OccupiedSquaresCount(pawns & Mask.DarkSquares);
+            int lightPawnsCount = PieceCount(pawns & Mask.LightSquares);
+            int darkPawnsCount = PieceCount(pawns & Mask.DarkSquares);
 
-            int lightBishopsCount = OccupiedSquaresCount(bishops & Mask.LightSquares);
-            int darkBishopsCount = OccupiedSquaresCount(bishops & Mask.DarkSquares);
-
-            // Give a penalty for the lack of a bishop on a light square, for each extra pawn on a dark square.
-            score += evaluationData.ColorWeaknessPenaltyPerPawn * (uint)(lightBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, darkPawnsCount - lightPawnsCount);
+            int lightBishopsCount = PieceCount(bishops & Mask.LightSquares);
+            int darkBishopsCount = PieceCount(bishops & Mask.DarkSquares);
 
             // Give a penalty for the lack of a bishop on a light square, for each extra pawn on a dark square.
-            score += evaluationData.ColorWeaknessPenaltyPerPawn * (uint)(darkBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, lightPawnsCount - darkPawnsCount);
+            score += ColorWeaknessPenaltyPerPawn * (uint)(lightBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, darkPawnsCount - lightPawnsCount);
+
+            // Give a penalty for the lack of a bishop on a light square, for each extra pawn on a dark square.
+            score += ColorWeaknessPenaltyPerPawn * (uint)(darkBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, lightPawnsCount - darkPawnsCount);
 
             return score;
         }
@@ -311,7 +397,7 @@ public class Evaluation
             // If a knight is in the opponent's half of the board (or in the center),
             // is defended by a pawn and is not under attack by an opponent pawn,
             // it is considered an "outpost".
-            return (uint)OccupiedSquaresCount(pawnDefendedSquares & ~opponentPawnAttackedSquares & knights & opponentHalf);
+            return (uint)PieceCount(pawnDefendedSquares & ~opponentPawnAttackedSquares & knights & opponentHalf);
         }
 
         uint BishopOutpostsCount(ulong pawnDefendedSquares, ulong opponentPawnAttackedSquares, ulong bishops, ulong opponentHalf)
@@ -319,7 +405,7 @@ public class Evaluation
             // If a bishop is in the opponent's half of the board (or in the center),
             // is defended by a pawn and is not under attack by an opponent pawn,
             // it is considered an "outpost".
-            return (uint)OccupiedSquaresCount(pawnDefendedSquares & ~opponentPawnAttackedSquares & bishops & opponentHalf);
+            return (uint)PieceCount(pawnDefendedSquares & ~opponentPawnAttackedSquares & bishops & opponentHalf);
         }
     }
 
@@ -340,13 +426,13 @@ public class Evaluation
     public static int GetGamePhase(int whiteMaterial, int blackMaterial, int whitePawnMaterial, int blackPawnMaterial) => 
         (whiteMaterial + blackMaterial) - (whitePawnMaterial + blackPawnMaterial);
 
-    public static bool PawnsOnly(EvaluationData evaluationData)
+    public static bool PawnsOnly()
     {
         int materialCount = 0;
-        materialCount += OccupiedSquaresCount(Board.Knights[Board.CurrentTurn]);
-        materialCount += OccupiedSquaresCount(Board.Bishops[Board.CurrentTurn]);
-        materialCount += OccupiedSquaresCount(Board.Rooks[Board.CurrentTurn]);
-        materialCount += OccupiedSquaresCount(Board.Queens[Board.CurrentTurn]);
+        materialCount += PieceCount(Board.Knights[Board.CurrentTurn]);
+        materialCount += PieceCount(Board.Bishops[Board.CurrentTurn]);
+        materialCount += PieceCount(Board.Rooks[Board.CurrentTurn]);
+        materialCount += PieceCount(Board.Queens[Board.CurrentTurn]);
         return materialCount == 0;
     }
     
@@ -572,58 +658,58 @@ public class PieceSquareTables
 
         /* Knight */
         new uint[][] {
-            new uint[] { MakeScore(-175, -96), MakeScore( -92, -65), MakeScore( -74, -49), MakeScore( -73, -21) },
-            new uint[] { MakeScore( -77, -67), MakeScore( -41, -54), MakeScore( -27, -18), MakeScore( -15,   8) },
-            new uint[] { MakeScore( -61, -40), MakeScore( -17, -27), MakeScore(   6,  -8), MakeScore(  12,  29) },
-            new uint[] { MakeScore( -35, -35), MakeScore(   8,  -2), MakeScore(  40,  13), MakeScore(  49,  28) },
-            new uint[] { MakeScore( -34, -45), MakeScore(  13, -16), MakeScore(  44,   9), MakeScore(  51,  39) },
-            new uint[] { MakeScore(  -9, -51), MakeScore(  22, -44), MakeScore(  58, -16), MakeScore(  53,  17) },
-            new uint[] { MakeScore( -67, -69), MakeScore( -27, -50), MakeScore(   4, -51), MakeScore(  37,  12) },
-            new uint[] { MakeScore(-201,-100), MakeScore( -83, -88), MakeScore( -56, -56), MakeScore( -26, -17) }
+            new uint[] { S(-175, -96), S( -92, -65), S( -74, -49), S( -73, -21) },
+            new uint[] { S( -77, -67), S( -41, -54), S( -27, -18), S( -15,   8) },
+            new uint[] { S( -61, -40), S( -17, -27), S(   6,  -8), S(  12,  29) },
+            new uint[] { S( -35, -35), S(   8,  -2), S(  40,  13), S(  49,  28) },
+            new uint[] { S( -34, -45), S(  13, -16), S(  44,   9), S(  51,  39) },
+            new uint[] { S(  -9, -51), S(  22, -44), S(  58, -16), S(  53,  17) },
+            new uint[] { S( -67, -69), S( -27, -50), S(   4, -51), S(  37,  12) },
+            new uint[] { S(-201,-100), S( -83, -88), S( -56, -56), S( -26, -17) }
         },                                                                                       
                                                                                                  
         new uint[][] { /* Bishop */                                                              
-            new uint[] { MakeScore( -37, -40), MakeScore(  -4, -21), MakeScore(  -6, -26), MakeScore( -16,  -8) },
-            new uint[] { MakeScore( -11, -26), MakeScore(   6,  -9), MakeScore(  13, -12), MakeScore(   3,   1) },
-            new uint[] { MakeScore( -5 , -11), MakeScore(  15,  -1), MakeScore(  -4,  -1), MakeScore(  12,   7) },
-            new uint[] { MakeScore( -4 , -14), MakeScore(   8,  -4), MakeScore(  18,   0), MakeScore(  27,  12) },
-            new uint[] { MakeScore( -8 , -12), MakeScore(  20,  -1), MakeScore(  15, -10), MakeScore(  22,  11) },
-            new uint[] { MakeScore( -11, -21), MakeScore(   4,   4), MakeScore(   1,   3), MakeScore(   8,   4) },
-            new uint[] { MakeScore( -12, -22), MakeScore( -10, -14), MakeScore(   4,  -1), MakeScore(   0,   1) },
-            new uint[] { MakeScore( -34, -32), MakeScore(   1, -29), MakeScore( -10, -26), MakeScore( -16, -17) }
+            new uint[] { S( -37, -40), S(  -4, -21), S(  -6, -26), S( -16,  -8) },
+            new uint[] { S( -11, -26), S(   6,  -9), S(  13, -12), S(   3,   1) },
+            new uint[] { S( -5 , -11), S(  15,  -1), S(  -4,  -1), S(  12,   7) },
+            new uint[] { S( -4 , -14), S(   8,  -4), S(  18,   0), S(  27,  12) },
+            new uint[] { S( -8 , -12), S(  20,  -1), S(  15, -10), S(  22,  11) },
+            new uint[] { S( -11, -21), S(   4,   4), S(   1,   3), S(   8,   4) },
+            new uint[] { S( -12, -22), S( -10, -14), S(   4,  -1), S(   0,   1) },
+            new uint[] { S( -34, -32), S(   1, -29), S( -10, -26), S( -16, -17) }
         },                                                                                       
                                                                                                  
         new uint[][] { /* Rook */                                                                
-            new uint[] { MakeScore( -31,  -9), MakeScore( -20, -13), MakeScore( -14, -10), MakeScore(  -5,  -9) },
-            new uint[] { MakeScore( -21, -12), MakeScore( -13,  -9), MakeScore(  -8,  -1), MakeScore(   6,  -2) },
-            new uint[] { MakeScore( -25,   6), MakeScore( -11,  -8), MakeScore(  -1,  -2), MakeScore(   3,  -6) },
-            new uint[] { MakeScore( -13,  -6), MakeScore(  -5,   1), MakeScore(  -4,  -9), MakeScore(  -6,   7) },
-            new uint[] { MakeScore( -27,  -5), MakeScore( -15,   8), MakeScore(  -4,   7), MakeScore(   3,  -6) },
-            new uint[] { MakeScore( -22,   6), MakeScore(  -2,   1), MakeScore(   6,  -7), MakeScore(  12,  10) },
-            new uint[] { MakeScore(  -2,   4), MakeScore(  12,   5), MakeScore(  16,  20), MakeScore(  18,  -5) },
-            new uint[] { MakeScore( -17,  18), MakeScore( -19,   0), MakeScore(  -1,  19), MakeScore(   9,  13) }
+            new uint[] { S( -31,  -9), S( -20, -13), S( -14, -10), S(  -5,  -9) },
+            new uint[] { S( -21, -12), S( -13,  -9), S(  -8,  -1), S(   6,  -2) },
+            new uint[] { S( -25,   6), S( -11,  -8), S(  -1,  -2), S(   3,  -6) },
+            new uint[] { S( -13,  -6), S(  -5,   1), S(  -4,  -9), S(  -6,   7) },
+            new uint[] { S( -27,  -5), S( -15,   8), S(  -4,   7), S(   3,  -6) },
+            new uint[] { S( -22,   6), S(  -2,   1), S(   6,  -7), S(  12,  10) },
+            new uint[] { S(  -2,   4), S(  12,   5), S(  16,  20), S(  18,  -5) },
+            new uint[] { S( -17,  18), S( -19,   0), S(  -1,  19), S(   9,  13) }
         },                                                                                       
                                                                                                  
         new uint[][] { /* Queen */                                                               
-            new uint[] { MakeScore(   3, -69), MakeScore(  -5, -57), MakeScore(  -5, -47), MakeScore(   4, -26) },
-            new uint[] { MakeScore(  -3, -54), MakeScore(   5, -31), MakeScore(   8, -22), MakeScore(  12,  -4) },
-            new uint[] { MakeScore(  -3, -39), MakeScore(   6, -18), MakeScore(  13,  -9), MakeScore(   7,   3) },
-            new uint[] { MakeScore(   4, -23), MakeScore(   5,  -3), MakeScore(   9,  13), MakeScore(   8,  24) },
-            new uint[] { MakeScore(   0, -29), MakeScore(  14,  -6), MakeScore(  12,   9), MakeScore(   5,  21) },
-            new uint[] { MakeScore(  -4, -38), MakeScore(  10, -18), MakeScore(   6, -11), MakeScore(   8,   1) },
-            new uint[] { MakeScore(  -5, -50), MakeScore(   6, -27), MakeScore(  10, -24), MakeScore(   8,  -8) },
-            new uint[] { MakeScore(  -2, -74), MakeScore(  -2, -52), MakeScore(   1, -43), MakeScore(  -2, -34) }
+            new uint[] { S(   3, -69), S(  -5, -57), S(  -5, -47), S(   4, -26) },
+            new uint[] { S(  -3, -54), S(   5, -31), S(   8, -22), S(  12,  -4) },
+            new uint[] { S(  -3, -39), S(   6, -18), S(  13,  -9), S(   7,   3) },
+            new uint[] { S(   4, -23), S(   5,  -3), S(   9,  13), S(   8,  24) },
+            new uint[] { S(   0, -29), S(  14,  -6), S(  12,   9), S(   5,  21) },
+            new uint[] { S(  -4, -38), S(  10, -18), S(   6, -11), S(   8,   1) },
+            new uint[] { S(  -5, -50), S(   6, -27), S(  10, -24), S(   8,  -8) },
+            new uint[] { S(  -2, -74), S(  -2, -52), S(   1, -43), S(  -2, -34) }
         },                                                                                       
                                                                                                  
         new uint[][] { /* King */                                                                
-            new uint[] { MakeScore( 271,   1), MakeScore( 327,  45), MakeScore( 271,  85), MakeScore( 198,  76) },
-            new uint[] { MakeScore( 278,  53), MakeScore( 303, 100), MakeScore( 234, 133), MakeScore( 179, 135) },
-            new uint[] { MakeScore( 195,  88), MakeScore( 258, 130), MakeScore( 169, 169), MakeScore( 120, 175) },
-            new uint[] { MakeScore( 164, 103), MakeScore( 190, 156), MakeScore( 138, 172), MakeScore(  98, 172) },
-            new uint[] { MakeScore( 154,  96), MakeScore( 179, 166), MakeScore( 105, 199), MakeScore(  70, 199) },
-            new uint[] { MakeScore( 123,  92), MakeScore( 145, 172), MakeScore(  81, 184), MakeScore(  31, 191) },
-            new uint[] { MakeScore(  88,  47), MakeScore( 120, 121), MakeScore(  65, 116), MakeScore(  33, 131) },
-            new uint[] { MakeScore(  59,  11), MakeScore(  89,  59), MakeScore(  45,  73), MakeScore(  -1,  78) }
+            new uint[] { S( 271,   1), S( 327,  45), S( 271,  85), S( 198,  76) },
+            new uint[] { S( 278,  53), S( 303, 100), S( 234, 133), S( 179, 135) },
+            new uint[] { S( 195,  88), S( 258, 130), S( 169, 169), S( 120, 175) },
+            new uint[] { S( 164, 103), S( 190, 156), S( 138, 172), S(  98, 172) },
+            new uint[] { S( 154,  96), S( 179, 166), S( 105, 199), S(  70, 199) },
+            new uint[] { S( 123,  92), S( 145, 172), S(  81, 184), S(  31, 191) },
+            new uint[] { S(  88,  47), S( 120, 121), S(  65, 116), S(  33, 131) },
+            new uint[] { S(  59,  11), S(  89,  59), S(  45,  73), S(  -1,  78) }
         }
     };
 
@@ -632,12 +718,12 @@ public class PieceSquareTables
     private static readonly uint[][] s_pawnPieceSquareTables =
     {
         new uint[] { },
-        new uint[] { MakeScore(  2, -8), MakeScore(  4, -6), MakeScore( 11,  9), MakeScore( 18,  5), MakeScore( 16, 16), MakeScore( 21,  6), MakeScore(  9, -6), MakeScore( -3,-18) },
-        new uint[] { MakeScore( -9, -9), MakeScore(-15, -7), MakeScore( 11,-10), MakeScore( 15,  5), MakeScore( 31,  2), MakeScore( 23,  3), MakeScore(  6, -8), MakeScore(-20, -5) },
-        new uint[] { MakeScore( -3,  7), MakeScore(-20,  1), MakeScore(  8, -8), MakeScore( 19, -2), MakeScore( 39,-14), MakeScore( 17,-13), MakeScore(  2,-11), MakeScore( -5, -6) },
-        new uint[] { MakeScore( 11, 12), MakeScore( -4,  6), MakeScore(-11,  2), MakeScore(  2, -6), MakeScore( 11, -5), MakeScore(  0, -4), MakeScore(-12, 14), MakeScore(  5,  9) },
-        new uint[] { MakeScore(  3, 27), MakeScore(-11, 18), MakeScore( -6, 19), MakeScore( 22, 29), MakeScore( -8, 30), MakeScore( -5,  9), MakeScore(-14,  8), MakeScore(-11, 14) },
-        new uint[] { MakeScore( -7, -1), MakeScore(  6,-14), MakeScore( -2, 13), MakeScore(-11, 22), MakeScore(  4, 24), MakeScore(-14, 17), MakeScore( 10,  7), MakeScore( -9,  7) }
+        new uint[] { S(  2, -8), S(  4, -6), S( 11,  9), S( 18,  5), S( 16, 16), S( 21,  6), S(  9, -6), S( -3,-18) },
+        new uint[] { S( -9, -9), S(-15, -7), S( 11,-10), S( 15,  5), S( 31,  2), S( 23,  3), S(  6, -8), S(-20, -5) },
+        new uint[] { S( -3,  7), S(-20,  1), S(  8, -8), S( 19, -2), S( 39,-14), S( 17,-13), S(  2,-11), S( -5, -6) },
+        new uint[] { S( 11, 12), S( -4,  6), S(-11,  2), S(  2, -6), S( 11, -5), S(  0, -4), S(-12, 14), S(  5,  9) },
+        new uint[] { S(  3, 27), S(-11, 18), S( -6, 19), S( 22, 29), S( -8, 30), S( -5,  9), S(-14,  8), S(-11, 14) },
+        new uint[] { S( -7, -1), S(  6,-14), S( -2, 13), S(-11, 22), S(  4, 24), S(-14, 17), S( 10,  7), S( -9,  7) }
     };
 
 
@@ -667,171 +753,12 @@ public class PieceSquareTables
     //};
 }
 
-
-// Default values from Stockfish.
-[System.Serializable]
-public class EvaluationData
-{
-    public uint[] PieceValues =
-    {
-        MakeScore(   0,   0), /* None */
-        MakeScore( 126, 208), /* Pawn */
-        MakeScore( 781, 854), /* Knight */
-        MakeScore( 825, 915), /* Bishop */
-        MakeScore(1276,1380), /* Rook */
-        MakeScore(2538,2682)  /* Queen */
-    };
-
-
-    public uint[] PassedPawnBonus = 
-    {
-        MakeScore(   +0,   +0),
-        MakeScore(   +2,  +38),
-        MakeScore(  +15,  +36),
-        MakeScore(  +22,  +50),
-        MakeScore(  +64,  +81),
-        MakeScore( +166, +184),
-        MakeScore( +284, +269),
-        MakeScore(   +0,   +0),
-    };
-
-    public uint DoubledPawnPenalty = MakeScore(-11, -51);
-    public uint IsolatedPawnPenalty = MakeScore(-1, -20);
-    public uint BackwardPawnPenalty = MakeScore(-6, -10);
-
-    // Not from Stockfish.
-    public uint MaterialImbalancePawnPenaltyPerPawn = MakeScore(-5, -3);
-
-    // Not from Stockfish.
-    public uint KnightPairInOpenPositionBonus = MakeScore(+20, +10);
-    public uint BishopPairInOpenPositionBonus = MakeScore(+60, +40);
-    public uint KnightPairInClosedPositionBonus = MakeScore(+50, +30);
-    public uint BishopPairInClosedPositionBonus = MakeScore(+30, +10);
-
-    // MobilityBonus[PieceType][attacked] contains bonuses for middle and end game,
-    // indexed by piece type and number of attacked squares in the mobility area.
-    public uint[][] MobilityBonus =
-    {
-        /* None */
-        new uint[] { },
-
-        /* Pawn */
-        new uint[] { },
-
-        /* Knight */
-        new uint[] { MakeScore(-62,-81), MakeScore(-53,-56), MakeScore(-12,-30), MakeScore( -4,-14), MakeScore(  3,  8), MakeScore( 13, 15), MakeScore( 22, 23), MakeScore( 28, 27), MakeScore( 33, 33) },
-    
-        /* Bishop */
-        new uint[] { MakeScore(-48, -59), MakeScore(-20, -23), MakeScore(16, -3), MakeScore(26, 13), MakeScore(38, 24), MakeScore(51, 42), MakeScore(55, 54), MakeScore(63, 57), MakeScore(63, 65), MakeScore(68, 73), MakeScore(81, 78), MakeScore(81, 86), MakeScore(91, 88), MakeScore(98, 97) },
-        
-        /* Rook */
-        new uint[] { MakeScore(-58, -76), MakeScore(-27, -18), MakeScore(-15, 28), MakeScore(-10, 55), MakeScore(-5, 69), MakeScore(-2, 82), MakeScore(9, 112), MakeScore(16, 118), MakeScore(30, 132), MakeScore(29, 142), MakeScore(32, 155), MakeScore(38, 165), MakeScore(46, 166), MakeScore(48, 169), MakeScore(58, 171) },
-
-        /* Queen */
-        new uint[] { MakeScore(-39, -36), MakeScore(-21, -15), MakeScore(3, 8), MakeScore(3, 18), MakeScore(14, 34), MakeScore(22, 54), MakeScore(28, 61), MakeScore(41, 73), MakeScore(43, 79), MakeScore(48, 92), MakeScore(56, 94), MakeScore(60, 104), MakeScore(60, 113), MakeScore(66, 120), MakeScore(67, 123), MakeScore(70, 126), MakeScore(71, 133), MakeScore(73, 136), MakeScore(79, 140), MakeScore(88, 143), MakeScore(88, 148), MakeScore(99, 166), MakeScore(102, 170), MakeScore(102, 175), MakeScore(106, 184), MakeScore(109, 191), MakeScore(113, 206), MakeScore(116, 212) },
-
-        /* King */
-        new uint[] { }
-    };
-
-    // Not from Stockfish.
-    public uint FirstShieldingPawnKingSafetyBonus = MakeScore(+20, +10);
-    public uint SecondShieldingPawnKingSafetyBonus = MakeScore(+10, +5);
-
-    // Not from Stockfish.
-    public uint HalfOpenFileNextToKingPenalty = MakeScore(-20, -30);
-    public uint OpenFileNextToKingPenalty = MakeScore(-40, -50);
-
-    public uint ColorWeaknessPenaltyPerPawn = MakeScore(-3, -8);
-
-    public uint KnightOutpostBonus = MakeScore(+54, +34);
-    public uint BishopOutpostBonus = MakeScore(+31, +25);
-
-    public EvaluationData()
-    {
-        ResetAllValues();
-    }
-
-
-    public void ResetAllValues()
-    {
-        PieceValues = new[]
-        {
-            MakeScore(   0,   0), /* None */
-            MakeScore( 126, 208), /* Pawn */
-            MakeScore( 781, 854), /* Knight */
-            MakeScore( 825, 915), /* Bishop */
-            MakeScore(1276,1380), /* Rook */
-            MakeScore(2538,2682)  /* Queen */
-        };
-    
-    
-        PassedPawnBonus = new[]
-        {
-            MakeScore(   +0,   +0),
-            MakeScore(   +2,  +38),
-            MakeScore(  +15,  +36),
-            MakeScore(  +22,  +50),
-            MakeScore(  +64,  +81),
-            MakeScore( +166, +184),
-            MakeScore( +284, +269),
-            MakeScore(   +0,   +0),
-        };
-    
-        DoubledPawnPenalty = MakeScore(-11, -51);
-        IsolatedPawnPenalty = MakeScore(-1, -20);
-        BackwardPawnPenalty = MakeScore(-6, -10);
-    
-        MaterialImbalancePawnPenaltyPerPawn = MakeScore(-5, -3);
-    
-        KnightPairInOpenPositionBonus = MakeScore(+20, +10);
-        BishopPairInOpenPositionBonus = MakeScore(+60, +40);
-        KnightPairInClosedPositionBonus = MakeScore(+50, +30);
-        BishopPairInClosedPositionBonus = MakeScore(+30, +10);
-
-        MobilityBonus = new[]
-        {
-            /* None */
-            new uint[] { },
-
-            /* Pawn */
-            new uint[] { },
-
-            /* Knight */
-            new uint[] { MakeScore(-62, -81), MakeScore(-53, -56), MakeScore(-12, -30), MakeScore(-4, -14), MakeScore(3, 8), MakeScore(13, 15), MakeScore(22, 23), MakeScore(28, 27), MakeScore(33, 33) },
-        
-            /* Bishop */
-            new uint[] { MakeScore(-48, -59), MakeScore(-20, -23), MakeScore(16, -3), MakeScore(26, 13), MakeScore(38, 24), MakeScore(51, 42), MakeScore(55, 54), MakeScore(63, 57), MakeScore(63, 65), MakeScore(68, 73), MakeScore(81, 78), MakeScore(81, 86), MakeScore(91, 88), MakeScore(98, 97) },
-            
-            /* Rook */
-            new uint[] { MakeScore(-58, -76), MakeScore(-27, -18), MakeScore(-15, 28), MakeScore(-10, 55), MakeScore(-5, 69), MakeScore(-2, 82), MakeScore(9, 112), MakeScore(16, 118), MakeScore(30, 132), MakeScore(29, 142), MakeScore(32, 155), MakeScore(38, 165), MakeScore(46, 166), MakeScore(48, 169), MakeScore(58, 171) },
-
-            /* Queen */
-            new uint[] { MakeScore(-39, -36), MakeScore(-21, -15), MakeScore(3, 8), MakeScore(3, 18), MakeScore(14, 34), MakeScore(22, 54), MakeScore(28, 61), MakeScore(41, 73), MakeScore(43, 79), MakeScore(48, 92), MakeScore(56, 94), MakeScore(60, 104), MakeScore(60, 113), MakeScore(66, 120), MakeScore(67, 123), MakeScore(70, 126), MakeScore(71, 133), MakeScore(73, 136), MakeScore(79, 140), MakeScore(88, 143), MakeScore(88, 148), MakeScore(99, 166), MakeScore(102, 170), MakeScore(102, 175), MakeScore(106, 184), MakeScore(109, 191), MakeScore(113, 206), MakeScore(116, 212) },
-
-            /* King */
-            new uint[] { }
-        };
-
-        FirstShieldingPawnKingSafetyBonus = MakeScore(+20, +10);
-        SecondShieldingPawnKingSafetyBonus = MakeScore(+10, +5);
-    
-        HalfOpenFileNextToKingPenalty = MakeScore(-20, -30);
-        OpenFileNextToKingPenalty = MakeScore(-40, -50);
-    
-        ColorWeaknessPenaltyPerPawn = MakeScore(-3, -8);
-    
-        KnightOutpostBonus = MakeScore(+54, +34);
-        BishopOutpostBonus = MakeScore(+31, +25);
-    }
-}
-
 public struct Score
 {
     // A score is stored in a single unsigned integer,
     // where the first 16 bits store the endgame score
     // and the last 16 bits store the opening score.
-    public static uint MakeScore(short opening, short endgame) => (((uint)endgame) << 16) + (uint)opening;
+    public static uint S(short opening, short endgame) => (((uint)endgame) << 16) + (uint)opening;
 
     public static int Interpolate(uint score, int gamePhase)
     {

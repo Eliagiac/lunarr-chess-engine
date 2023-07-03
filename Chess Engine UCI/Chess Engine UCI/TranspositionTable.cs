@@ -1,35 +1,87 @@
-﻿public class TranspositionTable {
+﻿using System.Runtime.InteropServices;
 
+using static Utilities.Bitboard;
+using static Engine;
+
+public class TranspositionTable 
+{
+	/// <summary>The position is not in the transposition table.</summary>
 	public const int LookupFailed = 32003;
 
-	// The value for this position is the exact evaluation.
-	public const int Exact = 3;
 
-	// A move was found during the search that was too good, meaning the opponent will play a different move earlier on,
-	// not allowing the position where this move was available to be reached. Because the search cuts off at
-	// this point (beta cut-off), an even better move may exist. This means that the evaluation for the
-	// position could be even higher, making the stored value the lower bound of the actual value.
-	public const int LowerBound = 2;
+	/// <summary>
+	/// A table containing information about specific positions, <br />
+	/// indexed based on the <see cref="Board.ZobristKey"/> of the position.
+	/// </summary>
+	public static Entry[] Entries;
 
-	// No move during the search resulted in a position that was better than the current player could get from playing a
-	// different move in an earlier position (i.e eval was <= alpha for all moves in the position).
-	// Due to the way alpha-beta search works, the value we get here won't be the exact evaluation of the position,
-	// but rather the upper bound of the evaluation. This means that the evaluation is, at most, equal to this value.
-	public const int UpperBound = 1;
+	/// <summary>
+	/// The index of the current position in the <see cref="Entries"/> array based on the <see cref="Board.ZobristKey"/>.
+	/// </summary>
+	public static ulong CurrentEntryIndex;
 
-	public Entry[] Entries;
 
-	public readonly ulong Size;
-	public bool Enabled = true;
+    /// <summary>
+    /// If the transposition table is disabled, <see cref="LookupEvaluation"/> 
+	/// and <see cref="StoreEvaluation"/> will return early.
+    /// </summary>
+    public static bool IsEnabled = true;
 
-	public TranspositionTable(int size) 
-	{
-		Size = (ulong)size;
 
-		Entries = new Entry[size];
+    /// <summary>
+    /// The score returned by the search may not be the exact evaluation 
+    /// of the position, because of <see href="https://www.chessprogramming.org/Alpha-Beta">Alpha-Beta pruning</see>.
+    /// </summary>
+    public enum EvaluationType
+    {
+        /// <summary>The node is a PV-Node.</summary>
+		/// <remarks>The score is the exact evaluation of the position.</remarks>
+        Exact = 3,
+
+        /// <summary>The node is a Cut-Node.</summary>
+		/// <remarks>
+        /// A beta-cutoff caused some moves to be skipped,
+        /// so the score is a lower bound of the evaluation
+        /// (the exact evaluation may be higher).
+		/// </remarks>
+        LowerBound = 2,
+
+        /// <summary>The node is an All-Node.</summary>
+		/// <remarks>
+        /// No moves exceeded alpha, so the score 
+		/// is an upper bound of the evaluation
+        /// (the exact evaluation may be lower).
+		/// </remarks>
+        UpperBound = 1
 	}
 
-	public void Clear () 
+
+	/// <summary>The entry at the <see cref="CurrentEntryIndex"/>.</summary>
+	private static Entry CurrentEntry
+	{
+        get => Entries[CurrentEntryIndex];
+		set => Entries[CurrentEntryIndex] = value;
+    }
+
+	/// <summary>The size of the <see cref="Entries"/> array.</summary>
+    public static ulong Size { get; private set; }
+
+
+    /// <summary>Generate a new transposition table of a specific size (in megabytes).</summary>
+    /// <param name="size">The size of the <see cref="Entries"/> array in megabytes.</param>
+    public static void ResizeTranspositionTable(ulong size)
+    {
+        const int megabyte = 1024 * 1024;
+
+        Size = (size * megabyte) / (ulong)Entry.GetSize();
+
+        Entries = new Entry[Size];
+    }
+
+    /// <summary>
+    /// Reset the <see cref="Entries"/> array.
+    /// </summary>
+    public static void Clear() 
 	{
 		for (int i = 0; i < Entries.Length; i++) 
 		{
@@ -37,41 +89,37 @@
 		}
 	}
 
-	// Use the first 28 bits of the key to get the index of the entry.
-	// This number was tweaked for the best performance.
-	// It may need to be updated after changing the size of the transposition table.
-	public ulong Index => (Board.ZobristKey >> 36) % Size;
+	public static void CalculateCurrentEntryIndex() => CurrentEntryIndex = MultiplyHigh64Bits(Board.ZobristKey, Size);
 
 
-	public Move GetStoredMove() => Entries[Index].Line?.Move;
+	public static Move GetStoredMove() => CurrentEntry.Line?.Move;
 
-    public Line GetStoredLine() => Entries[Index].Line;
+    public static Line GetStoredLine() => CurrentEntry.Line;
 
-    public Entry GetStoredEntry(out bool ttHit)
-    {
-        Entry entry = Entries[Index];
-
-        if (entry.Key == Board.ZobristKey) ttHit = true;
-        else ttHit = false;
-
-        return entry;
-    }
-
-    public int LookupEvaluation(int depth, int plyFromRoot, int alpha, int beta) 
+	public static Entry GetStoredEntry(out bool ttHit)
 	{
-		if (!Enabled) return LookupFailed;
+		if (CurrentEntry.Key == Board.ZobristKey) ttHit = true;
+		else ttHit = false;
 
-        Entry entry = Entries[Index];
+		return CurrentEntry;
+	}
 
-		if (entry.Key == Board.ZobristKey) 
+    public static void ClearCurrentEntry() =>
+        CurrentEntry = new();
+
+
+    public static int LookupEvaluation(int depth, int ply, int alpha, int beta) 
+	{
+		if (!IsEnabled) return LookupFailed;
+
+		if (CurrentEntry.Key == Board.ZobristKey) 
 		{
-			// Only use stored evaluation if it has been searched to at least the same depth as would be searched now
-			if (entry.Depth >= depth && depth != AI.Null && entry.Evaluation != LookupFailed) 
+			if (depth != Null && CurrentEntry.Score != LookupFailed) 
 			{
-				int correctedScore = CorrectRetrievedMateScore (entry.Evaluation, plyFromRoot);
+				int correctedScore = CorrectRetrievedMateScore (CurrentEntry.Score, ply);
 
 				// We have stored the exact evaluation for this position, so return it
-				if (entry.Bound == Exact) 
+				if (CurrentEntry.EvaluationType == EvaluationType.Exact) 
 				{
 					return correctedScore;
 				}
@@ -79,43 +127,35 @@
 				// We have stored the upper bound of the eval for this position. If it's less than alpha then we don't need to
 				// search the moves in this position as they won't interest us; otherwise we will have to search to find the exact value
 
-				if (entry.Bound == UpperBound && correctedScore <= alpha) 
+				if (CurrentEntry.EvaluationType == EvaluationType.UpperBound && correctedScore <= alpha) 
 				{
 					return correctedScore;
 				}
 
 				// We have stored the lower bound of the eval for this position. Only return if it causes a beta cut-off.
-				if (entry.Bound == LowerBound && correctedScore >= beta) 
+				if (CurrentEntry.EvaluationType == EvaluationType.LowerBound && correctedScore >= beta) 
 				{
 					return correctedScore;
 				}
 			}
 		}
 
-		return LookupFailed;
-	}
-
-	public void StoreEvaluation(int depth, int numPlySearched, int eval, int evalType, Line line, int staticEvaluation) 
-	{
-		if (!Enabled) return;
-
-        ulong index = Index;
-		if (depth >= Entries[index].Depth) 
-		{
-			Entry entry = new Entry(Board.ZobristKey, CorrectMateScoreForStorage(eval, numPlySearched), (byte)depth, (byte)evalType, line, staticEvaluation);
-			Entries[index] = entry;
-		}
-	}
-
-	public void ClearEntry()
-	{
-		Entries[Index] = new();
+        return LookupFailed;
     }
 
-
-	public int CorrectMateScoreForStorage(int score, int numPlySearched) 
+	public static void StoreEvaluation(int depth, int numPlySearched, int score, EvaluationType evaluationType, Line line, int staticEvaluation) 
 	{
-		if (AI.IsMateScore(score)) 
+		// Don't store incorrect values.
+		if (!IsEnabled || WasSearchAborted || score == Null) return;
+
+		if (depth >= CurrentEntry.Depth) 
+            CurrentEntry = new Entry(Board.ZobristKey, CorrectMateScoreForStorage(score, numPlySearched), depth, staticEvaluation, evaluationType, line);
+	}
+
+
+	public static int CorrectMateScoreForStorage(int score, int numPlySearched) 
+	{
+		if (IsMateScore(score)) 
 		{
 			int sign = Math.Sign(score);
 			return (score * sign + numPlySearched) * sign;
@@ -124,9 +164,9 @@
 		return score;
 	}
 
-    public int CorrectRetrievedMateScore(int score, int numPlySearched) 
+    public static int CorrectRetrievedMateScore(int score, int numPlySearched) 
 	{
-		if (AI.IsMateScore(score)) 
+		if (IsMateScore(score)) 
 		{
 			int sign = Math.Sign(score);
 			return (score * sign - numPlySearched) * sign;
@@ -140,25 +180,23 @@
 	{
 
 		public readonly ulong Key;
-		public readonly int Evaluation;
-		public readonly Line Line;
-		public readonly byte Depth;
-		public readonly byte Bound;
+		public readonly int Score;
+		public readonly int Depth;
         public readonly int StaticEvaluation;
+        public readonly EvaluationType EvaluationType;
+        public readonly Line Line;
 
-        public Entry(ulong key, int evaluation, byte depth, byte bound, Line line, int staticEvaluation) 
+        public Entry(ulong key, int score, int depth, int staticEvaluation, EvaluationType evaluationType, Line line) 
 		{
 			Key = key;
-            Evaluation = evaluation;
+            Score = score;
 			Depth = depth;
-			Bound = bound;
-			Line = line;
 			StaticEvaluation = staticEvaluation;
+            EvaluationType = evaluationType;
+            Line = line;
         }
 
-		public static int GetSize() 
-		{
-			return System.Runtime.InteropServices.Marshal.SizeOf<Entry> ();
-		}
-	}
+
+		public static int GetSize() => Marshal.SizeOf<Entry>();
+    }
 }

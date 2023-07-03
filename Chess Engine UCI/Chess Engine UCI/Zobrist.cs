@@ -1,127 +1,132 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
+﻿using static Utilities.Bitboard;
 
-public static class Zobrist {
-	const int seed = 2361912;
-	const string randomNumbersFileName = "RandomNumbers.txt";
-
-	/// piece type, color, square index
-	public static readonly ulong[, , ] piecesArray = new ulong[8, 2, 64];
-	public static readonly ulong[] castlingRights = new ulong[16];
-	/// ep file (0 = no ep).
-	public static readonly ulong[] enPassantFile = new ulong[9]; // no need for rank info as side to move is included in key
-	public static readonly ulong sideToMove;
-
-	static System.Random prng = new System.Random(seed);
-
-	static void WriteRandomNumbers () 
+namespace Utilities
+{
+	/// <summary>
+	/// A collection of constant keys used to update the board's Zobrist key.
+	/// </summary>
+	public static class Zobrist
 	{
-		prng = new System.Random(seed);
-		string randomNumberString = "";
-		int numRandomNumbers = 64 * 8 * 2 + castlingRights.Length + 9 + 1;
+		// Note: using a known seed allows storing of data regarding specific
+		// positions throughout different excecutions (for example, for an opening book).
+		private const int Seed = 2361912;
 
-		for (int i = 0; i < numRandomNumbers; i++) 
+
+		// Indexed by [pieceType, pieceColor, squareIndex]
+		public static readonly ulong[,,] PieceKeys = new ulong[8, 2, 64];
+
+		// Indexed by [4BitCastlingRights]
+		public static readonly ulong[] CastlingRightsKeys = new ulong[16];
+
+        // Indexed by [enPassantFile]
+        // Note: if en passant is unavailable, EnPassantFileKeys[0] should be used.
+        public static readonly ulong[] EnPassantFileKeys = new ulong[9]; // no need for rank info as side to move is included in key
+
+		// Note: this key is used on every turn change (it's effectively either added or removed).
+		public static readonly ulong BlackToMoveKey;
+
+
+		private static Random _randomNumberGenerator = new(Seed);
+
+
+        static string randomNumbersPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "RandomNumbers.txt");
+
+
+        private static void WriteRandomNumbers()
+        {
+            int randomNumbersAmount = 
+				(PieceKeys.GetLength(0) * PieceKeys.GetLength(1) * PieceKeys.GetLength(2)) +
+                CastlingRightsKeys.GetLength(0) +
+                EnPassantFileKeys.GetLength(0) +
+                1;
+
+			ulong[] randomNumbers = new ulong[randomNumbersAmount];
+
+            for (int i = 0; i < randomNumbers.Length; i++)
+                randomNumbers[i] = NextRandomNumber();
+
+            StreamWriter writer = new(randomNumbersPath);
+			writer.Write(string.Join(',', randomNumbers));
+			writer.Close();
+		}
+
+        private static Queue<ulong> ReadRandomNumbers()
 		{
-			randomNumberString += RandomUnsigned64BitNumber();
-			if (i != numRandomNumbers - 1) 
+			if (!File.Exists(randomNumbersPath)) WriteRandomNumbers();
+
+            Queue<ulong> randomNumbers = new();
+
+            StreamReader reader = new(randomNumbersPath);
+            string randomNumbersString = reader.ReadToEnd();
+			reader.Close();
+
+			foreach (var number in randomNumbersString.Split(','))
+				randomNumbers.Enqueue(ulong.Parse(number));
+
+			return randomNumbers;
+		}
+
+		static Zobrist()
+		{
+
+			var randomNumbers = ReadRandomNumbers();
+
+			for (int squareIndex = 0; squareIndex < 64; squareIndex++)
 			{
-				randomNumberString += ',';
+				for (int pieceIndex = 0; pieceIndex < 8; pieceIndex++)
+				{
+                    PieceKeys[pieceIndex, 0, squareIndex] = randomNumbers.Dequeue();
+                    PieceKeys[pieceIndex, 1, squareIndex] = randomNumbers.Dequeue();
+				}
 			}
-		}
-		var writer = new StreamWriter(randomNumbersPath);
-		writer.Write(randomNumberString);
-		writer.Close();
-	}
 
-	static Queue<ulong> ReadRandomNumbers() 
-	{
-		if (!File.Exists(randomNumbersPath)) 
-		{
-			WriteRandomNumbers();
-		}
-		Queue<ulong> randomNumbers = new Queue<ulong> ();
-
-		var reader = new StreamReader(randomNumbersPath);
-		string numbersString = reader.ReadToEnd();
-		reader.Close();
-
-		string[] numberStrings = numbersString.Split(',');
-		for (int i = 0; i < numberStrings.Length; i++) 
-		{
-			ulong number = ulong.Parse(numberStrings[i]);
-			randomNumbers.Enqueue(number);
-		}
-		return randomNumbers;
-	}
-
-	static Zobrist () {
-
-		var randomNumbers = ReadRandomNumbers ();
-
-		for (int squareIndex = 0; squareIndex < 64; squareIndex++) 
-		{
-			for (int pieceIndex = 0; pieceIndex < 8; pieceIndex++) 
+			for (int i = 0; i < 16; i++)
 			{
-				piecesArray[pieceIndex, 0, squareIndex] = randomNumbers.Dequeue();
-				piecesArray[pieceIndex, 1, squareIndex] = randomNumbers.Dequeue();
+                CastlingRightsKeys[i] = randomNumbers.Dequeue();
 			}
+
+			for (int i = 0; i < EnPassantFileKeys.Length; i++)
+			{
+                EnPassantFileKeys[i] = randomNumbers.Dequeue();
+			}
+
+            BlackToMoveKey = randomNumbers.Dequeue();
 		}
 
-		for (int i = 0; i < 16; i++) 
+		/// <summary>
+		/// Generate a unique key based on the current board state. <br />
+		/// Should only be used upon board initialization.
+		/// </summary>
+		public static ulong CalculateZobristKey()
 		{
-			castlingRights[i] = randomNumbers.Dequeue();
+			ulong key = 0;
+
+			for (int squareIndex = 0; squareIndex < 64; squareIndex++)
+			{
+				int pieceType = Board.PieceType(squareIndex);
+				int pieceColorIndex = Board.PieceColor(squareIndex) == Piece.White ? 0 : 1;
+
+				if (pieceType != Piece.None) key ^= PieceKeys[pieceType, pieceColorIndex, squareIndex];
+			}
+
+			if (Board.CurrentTurn == 1) key ^= BlackToMoveKey;
+
+            key ^= CastlingRightsKeys[Board.FourBitCastlingRights()];
+
+			int enPassantFileIndex = Board.EnPassantSquare != 0 ? 
+				Board.GetFile(FirstSquareIndex(Board.EnPassantSquare)) + 1 : 
+				0;
+
+            key ^= EnPassantFileKeys[enPassantFileIndex];
+
+			return key;
 		}
 
-		for (int i = 0; i < enPassantFile.Length; i++) 
+        static ulong NextRandomNumber()
 		{
-			enPassantFile[i] = randomNumbers.Dequeue();
+			byte[] buffer = new byte[8];
+			_randomNumberGenerator.NextBytes(buffer);
+			return BitConverter.ToUInt64(buffer, 0);
 		}
-
-		sideToMove = randomNumbers.Dequeue();
-	}
-
-	/// Calculate zobrist key from current board position. This should only be used after setting board from fen; during search the key should be updated incrementally.
-	public static ulong CalculateZobristKey() {
-		ulong zobristKey = 0;
-
-		for (int squareIndex = 0; squareIndex < 64; squareIndex++) 
-		{
-            int pieceType = Board.PieceType(squareIndex);
-            int pieceColor = Board.PieceColor(squareIndex);
-
-            if (pieceType != Piece.None) zobristKey ^= piecesArray[pieceType, pieceColor == Piece.White ? 0 : 1, squareIndex];
-        }
-
-		if (Board.CurrentTurn == 1) {
-			zobristKey ^= sideToMove;
-		}
-
-		zobristKey ^= castlingRights[
-            ((Board.CastlingRights >> 6) |
-            (Board.CastlingRights >> 1) |
-            (Board.CastlingRights >> 60) |
-            (Board.CastlingRights >> 55)) & 0b1111];
-
-        int epIndex = Board.EnPassantSquare != 0 ? Board.GetFile(BitboardUtility.FirstSquareIndex(Board.EnPassantSquare)) + 1 : 0;
-        zobristKey ^= enPassantFile[epIndex];
-
-        return zobristKey;
-	}
-
-	static string randomNumbersPath 
-	{
-		get 
-		{
-			return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, randomNumbersFileName);
-        }
-	}
-
-	static ulong RandomUnsigned64BitNumber () 
-	{
-		byte[] buffer = new byte[8];
-		prng.NextBytes(buffer);
-		return BitConverter.ToUInt64(buffer, 0);
 	}
 }
