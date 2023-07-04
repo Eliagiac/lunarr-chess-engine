@@ -95,7 +95,7 @@ namespace Utilities
 
 		/// <summary>
 		/// Generate a unique key based on the current board state. <br />
-		/// Should only be used upon board initialization.
+		/// Should only be used on board initialization.
 		/// </summary>
 		public static ulong CalculateZobristKey()
 		{

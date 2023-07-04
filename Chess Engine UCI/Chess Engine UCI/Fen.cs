@@ -1,5 +1,4 @@
-using System.Collections;
-using System.Collections.Generic;
+using static Utilities.Bitboard;
 
 namespace Utilities
 {
@@ -82,6 +81,69 @@ namespace Utilities
 
             Board.PsqtScore[0] = PieceSquareTables.EvaluateAllPsqt(0);
             Board.PsqtScore[1] = PieceSquareTables.EvaluateAllPsqt(1);
+        }
+
+        public static string GetCurrentFen()
+        {
+            string currentString = "";
+            string fen = "";
+            int emptySquaresCount = 0;
+
+            for (int i = 63; i >= 0; i--)
+            {
+                string pieceLetter = Board.Squares[i].PieceLetter();
+                if (pieceLetter == "-") emptySquaresCount++;
+                else
+                {
+                    if (emptySquaresCount != 0)
+                    {
+                        currentString += emptySquaresCount;
+                        emptySquaresCount = 0;
+                    }
+                    currentString += pieceLetter;
+                }
+
+                if (i % 8 == 0)
+                {
+                    if (emptySquaresCount != 0)
+                    {
+                        currentString += emptySquaresCount;
+                        emptySquaresCount = 0;
+                    }
+                    
+                    // Letters are added in reverse order compared to fen notation.
+                    fen += Reverse(currentString);
+                    if (i != 0) fen += "/";
+
+                    currentString = "";
+                }
+            }
+
+            fen += " ";
+            fen += Board.CurrentTurn == 0 ? "w" : "b";
+
+            fen += " ";
+            if ((Board.CastlingRights | Mask.WhiteKingsideCastling) != 0) fen += "K";
+            if ((Board.CastlingRights | Mask.WhiteQueensideCastling) != 0) fen += "Q";
+            if ((Board.CastlingRights | Mask.BlackKingsideCastling) != 0) fen += "k";
+            if ((Board.CastlingRights | Mask.BlackQueensideCastling) != 0) fen += "q";
+
+            fen += " ";
+            if (Board.EnPassantSquare != 0)
+            {
+                fen += Enum.GetName((Square)FirstSquareIndex(Board.EnPassantSquare));
+            }
+            else fen += "-";
+
+            return fen;
+
+
+            string Reverse(string s)
+            {
+                char[] charArray = s.ToCharArray();
+                Array.Reverse(charArray);
+                return new string(charArray);
+            }
         }
     }
 }

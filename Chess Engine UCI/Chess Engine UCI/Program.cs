@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-
 using static Utilities.Fen;
 using static Engine;
 
@@ -14,8 +13,8 @@ UseMoveOrdering = true;
 UseOpeningBook = false;
 LateMoveReductionMinimumTreshold = 1;
 LateMoveReductionPercentage = 1.0;
-UseTranspositionTable = true;
-ResetTranspositionTableOnEachSearch = false;
+UseTT = true;
+ResetTTOnEachSearch = false;
 ShallowDepthThreshold = 8;
 UseOpeningBook = false;
 InternalIterativeDeepeningDepthReduction = 5;

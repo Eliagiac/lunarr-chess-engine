@@ -44,20 +44,6 @@ public class Move
         return $"{(Square)FirstSquareIndex(StartSquare)}{(Square)FirstSquareIndex(TargetSquare)}{new[] { "", "p", "n", "b", "r", "q", "k" }[PromotionPiece]}";
     }
 
-    private string PieceTypeString()
-    {
-        switch (PieceType)
-        {
-            case Piece.King: return "King";
-            case Piece.Pawn: return "Pawn";
-            case Piece.Knight: return "Knight";
-            case Piece.Bishop: return "Bishop";
-            case Piece.Rook: return "Rook";
-            case Piece.Queen: return "Queen";
-            default: return "";
-        }
-    }
-
     public Move(Move other)
     {
         PieceType = other.PieceType;

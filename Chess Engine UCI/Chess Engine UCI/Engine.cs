@@ -3,7 +3,7 @@ using static Utilities.Bitboard;
 using static System.Math;
 using static Piece;
 using static Evaluation;
-using static TranspositionTable;
+using Utilities;
 
 public class Engine
 {
@@ -74,8 +74,8 @@ public class Engine
     public static ulong SearchNodes;
     public static List<int> SearchNodesPerDepth;
     public static List<string> BestMovesThisSearch;
-    public static bool UseTranspositionTable;
-    public static bool ResetTranspositionTableOnEachSearch;
+    public static bool UseTT;
+    public static bool ResetTTOnEachSearch;
     public static bool UseOpeningBook;
     public static int InternalIterativeDeepeningDepthReduction;
     public static int ProbCutDepthReduction;
@@ -102,10 +102,12 @@ public class Engine
 
     private static int _totalSearchNodes;
 
+    public static string LastPerftResults;
+
 
     public static void Init()
     {
-        ResizeTranspositionTable(8);
+        TT.Resize(8);
 
         for (int depth = 1; depth < 64; depth++)
         {
@@ -132,10 +134,17 @@ public class Engine
 
     public static int Perft(int depth, int startingDepth, Move previousMove = null, Move ancestorMove = null)
     {
+        if (depth == startingDepth) LastPerftResults = "";
+        
         if (depth == 0)
         {
             if (startingDepth == 1)
-                Console.WriteLine($"{previousMove} : 1");
+            {
+                Console.WriteLine($"{previousMove}: 1");
+
+                if (LastPerftResults != "") LastPerftResults += "\n";
+                LastPerftResults += $"{previousMove}: 1";
+            }
 
             return 1;
         }
@@ -151,7 +160,12 @@ public class Engine
         }
 
         if (depth == startingDepth - 1)
+        {
             Console.WriteLine($"{previousMove}: {numPositions}");
+
+            if (LastPerftResults != "") LastPerftResults += "\n";
+            LastPerftResults += $"{previousMove}: {numPositions}";
+        }
 
         return numPositions;
     }
@@ -190,94 +204,92 @@ public class Engine
 
     private static void StartSearch()
     {
-        try
+        TT.IsEnabled = UseTT;
+
+        WasSearchAborted = false;
+
+        _progress = 0;
+        SearchNodes = 0;
+        _totalSearchNodes = 0;
+
+        SearchNodesPerDepth = new();
+
+        Board.PositionHistory = new();
+
+        MainLine = new();
+        CurrentMainLine = new();
+
+        BestMovesThisSearch = new();
+
+        if (ResetTTOnEachSearch) TT.Clear();
+
+        // Opening book not available in UCI mode.
+
+        SearchStopwatch.Restart();
+        int depth = 1;
+
+        int evaluation;
+        do
         {
-            TranspositionTable.IsEnabled = UseTranspositionTable;
+            ExcludedRootMoves = new();
 
-            WasSearchAborted = false;
-
-            _progress = 0;
-            SearchNodes = 0;
-            _totalSearchNodes = 0;
-
-            SearchNodesPerDepth = new();
-
-            Board.PositionHistory = new();
-
-            MainLine = new();
-            CurrentMainLine = new();
-
-            BestMovesThisSearch = new();
-
-            if (ResetTranspositionTableOnEachSearch) TranspositionTable.Clear();
-
-            // Opening book not available in UCI mode.
-
-            SearchStopwatch.Restart();
-            int depth = 1;
-
-            int evaluation;
-            do
+            for (int pvIndex = 0; pvIndex < MultiPvCount; pvIndex++)
             {
-                ExcludedRootMoves = new();
+                int alpha = -Infinity;
+                int beta = Infinity;
 
-                for (int pvIndex = 0; pvIndex < MultiPvCount; pvIndex++)
+                int alphaWindow = 25;
+                int betaWindow = 25;
+
+                while (true)
                 {
-                    int alpha = -Infinity;
-                    int beta = Infinity;
+                    // Reset on each iteration because of better performance.
+                    // This behaviour is not expected and further research is required.
+                    KillerMoves = new Move[_maxKillerMoves, MaxPly];
+                    History = new[] { new int[64, 64], new int[64, 64] };
 
-                    int alphaWindow = 25;
-                    int betaWindow = 25;
+                    _progress = 0;
 
-                    while (true)
+                    SelectiveDepth = 0;
+
+                    // Maximum amount of search extensions inside any given branch.
+                    // MaxExtensions = depth -> the SelDepth may be up to twice the depth.
+                    // Further testing is needed to find the perfect value here.
+                    MaxExtensions = depth;
+
+
+                    RootNode = new(0, SearchType.Normal);
+                    evaluation = Search(RootNode, depth, alpha, beta, out CurrentMainLine);
+
+                    bool searchFailed = false;
+                    if (evaluation <= alpha)
                     {
-                        // Reset on each iteration because of better performance.
-                        // This behaviour is not expected and further research is required.
-                        KillerMoves = new Move[_maxKillerMoves, MaxPly];
-                        History = new[] { new int[64, 64], new int[64, 64] };
-
-                        _progress = 0;
-
-                        SelectiveDepth = 0;
-
-                        // Maximum amount of search extensions inside any given branch.
-                        // MaxExtensions = depth -> the SelDepth may be up to twice the depth.
-                        // Further testing is needed to find the perfect value here.
-                        MaxExtensions = depth;
-
-
-                        RootNode = new(0, SearchType.Normal);
-                        evaluation = Search(RootNode, depth, alpha, beta, out CurrentMainLine);
-
-                        bool searchFailed = false;
-                        if (evaluation <= alpha)
-                        {
-                            alphaWindow *= AspirationWindowsMultipliers[0];
-                            searchFailed = true;
-                        }
-
-                        if (evaluation >= beta)
-                        {
-                            betaWindow *= AspirationWindowsMultipliers[1];
-                            searchFailed = true;
-                        }
-
-                        alpha = Max(evaluation - alphaWindow, -Infinity);
-                        beta = Min(evaluation + betaWindow, Infinity);
-
-                        if (!searchFailed) break;
+                        alphaWindow *= AspirationWindowsMultipliers[0];
+                        searchFailed = true;
                     }
 
+                    if (evaluation >= beta)
+                    {
+                        betaWindow *= AspirationWindowsMultipliers[1];
+                        searchFailed = true;
+                    }
 
-                    // The "Focused Search" technique is an idea I came up with that involves
-                    // performing a search at a reduced depth at the end of the main line found by the computer,
-                    // to get a more realistic representation of the final evaluation.
-                    // A new search is then done using these new values to "verify" the line,
-                    // and if a different move is returned the whole process is repeated.
-                    // For more information: https://www.reddit.com/r/ComputerChess/comments/1192dur/engine_optimization_idea_focused_search/?utm_source=share&utm_medium=web2x&context=3
-                    // Disabled because of inconsintent performance and results.
-                    // Further research will need to be done.
-                    #region Focused Search
+                    alpha = Max(evaluation - alphaWindow, -Infinity);
+                    beta = Min(evaluation + betaWindow, Infinity);
+
+                    if (!searchFailed) break;
+                }
+
+
+                // The "Focused Search" technique is an idea I came up with that involves
+                // performing a search at a reduced depth at the end of the main line found by the computer,
+                // to get a more realistic representation of the final evaluation.
+                // A new search is then done using these new values to "verify" the line,
+                // and if a different move is returned the whole process is repeated.
+                // For more information: https://www.reddit.com/r/ComputerChess/comments/1192dur/engine_optimization_idea_focused_search/?utm_source=share&utm_medium=web2x&context=3
+                // Disabled because of inconsintent performance and results.
+                // Further research will need to be done.
+                #region Focused Search
                     if (CurrentMainLine != null && !CurrentMainLine.Cleanup())
                     {
                         //    // To make sure we are not overlooking some of the opponent's responses to our chosen line,
@@ -317,59 +329,54 @@ public class Engine
                     }
                     #endregion
 
-                    if (!WasSearchAborted)
-                    {
-                        _totalSearchTime = SearchStopwatch.ElapsedMilliseconds;
+                if (!WasSearchAborted)
+                {
+                    _totalSearchTime = SearchStopwatch.ElapsedMilliseconds;
 
-                        RootNode.SetScore(evaluation);
+                    RootNode.SetScore(evaluation);
 
-                        //DepthReachedData = new(CurrentDepthReachedData);
-                        //BestMovesThisSearch.Add(CurrentMainLine.Move.ToString());
-                        MainLine = new(CurrentMainLine);
-                        _evaluation = (evaluation * (Board.CurrentTurn == 1 ? -0.01f : 0.01f)).ToString("0");
-                        SearchNodes = (ulong)_totalSearchNodes;
-                        SearchNodesPerDepth.Add(_totalSearchNodes);
+                    //DepthReachedData = new(CurrentDepthReachedData);
+                    //BestMovesThisSearch.Add(CurrentMainLine.Move.ToString());
+                    MainLine = new(CurrentMainLine);
+                    _evaluation = (evaluation * (Board.CurrentTurn == 1 ? -0.01f : 0.01f)).ToString("0");
+                    SearchNodes = (ulong)_totalSearchNodes;
+                    SearchNodesPerDepth.Add(_totalSearchNodes);
 
-                        Console.WriteLine($"info " +
-                            $"depth {depth} " +
-                            $"seldepth {SelectiveDepth + 1} " +
-                            $"multipv {pvIndex + 1} " +
-                            $"score " +
-                                (!IsMateScore(evaluation) ?
-                                $"cp {evaluation} " :
-                                $"mate {((evaluation > 0) ? "+" : "-")}{Ceiling((Checkmate - Abs(evaluation)) / 2.0)} ") +
-                            $"nodes {SearchNodes} " +
-                            $"nps {(int)Round(SearchNodes / (double)SearchStopwatch.ElapsedMilliseconds * 1000)} " +
-                            $"time {SearchStopwatch.ElapsedMilliseconds} " +
-                            $"pv {MainLine}");
+                    Console.WriteLine($"info " +
+                        $"depth {depth} " +
+                        $"seldepth {SelectiveDepth + 1} " +
+                        $"multipv {pvIndex + 1} " +
+                        $"score " +
+                            (!IsMateScore(evaluation) ?
+                            $"cp {evaluation} " :
+                            $"mate {((evaluation > 0) ? "+" : "-")}{Ceiling((Checkmate - Abs(evaluation)) / 2.0)} ") +
+                        $"nodes {SearchNodes} " +
+                        $"nps {(int)Round(SearchNodes / (double)SearchStopwatch.ElapsedMilliseconds * 1000)} " +
+                        $"time {SearchStopwatch.ElapsedMilliseconds} " +
+                        $"pv {MainLine}");
 
-                        ExcludedRootMoves.Add(MainLine?.Move);
+                    ExcludedRootMoves.Add(MainLine?.Move);
 
-                        //Stream stream = new FileStream(AppDomain.CurrentDomain.BaseDirectory + "RootNode.txt", FileMode.Create, FileAccess.Write);
-                        //
-                        //JsonSerializer.Serialize(stream, RootNode);
-                        //stream.Close();
-                    }
-
-                    else break;
-
-                    if (ExcludedRootMoves.Count >= Board.GenerateAllLegalMoves(promotionMode: 2).Count) break;
+                    //Stream stream = new FileStream(AppDomain.CurrentDomain.BaseDirectory + "RootNode.txt", FileMode.Create, FileAccess.Write);
+                    //
+                    //JsonSerializer.Serialize(stream, RootNode);
+                    //stream.Close();
                 }
 
-                depth++;
-            }
-            while (
-            !WasSearchAborted &&
-            (!UseTimeManagement || SearchStopwatch.ElapsedMilliseconds <= OptimumTime) &&
-            (UseTimeLimit || depth <= TimeLimit /* Time limit also represents the max depth. */));
+                else break;
 
-            SearchStopwatch.Stop();
-            OnSearchComplete.Invoke();
+                if (ExcludedRootMoves.Count >= Board.GenerateAllLegalMoves(promotionMode: 2).Count) break;
+            }
+
+            depth++;
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex);
-        }
+        while (
+        !WasSearchAborted &&
+        (!UseTimeManagement || SearchStopwatch.ElapsedMilliseconds <= OptimumTime) &&
+        (UseTimeLimit || depth <= TimeLimit /* Time limit also represents the max depth. */));
+
+        SearchStopwatch.Stop();
+        OnSearchComplete.Invoke();
     }
 
 
@@ -440,13 +447,11 @@ public class Engine
         // Was this position searched before?
         bool ttHit;
 
-        // Store transposition table entry. To be accessed only if ttHit is true.
-        Entry ttEntry = TranspositionTable.
-            GetStoredEntry(out ttHit);
+        // Store transposition table entry. Should be accessed only if ttHit is true.
+        TTEntry ttEntry = TT.GetStoredEntry(out ttHit);
 
         // Lookup transposition evaluation. If the lookup fails, ttEval == LookupFailed.
-        int ttEval = TranspositionTable.
-            LookupEvaluation(depth, ply, alpha, beta);
+        int ttEval = TT.CorrectRetrievedMateScore(ttEntry.Evaluation, ply);
 
         // Store the best move found when this position was previously searched.
         Line ttLine = ttHit ? ttEntry.Line : null;
@@ -458,7 +463,7 @@ public class Engine
         // Early Transposition Table Cutoff:
         // If the current position has been evaluated before at a depth
         // greater or equal the current depth, return the stored value.
-        if (TranspositionTableCutoff(out pvLine)) return ttEval;
+        if (TTCutoff(out pvLine)) return ttEval;
 
 
         pvLine = new();
@@ -516,6 +521,7 @@ public class Engine
         // Generate a list of all the moves currently available.
         var moves = Board.GenerateAllLegalMoves(
             promotionMode: 2 /* Only queen promotions. Note: other promotions are tried if these end in a draw.*/);
+
 
         // If no legal moves were found, it's either
         // checkmate for the current player or stalemate.
@@ -597,7 +603,7 @@ public class Engine
 
 
             // Make the move on the board.
-            // The move must be unmade before moving onto the next one.
+            // The move must be unmade before moving on to the next one.
             Board.MakeMove(moves[i]);
 
 
@@ -712,7 +718,7 @@ public class Engine
                     evaluationType = EvaluationType.LowerBound;
                     node.NodeType = NodeType.CutNode;
 
-                    TranspositionTable.StoreEvaluation(depth, ply, beta, evaluationType, pvLine, staticEvaluation);
+                    TT.StoreEvaluation(depth, ply, beta, evaluationType, pvLine, staticEvaluation);
 
                     // If a quiet move caused a beta cutoff, update it's stats.
                     if (!isCapture) UpdateQuietMoveStats();
@@ -866,7 +872,6 @@ public class Engine
                 // Moves with the same start and target square will be boosted in move ordering.
                 History[Board.CurrentTurn][FirstSquareIndex(moves[i].StartSquare), FirstSquareIndex(moves[i].TargetSquare)] += depth * depth;
 
-                // 
                 StoreKillerMove(moves[i], ply);
             }
         }
@@ -883,7 +888,7 @@ public class Engine
         //}
 
         // Once all legal moves have been searched, save the best score found in the transposition table and return it.
-        TranspositionTable.StoreEvaluation(depth, ply, alpha, evaluationType, pvLine, staticEvaluation);
+        TT.StoreEvaluation(depth, ply, alpha, evaluationType, pvLine, staticEvaluation);
 
         // Reset search type before returning.
         node.SearchType = parentSearchType;
@@ -905,14 +910,15 @@ public class Engine
             return false;
         }
 
-        bool TranspositionTableCutoff(out Line pvLine)
+        bool TTCutoff(out Line pvLine)
         {
             pvLine = null;
 
-            if (!rootNode && ttHit && ttEntry.Depth >= depth && ttEval != LookupFailed)
+            if (!rootNode && ttHit && ttEntry.Depth >= depth && ttEval != Null)
             {
                 // Update quiet move stats.
-                if (!ttMoveIsCapture)
+                if (ttMove != null /* BUG: ttMove is sometimes null even though ttHit is true. Somewhere in the code entries are being saved without a best move. Not sure whether or not this should ever be done. */&& 
+                    !ttMoveIsCapture)
                 {
                     if (ttEval >= beta)
                     {
@@ -922,9 +928,9 @@ public class Engine
                     }
                 }
 
-                pvLine = TranspositionTable.GetStoredLine();
+                pvLine = TT.GetStoredLine();
 
-                node.NodeType = NodeType.TranspositionTableCutoffNode;
+                node.NodeType = NodeType.TTCutoffNode;
                 return true;
             }
 
@@ -956,7 +962,7 @@ public class Engine
                 staticEvaluation = evaluation = Evaluate(out int _);
 
                 // TODO: Save static evaluation in the transposition table.
-                //TranspositionTable.StoreEvaluation(Null, Null, LookupFailed, Null, null, staticEvaluation);
+                //TT.StoreEvaluation(Null, Null, LookupFailed, Null, null, staticEvaluation);
             }
 
             hasStaticEvaluationImproved = !inCheck && (node.Grandparent == null || node.Grandparent.StaticEvaluation == Null ||
@@ -1111,7 +1117,7 @@ public class Engine
                         pvLine.Next = probCutLine;
 
                         // Save ProbCut data into transposition table.
-                        TranspositionTable.StoreEvaluation(depth - (ProbCutDepthReduction - 1 /* Here the effective depth is 1 higher than the reduced prob cut depth. */),
+                        TT.StoreEvaluation(depth - (ProbCutDepthReduction - 1 /* Here the effective depth is 1 higher than the reduced prob cut depth. */),
                             ply, probCutScore, EvaluationType.LowerBound, pvLine, staticEvaluation);
 
                         node.NodeType = NodeType.PrunedNode;
@@ -1135,8 +1141,8 @@ public class Engine
                 int score = Search(node, depth - InternalIterativeDeepeningDepthReduction, alpha, beta, out Line _);
                 node.SetScore(score);
 
-                ttEntry = TranspositionTable.GetStoredEntry(out ttHit);
-                ttEval = TranspositionTable.LookupEvaluation(depth, ply, alpha, beta);
+                ttEntry = TT.GetStoredEntry(out ttHit);
+                ttEval = TT.CorrectRetrievedMateScore(ttEntry.Evaluation, ply);
 
                 ttLine = ttHit ? ttEntry.Line : null;
                 ttMove = ttLine?.Move;
@@ -1212,12 +1218,10 @@ public class Engine
         bool ttHit;
 
         // Store transposition table entry. To be accessed only if ttHit is true.
-        Entry ttEntry = TranspositionTable.
-            GetStoredEntry(out ttHit);
+        TTEntry ttEntry = TT.GetStoredEntry(out ttHit);
 
         // Lookup transposition evaluation. If the lookup fails, ttEval == LookupFailed.
-        int ttEval = TranspositionTable.
-            LookupEvaluation(0, ply, alpha, beta);
+        int ttEval = TT.CorrectRetrievedMateScore(ttEntry.Evaluation, ply);
 
         // Store the best move found when this position was previously searched.
         Line ttLine = ttHit ? ttEntry.Line : null;
@@ -1229,7 +1233,7 @@ public class Engine
         // Early Transposition Table Cutoff:
         // If the current position has been evaluated before at a depth
         // greater or equal the current depth, return the stored value.
-        if (TranspositionTableCutoff(out pvLine)) return ttEval;
+        if (TTCutoff(out pvLine)) return ttEval;
 
 
         pvLine = new();
@@ -1241,9 +1245,6 @@ public class Engine
 
         // Evaluation of the current position.
         int staticEvaluation;
-
-        // Has the static evaluation improved since our last turn?
-        bool hasStaticEvaluationImproved;
 
         // Approximation of the actual evaluation.
         // Found using the transposition table in case of a ttHit, otherwise evaluation = staticEvaluation.
@@ -1329,7 +1330,7 @@ public class Engine
                     evaluationType = EvaluationType.LowerBound;
                     node.NodeType = NodeType.CutNode;
 
-                    TranspositionTable.StoreEvaluation(0, ply, beta, evaluationType, pvLine, staticEvaluation);
+                    TT.StoreEvaluation(0, ply, beta, evaluationType, pvLine, staticEvaluation);
 
                     return beta;
                 }
@@ -1337,19 +1338,19 @@ public class Engine
         }
 
 
-        TranspositionTable.StoreEvaluation(0, ply, alpha, evaluationType, pvLine, staticEvaluation);
+        TT.StoreEvaluation(0, ply, alpha, evaluationType, pvLine, staticEvaluation);
         return alpha;
 
 
-        bool TranspositionTableCutoff(out Line pvLine)
+        bool TTCutoff(out Line pvLine)
         {
             pvLine = null;
 
-            if (ttHit && ttEval != LookupFailed)
+            if (ttHit && ttEval != Null)
             {
-                pvLine = TranspositionTable.GetStoredLine();
+                pvLine = TT.GetStoredLine();
 
-                node.NodeType = NodeType.TranspositionTableCutoffNode;
+                node.NodeType = NodeType.TTCutoffNode;
                 return true;
             }
 
@@ -1364,8 +1365,11 @@ public class Engine
             {
                 staticEvaluation = Null;
 
-                // In quiescence search, evaluation must never be set to Null to avoid issues with standing pat.
-                evaluation = -Infinity;
+                // In quiescence search, the evaluation must always be set to the current eval to avoid returning -Infinity if no captures are available.
+                // Note: the implementation is different in Stockfish, where evaluation is set to -Infinity here,
+                // and after the moves loop if no moves where found and the player is in check checkmate is returned.
+                // I suspect their move generation still generates all legal moves when in check even inside qsearch.
+                evaluation = Evaluate(out int _);
             }
 
             // If this position was already evaluated, use the stored value.
@@ -1387,7 +1391,7 @@ public class Engine
                 staticEvaluation = evaluation = Evaluate(out int _);
 
                 // TODO: Save static evaluation in the transposition table.
-                //TranspositionTable.StoreEvaluation(Null, Null, LookupFailed, Null, null, staticEvaluation);
+                //TT.StoreEvaluation(Null, Null, LookupFailed, Null, null, staticEvaluation);
             }
         }
 
@@ -1431,7 +1435,7 @@ public class Engine
         // ttMove stores the best move that was previously found.
         // This move should be given the top priority.
         // Note: may be null in case the position wasn't searched before.
-        Move ttMove = TranspositionTable.GetStoredMove();
+        Move ttMove = TT.GetStoredMove();
 
 
         List<int> scores = new();
@@ -1448,6 +1452,11 @@ public class Engine
             // Captures are sorted with a high priority.
             else if (move.CapturedPieceType != None)
             {
+                if (move.CapturedPieceType == King)
+                {
+                    Console.WriteLine("!");
+                }
+
                 // Captures are sorted using MVV-LVA (Most Valuable Victim - Least Valuable Attacker).
                 // A weak piece capturing a strong one will be given a
                 // higher priority than a strong piece capturing a weak one.
@@ -1612,7 +1621,7 @@ public class Line
     public void MakeMoves(bool removeEntries = false)
     {
         Board.MakeMove(Move);
-        if (removeEntries) TranspositionTable.ClearCurrentEntry();
+        if (removeEntries) TT.ClearCurrentEntry();
         if (Next != null) Next.MakeMoves(removeEntries);
     }
 
@@ -1801,7 +1810,7 @@ public enum NodeType
     CutNode,
     AllNode,
     PrunedNode,
-    TranspositionTableCutoffNode,
+    TTCutoffNode,
 }
 
 public enum SearchType

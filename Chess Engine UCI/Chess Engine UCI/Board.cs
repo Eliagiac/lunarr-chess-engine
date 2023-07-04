@@ -412,7 +412,7 @@ public class Board
         OpponentTurn ^= 1;
         ZobristKey ^= BlackToMoveKey;
 
-        TranspositionTable.CalculateCurrentEntryIndex();
+        TT.CalculateCurrentEntryIndex();
 
         PositionHistory.Push(ZobristKey);
 
@@ -544,7 +544,7 @@ public class Board
 
         UpdateBoardInformation(move.TargetSquare, move.StartSquare, enPassant, EnPassantTarget, castledRookSquare != 0, castledRookTarget, castledRookSquare);
 
-        TranspositionTable.CalculateCurrentEntryIndex();
+        TT.CalculateCurrentEntryIndex();
 
         PositionHistory.Pop();
 
@@ -641,7 +641,7 @@ public class Board
         CurrentTurn ^= 1;
         OpponentTurn ^= 1;
 
-        TranspositionTable.CalculateCurrentEntryIndex();
+        TT.CalculateCurrentEntryIndex();
     }
 
     public static void UnmakeNullMove(NullMove move)
@@ -660,7 +660,7 @@ public class Board
         CurrentTurn ^= 1;
         OpponentTurn ^= 1;
 
-        TranspositionTable.CalculateCurrentEntryIndex();
+        TT.CalculateCurrentEntryIndex();
     }
 
 
@@ -733,16 +733,16 @@ public class Board
 
                 if (attackerIndex != -1)
                 {
-                    int attackerType = PieceType(attackerIndex, slidingPiecesOnly : true);
-                    if (attackerType != None)
+                    int attackerType = GetRank(attackerIndex) == GetRank(startSquareIndex) || GetFile(attackerIndex) == GetFile(startSquareIndex) ? Rook : Bishop;
+                    if (IsSlidingPiece(1UL << attackerIndex) && attackerType != None)
                     {
                         if (MoveData.SpecificMasks[attackerType][attackerIndex, targetSquareIndex] != 0) return false;
                     }
 
                     if (secondAttackerIndex != -1)
                     {
-                        int secondAttackerType = PieceType(secondAttackerIndex, slidingPiecesOnly: true);
-                        if (secondAttackerType != None)
+                        int secondAttackerType = GetRank(secondAttackerIndex) == GetRank(startSquareIndex) || GetFile(secondAttackerIndex) == GetFile(startSquareIndex) ? Rook : Bishop;
+                        if (IsSlidingPiece(1UL << secondAttackerIndex) && secondAttackerType != None)
                         {
                             if (MoveData.SpecificMasks[secondAttackerType][secondAttackerIndex, targetSquareIndex] != 0) return false;
                         }
