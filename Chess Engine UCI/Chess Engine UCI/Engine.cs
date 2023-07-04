@@ -3,67 +3,73 @@ using static Utilities.Bitboard;
 using static System.Math;
 using static Piece;
 using static Evaluation;
-using Utilities;
 
+/// <summary>The <see cref="Engine"/> class contains the main features of the engine.</summary>
 public class Engine
 {
+    /// <summary>Represents a value that is either not usable or incorrect.</summary>
     public const int Null = 32002;
+
+    /// <summary>The maximum evaluation of any position.</summary>
     public const int Infinity = 32001;
+
+    /// <summary>The score given to a position with checkmate on the board.</summary>
+    /// <remarks>Positions with a forced mating sequence are given a score of
+    /// <see cref="Checkmate"/> - <c>distance from mate</c>. For example, <c>mate in 5</c> = <c>31995</c>.</remarks>
     public const int Checkmate = 32000;
+
+    /// <summary>The evaluation of a drawn position or stalemate.</summary>
     public const int Draw = 0;
 
+    private const int MaxPly = 64;
 
-    public static Stopwatch SearchStopwatch = new();
 
-    public static bool WasSearchAborted;
+    /// <summary><see cref="Stopwatch"/> that keeps track of the total time taken by the current search.</summary>
+    /// <remarks>Note that it is not reset on different iterations of iterative deepening.</remarks>
+    private static readonly Stopwatch s_searchStopwatch = new();
 
-    // Indexed by [totalMoveCount].
-    private static int[] _lateMoveThresholds;
+    /// <summary>If the search was abruptly interrupted, the returned values will be unusable.</summary>
+    public static bool WasSearchAborted { get; private set; }
 
-    // Indexed by [improving(0/1)][depth].
-    private static int[][] _futilityMargin;
+    /// <summary>Minimum move index to use late move reductions, depending on total move count.</summary>
+    private static readonly int[] s_lateMoveThresholds = 
+        Enumerable.Range(0, 300).Select(totalMoveCount => (int)(
+        (totalMoveCount + LateMoveReductionMinimumTreshold) - (totalMoveCount * LateMoveReductionPercentage))).ToArray();
 
-    public static readonly int LimitedRazoringMargin = StaticPieceValues[Queen][0];
+    /// <summary>If the evaluation is too low compared to alpha (by at least <c><see cref="s_futilityMargin"/>[Improving 0/1][Depth]</c>) more moves will be skipped.</summary>
+    /// <remarks>The margin is lower if the evaluation has improved since the player's last turn, 
+    /// and is directly proportional to the depth. </remarks>
+    private static readonly int[][] s_futilityMargin = new[] {
+        Enumerable.Range(0, 64).Select(depth => 165 * depth).ToArray(),
+        Enumerable.Range(0, 64).Select(depth => 165 * (depth - 1)).ToArray(),
+    };
 
-    public static readonly int[] _extraPromotions = { Knight, Rook, Bishop };
+    private static Move[,] s_killerMoves = new Move[2, MaxPly];
 
-    public static float _totalSearchTime;
+    private static int s_maxExtensions;
 
-    public static bool _testing;
+    /// <summary>The best move found by the engine, and the best play sequence that follows it.</summary>
+    public static Line? MainLine { get; private set; }
+    private static Line? s_currentMainLine;
 
-    public static Move[,] KillerMoves;
+    private static CancellationTokenSource? s_abortSearchTimer;
 
-    public const int MaxPly = 64;
+    private static readonly int[] s_aspirationWindowsMultipliers = { 4, 4 };
 
-    public const int _maxKillerMoves = 2;
+    /// <summary>Bonus based on the success of a move in other positions.</summary>
+    /// <remarks>Moves are identified using butterfly boards (https://www.chessprogramming.org/Butterfly_Boards) with [ColorIndex][StartSquareIndex, TargetSquareIndex].</remarks>
+    private static int[][,] s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
 
-    // Limits the total amount of search depth extensions possible in a single branch.
-    // Set to twice the search depth.
-    public static int MaxExtensions;
+    /// <summary>Depth reduction for late moves depending on the search depth and the current move number.</summary>
+    /// <remarks>Later moves will receive greater depth reductions.</remarks>
+    private static readonly int[][] s_lateMoveDepthReductions =
+        Enumerable.Range(0, 64).Select(depth =>
+        Enumerable.Range(0, 64).Select(moveNumber =>
+        {
+            if (depth == 0 || moveNumber == 0) return 0;
 
-    public static Line MainLine;
-    public static Line CurrentMainLine;
-
-    public static CancellationTokenSource cancelSearchTimer;
-
-    public static Action OnSearchComplete;
-
-    public static string _evaluation;
-
-    public static float _progress;
-
-    public static bool _versionTesting;
-
-    public static int[] AspirationWindowsMultipliers = { 4, 4 };
-
-    // Indexed by [colorIndex][startSquareIndex][targetSquareIndex].
-    public static int[][,] History;
-
-    public static int _whiteWinsCount;
-    public static int _blackWinsCount;
-    public static int _drawsCount;
-
-    public static int[,] Reductions = new int[64, 64];
+            return Max((int)Round(Log(depth) * Log(moveNumber) / 2f) - 1, 0);
+        }).ToArray()).ToArray();
 
     public static float TimeLimit;
     public static bool UseTimeLimit;
@@ -108,27 +114,6 @@ public class Engine
     public static void Init()
     {
         TT.Resize(8);
-
-        for (int depth = 1; depth < 64; depth++)
-        {
-            for (int count = 1; count < 64; count++)
-            {
-                float d = (float)Log(depth);
-                float c = (float)Log(count);
-                Reductions[depth, count] = Max((int)Round(d * c / 2f) - 1, 0);
-            }
-        }
-
-        _lateMoveThresholds =
-        Enumerable.Range(0, 300).Select(totalMoveCount => (int)(
-        (totalMoveCount + LateMoveReductionMinimumTreshold) - (totalMoveCount * LateMoveReductionPercentage))).ToArray();
-
-        _futilityMargin = new[] {
-            Enumerable.Range(0, 64).Select(depth => 165 * depth).ToArray(),
-            Enumerable.Range(0, 64).Select(depth => 165 * (depth - 1)).ToArray(),
-        };
-
-        OnSearchComplete += FinishSearch;
     }
 
 
@@ -176,8 +161,8 @@ public class Engine
         Task.Factory.StartNew(
             StartSearch, TaskCreationOptions.LongRunning);
 
-        cancelSearchTimer = new();
-        if (UseTimeLimit) Task.Delay((int)(TimeLimit * 1000), cancelSearchTimer.Token).ContinueWith((t) => AbortSearch());
+        s_abortSearchTimer = new();
+        if (UseTimeLimit) Task.Delay((int)(TimeLimit * 1000), s_abortSearchTimer.Token).ContinueWith((t) => AbortSearch());
     }
 
     public static void AbortSearch()
@@ -187,19 +172,9 @@ public class Engine
 
     public static void FinishSearch()
     {
-        cancelSearchTimer?.Cancel();
+        s_abortSearchTimer?.Cancel();
 
         Console.WriteLine($"bestmove {MainLine.Move}");
-
-        //Board.MakeMove(MainLine.Move);
-
-        //using (StreamWriter writer = File.CreateText(@"C:\RootNode.txt"))
-        //{
-        //    Console.WriteLine($"Started Saving...");
-        //    writer.Write(RootNode.ToString());
-        //}
-        //Console.WriteLine($"Saved Successfully!");
-        //Console.WriteLine($"{RootNode}");
     }
 
     private static void StartSearch()
@@ -208,7 +183,6 @@ public class Engine
 
         WasSearchAborted = false;
 
-        _progress = 0;
         SearchNodes = 0;
         _totalSearchNodes = 0;
 
@@ -217,7 +191,7 @@ public class Engine
         Board.PositionHistory = new();
 
         MainLine = new();
-        CurrentMainLine = new();
+        s_currentMainLine = new();
 
         BestMovesThisSearch = new();
 
@@ -225,7 +199,7 @@ public class Engine
 
         // Opening book not available in UCI mode.
 
-        SearchStopwatch.Restart();
+        s_searchStopwatch.Restart();
         int depth = 1;
 
         int evaluation;
@@ -245,32 +219,30 @@ public class Engine
                 {
                     // Reset on each iteration because of better performance.
                     // This behaviour is not expected and further research is required.
-                    KillerMoves = new Move[_maxKillerMoves, MaxPly];
-                    History = new[] { new int[64, 64], new int[64, 64] };
-
-                    _progress = 0;
+                    s_killerMoves = new Move[2, MaxPly];
+                    s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
 
                     SelectiveDepth = 0;
 
                     // Maximum amount of search extensions inside any given branch.
-                    // MaxExtensions = depth -> the SelDepth may be up to twice the depth.
+                    // s_maxExtensions = depth -> the SelDepth may be up to twice the depth.
                     // Further testing is needed to find the perfect value here.
-                    MaxExtensions = depth;
+                    s_maxExtensions = depth;
 
 
                     RootNode = new(0, SearchType.Normal);
-                    evaluation = Search(RootNode, depth, alpha, beta, out CurrentMainLine);
+                    evaluation = Search(RootNode, depth, alpha, beta, out s_currentMainLine);
 
                     bool searchFailed = false;
                     if (evaluation <= alpha)
                     {
-                        alphaWindow *= AspirationWindowsMultipliers[0];
+                        alphaWindow *= s_aspirationWindowsMultipliers[0];
                         searchFailed = true;
                     }
 
                     if (evaluation >= beta)
                     {
-                        betaWindow *= AspirationWindowsMultipliers[1];
+                        betaWindow *= s_aspirationWindowsMultipliers[1];
                         searchFailed = true;
                     }
 
@@ -290,7 +262,7 @@ public class Engine
                 // Disabled because of inconsintent performance and results.
                 // Further research will need to be done.
                 #region Focused Search
-                    if (CurrentMainLine != null && !CurrentMainLine.Cleanup())
+                    if (s_currentMainLine != null && !s_currentMainLine.Cleanup())
                     {
                         //    // To make sure we are not overlooking some of the opponent's responses to our chosen line,
                         //    // do a new search at the end of the line with a reduced depth.
@@ -331,14 +303,11 @@ public class Engine
 
                 if (!WasSearchAborted)
                 {
-                    _totalSearchTime = SearchStopwatch.ElapsedMilliseconds;
-
                     RootNode.SetScore(evaluation);
 
                     //DepthReachedData = new(CurrentDepthReachedData);
                     //BestMovesThisSearch.Add(CurrentMainLine.Move.ToString());
-                    MainLine = new(CurrentMainLine);
-                    _evaluation = (evaluation * (Board.CurrentTurn == 1 ? -0.01f : 0.01f)).ToString("0");
+                    MainLine = new(s_currentMainLine);
                     SearchNodes = (ulong)_totalSearchNodes;
                     SearchNodesPerDepth.Add(_totalSearchNodes);
 
@@ -351,8 +320,8 @@ public class Engine
                             $"cp {evaluation} " :
                             $"mate {((evaluation > 0) ? "+" : "-")}{Ceiling((Checkmate - Abs(evaluation)) / 2.0)} ") +
                         $"nodes {SearchNodes} " +
-                        $"nps {(int)Round(SearchNodes / (double)SearchStopwatch.ElapsedMilliseconds * 1000)} " +
-                        $"time {SearchStopwatch.ElapsedMilliseconds} " +
+                        $"nps {(int)Round(SearchNodes / (double)s_searchStopwatch.ElapsedMilliseconds * 1000)} " +
+                        $"time {s_searchStopwatch.ElapsedMilliseconds} " +
                         $"pv {MainLine}");
 
                     ExcludedRootMoves.Add(MainLine?.Move);
@@ -372,11 +341,11 @@ public class Engine
         }
         while (
         !WasSearchAborted &&
-        (!UseTimeManagement || SearchStopwatch.ElapsedMilliseconds <= OptimumTime) &&
+        (!UseTimeManagement || s_searchStopwatch.ElapsedMilliseconds <= OptimumTime) &&
         (UseTimeLimit || depth <= TimeLimit /* Time limit also represents the max depth. */));
 
-        SearchStopwatch.Stop();
-        OnSearchComplete.Invoke();
+        s_searchStopwatch.Stop();
+        FinishSearch();
     }
 
 
@@ -729,15 +698,6 @@ public class Engine
                 }
             }
 
-            // Update the search progress.
-            if (rootNode)
-            {
-                _progress = (float)i / moves.Count * 100;
-
-
-                //Console.WriteLine($"info tree {RootNode}");
-            }
-
 
             bool FutilityPruning()
             {
@@ -776,28 +736,28 @@ public class Engine
             void ReduceDepth()
             {
                 // Late Move Reductions:
-                // Reduce quite moves towards the end of the ordered moves list.
+                // Reduce quiet moves towards the end of the ordered moves list.
                 usedLmr = false;
                 // Only reduce if we aren't in check and the move doesn't give check to the opponent.
-                if (!rootNode && i > _lateMoveThresholds[moves.Count] && !inCheck && !givesCheck)
+                if (!rootNode && i > s_lateMoveThresholds[moves.Count] && !inCheck && !givesCheck)
                 {
                     // Don't reduce captures, promotions and killer moves,
                     // unless we are past the moveCountBasedPruningThreshold (very late moves).
                     if (useLateMovePruning ||
                         (moves[i].CapturedPieceType == None &&
                         moves[i].PromotionPiece == None &&
-                        !moves[i].Equals(KillerMoves[0, ply]) &&
-                        !moves[i].Equals(KillerMoves[1, ply])))
+                        !moves[i].Equals(s_killerMoves[0, ply]) &&
+                        !moves[i].Equals(s_killerMoves[1, ply])))
                     {
                         usedLmr = true;
-                        R += Reductions[Min(depth, 63), Min(i, 63)];
+                        R += s_lateMoveDepthReductions[Min(depth, 63)][Min(i, 63)];
                     }
                 }
             }
 
             void ExtendDepth(ref int extensions)
             {
-                //if (newExtensions >= MaxExtensions) return;
+                //if (newExtensions >= s_maxExtensions) return;
 
                 // Capture extension.
                 //if (moves[i].CapturedPieceType != Piece.None)
@@ -806,7 +766,7 @@ public class Engine
                 //    R--;
                 //}
 
-                //if (newExtensions >= MaxExtensions) return;
+                //if (newExtensions >= s_maxExtensions) return;
 
                 // Recapture extension.
                 //if ((moves[i].TargetSquare & previousCapture) != 0)
@@ -815,7 +775,7 @@ public class Engine
                 //    R--;
                 //}
 
-                if (extensions >= MaxExtensions) return;
+                if (extensions >= s_maxExtensions) return;
 
                 // Passed pawn extension.
                 if (moves[i].PieceType == Pawn &&
@@ -825,7 +785,7 @@ public class Engine
                     R--;
                 }
 
-                //if (newExtensions >= MaxExtensions) return;
+                //if (newExtensions >= s_maxExtensions) return;
 
                 // Promotion extension.
                 //if (moves[i].PromotionPiece != Piece.None)
@@ -844,7 +804,7 @@ public class Engine
 
                 if (moves[i].PromotionPiece != None && score == Draw)
                 {
-                    foreach (int promotionPiece in _extraPromotions)
+                    foreach (int promotionPiece in new int[] { Knight, Rook, Bishop })
                     {
                         // Unmake the previous promotion.
                         Board.UnmakeMove(moves[i]);
@@ -870,7 +830,7 @@ public class Engine
             void UpdateQuietMoveStats()
             {
                 // Moves with the same start and target square will be boosted in move ordering.
-                History[Board.CurrentTurn][FirstSquareIndex(moves[i].StartSquare), FirstSquareIndex(moves[i].TargetSquare)] += depth * depth;
+                s_historyHeuristics[Board.CurrentTurn][FirstSquareIndex(moves[i].StartSquare), FirstSquareIndex(moves[i].TargetSquare)] += depth * depth;
 
                 StoreKillerMove(moves[i], ply);
             }
@@ -922,7 +882,7 @@ public class Engine
                 {
                     if (ttEval >= beta)
                     {
-                        History[Board.CurrentTurn][FirstSquareIndex(ttMove.StartSquare), FirstSquareIndex(ttMove.TargetSquare)] += depth * depth;
+                        s_historyHeuristics[Board.CurrentTurn][FirstSquareIndex(ttMove.StartSquare), FirstSquareIndex(ttMove.TargetSquare)] += depth * depth;
 
                         StoreKillerMove(ttMove, ply);
                     }
@@ -1025,7 +985,7 @@ public class Engine
                 // Should also check if eval is a mate score, 
                 // otherwise the engine will be blind to certain checkmates.
 
-                if (evaluation + _futilityMargin[hasStaticEvaluationImproved ? 1 : 0][Min(depth, 63)] <= alpha)
+                if (evaluation + s_futilityMargin[hasStaticEvaluationImproved ? 1 : 0][Min(depth, 63)] <= alpha)
                 {
                     return true;
                 }
@@ -1153,7 +1113,7 @@ public class Engine
 
         void CheckExtension(ref int extensions)
         {
-            if (!rootNode && extensions < MaxExtensions && inCheck)
+            if (!rootNode && extensions < s_maxExtensions && inCheck)
             {
                 extensions++;
                 depth++;
@@ -1177,7 +1137,7 @@ public class Engine
 
         void OneReplyExtension(ref int extensions)
         {
-            if (!rootNode && extensions < MaxExtensions && moves.Count == 1)
+            if (!rootNode && extensions < s_maxExtensions && moves.Count == 1)
             {
                 extensions++;
                 depth++;
@@ -1414,10 +1374,10 @@ public class Engine
 
     public static void StoreKillerMove(Move move, int ply)
     {
-        if (KillerMoves[0, ply] != null && !KillerMoves[0, ply].Equals(move))
-            KillerMoves[1, ply] = new(KillerMoves[0, ply]);
+        if (s_killerMoves[0, ply] != null && !s_killerMoves[0, ply].Equals(move))
+            s_killerMoves[1, ply] = new(s_killerMoves[0, ply]);
 
-        KillerMoves[0, ply] = move;
+        s_killerMoves[0, ply] = move;
     }
 
 
@@ -1467,8 +1427,8 @@ public class Engine
             else
             {
                 // Sort killer moves just below captures.
-                if (move.Equals(KillerMoves[0, ply])) moveScore += 9000;
-                else if (move.Equals(KillerMoves[1, ply])) moveScore += 8000;
+                if (move.Equals(s_killerMoves[0, ply])) moveScore += 9000;
+                else if (move.Equals(s_killerMoves[1, ply])) moveScore += 8000;
 
                 // Sort non-killer quiet moves by history heuristic.
                 else
@@ -1480,7 +1440,7 @@ public class Engine
                     //    int a = 0;
                     //}
 
-                    moveScore += History[Board.CurrentTurn][FirstSquareIndex(move.StartSquare), targetSquareIndex];
+                    moveScore += s_historyHeuristics[Board.CurrentTurn][FirstSquareIndex(move.StartSquare), targetSquareIndex];
 
                     //moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == None ? move.PieceType : move.PromotionPiece, targetSquareIndex, Board.CurrentTurn == 0, gamePhase);
                     //moveScore += GetPieceValue(move.PromotionPiece);
