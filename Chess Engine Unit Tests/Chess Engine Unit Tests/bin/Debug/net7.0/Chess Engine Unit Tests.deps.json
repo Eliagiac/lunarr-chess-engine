@@ -12,7 +12,6 @@
           "MSTest.TestFramework": "2.2.10",
           "Microsoft.NET.Test.Sdk": "17.3.2",
           "coverlet.collector": "3.1.2",
-          "Chess Engine UCI": "1.0.0.0",
           "Microsoft.VisualStudio.TestPlatform.TestFramework.Extensions": "14.0.0.0"
         },
         "runtime": {
@@ -1128,12 +1127,9 @@
           "System.Xml.ReaderWriter": "4.3.0"
         }
       },
-      "Chess Engine UCI/1.0.0.0": {
+      "Chess Engine UCI/1.0.0": {
         "runtime": {
-          "Chess Engine UCI.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
-          }
+          "Chess Engine UCI.dll": {}
         }
       },
       "Microsoft.VisualStudio.TestPlatform.TestFramework.Extensions/14.0.0.0": {
@@ -1817,8 +1813,8 @@
       "path": "system.xml.xmldocument/4.3.0",
       "hashPath": "system.xml.xmldocument.4.3.0.nupkg.sha512"
     },
-    "Chess Engine UCI/1.0.0.0": {
-      "type": "reference",
+    "Chess Engine UCI/1.0.0": {
+      "type": "project",
       "serviceable": false,
       "sha512": ""
     },

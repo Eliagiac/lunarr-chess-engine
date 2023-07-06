@@ -14,7 +14,22 @@ namespace Chess_Engine_Unit_Tests
         private const string Position5 = "r2q1rk1/pP1p2pp/Q4n2/bbp1p3/Np6/1B3NBn/pPPP1PPP/R3K2R b KQ - 0 1";
         private const string Position6 = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
         private const string Position7 = "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10";
-        private const string Position8 = "r2k3r/nbNqpp1p/1p1p2nB/4P3/3P2p1/p1Q2N2/PPP1PPPP/R2K3R b KQkq -";
+        private const string Position8 = "r3k2r/p2p1pb1/bn1qpnp1/2pPN3/1p2P3/2N2Q1p/PPPBBPPP/2RK3R w kq c6 0 3";
+        private const string Position9 = "1k6/1b6/8/8/7R/8/8/4K2R b K - 0 1";
+        private const string Position10 = "3k4/3p4/8/K1P4r/8/8/8/8 b - - 0 1";
+        private const string Position11 = "8/8/4k3/8/2p5/8/B2P2K1/8 w - - 0 1";
+        private const string Position12 = "8/8/1k6/2b5/2pP4/8/5K2/8 b - d3 0 1";
+        private const string Position13 = "5k2/8/8/8/8/8/8/4K2R w K - 0 1";
+        private const string Position14 = "3k4/8/8/8/8/8/8/R3K3 w Q - 0 1";
+        private const string Position15 = "r3k2r/1b4bq/8/8/8/8/7B/R3K2R w KQkq - 0 1";
+        private const string Position16 = "r3k2r/8/3Q4/8/8/5q2/8/R3K2R b KQkq - 0 1";
+        private const string Position17 = "2K2r2/4P3/8/8/8/8/8/3k4 w - - 0 1";
+        private const string Position18 = "8/8/1P2K3/8/2n5/1q6/8/5k2 b - - 0 1";
+        private const string Position19 = "4k3/1P6/8/8/8/8/K7/8 w - - 0 1";
+        private const string Position20 = "8/P1k5/K7/8/8/8/8/8 w - - 0 1";
+        private const string Position21 = "K1k5/8/P7/8/8/8/8/8 w - - 0 1";
+        private const string Position22 = "8/k1P5/8/1K6/8/8/8/8 w - - 0 1";
+        private const string Position23 = "8/8/2k5/5q2/5n2/8/5K2/8 b - - 0 1";
 
         private const string StockfishPath = @"C:\Users\eliag\OneDrive\Documenti\GitHub\Stockfish-VisualStudio\bin\Debug\x64\Stockfish.exe";
 
@@ -24,150 +39,100 @@ namespace Chess_Engine_Unit_Tests
             MoveData.GenerateDirectionalMasks();
             MoveData.ComputeMagicBitboards();
 
-            UseMoveOrdering = true;
-            UseOpeningBook = false;
-            LateMoveReductionMinimumTreshold = 1;
-            LateMoveReductionPercentage = 1.0;
-            UseTT = true;
-            ResetTTOnEachSearch = false;
-            ShallowDepthThreshold = 8;
-            UseOpeningBook = false;
-            InternalIterativeDeepeningDepthReduction = 5;
-            ProbCutDepthReduction = 4;
-            VerificationSearchMinimumDepth = 6;
-            MultiPvCount = 1;
-
-            Init();
+            TT.Resize(8);
         }
 
+        [TestMethod]
+        public void PerftResults_Position1_Depth5() =>
+            TestPerftResults(Position1, 5);
 
         [TestMethod]
-        public void PerftResults_Position1_Depth1() =>
-            TestPerftResults(Position1, 1);
+        public void PerftResults_Position2_Depth5() =>
+            TestPerftResults(Position2, 5);
 
         [TestMethod]
-        public void PerftResults_Position1_Depth2() =>
-            TestPerftResults(Position1, 2);
+        public void PerftResults_Position3_Depth7() =>
+            TestPerftResults(Position3, 7);
 
         [TestMethod]
-        public void PerftResults_Position1_Depth3() =>
-            TestPerftResults(Position1, 3);
+        public void PerftResults_Position4_Depth5() =>
+            TestPerftResults(Position4, 5);
 
         [TestMethod]
-        public void PerftResults_Position1_Depth4() =>
-            TestPerftResults(Position1, 4);
+        public void PerftResults_Position5_Depth6() =>
+            TestPerftResults(Position5, 6);
 
         [TestMethod]
-        public void PerftResults_Position2_Depth1() =>
-            TestPerftResults(Position2, 1);
-
-        [TestMethod]
-        public void PerftResults_Position2_Depth2() =>
-            TestPerftResults(Position2, 2);
-
-        [TestMethod]
-        public void PerftResults_Position2_Depth3() =>
-            TestPerftResults(Position2, 3);
-
-        [TestMethod]
-        public void PerftResults_Position2_Depth4() =>
-            TestPerftResults(Position2, 4);
-
-        [TestMethod]
-        public void PerftResults_Position3_Depth1() =>
-            TestPerftResults(Position3, 1);
-
-        [TestMethod]
-        public void PerftResults_Position3_Depth2() =>
-            TestPerftResults(Position3, 2);
-
-        [TestMethod]
-        public void PerftResults_Position3_Depth3() =>
-            TestPerftResults(Position3, 3);
-
-        [TestMethod]
-        public void PerftResults_Position3_Depth4() =>
-            TestPerftResults(Position3, 4);
-
-        [TestMethod]
-        public void PerftResults_Position4_Depth1() =>
-            TestPerftResults(Position4, 1);
-
-        [TestMethod]
-        public void PerftResults_Position4_Depth2() =>
-            TestPerftResults(Position4, 2);
-
-        [TestMethod]
-        public void PerftResults_Position4_Depth3() =>
-            TestPerftResults(Position4, 3);
-
-        [TestMethod]
-        public void PerftResults_Position4_Depth4() =>
-            TestPerftResults(Position4, 4);
-
-        [TestMethod]
-        public void PerftResults_Position5_Depth1() =>
-            TestPerftResults(Position5, 1);
-
-        [TestMethod]
-        public void PerftResults_Position5_Depth2() =>
-            TestPerftResults(Position5, 2);
-
-        [TestMethod]
-        public void PerftResults_Position5_Depth3() =>
-            TestPerftResults(Position5, 3);
-
-        [TestMethod]
-        public void PerftResults_Position5_Depth4() =>
-            TestPerftResults(Position5, 4);
-
-        [TestMethod]
-        public void PerftResults_Position6_Depth1() =>
-            TestPerftResults(Position6, 1);
-
-        [TestMethod]
-        public void PerftResults_Position6_Depth2() =>
-            TestPerftResults(Position6, 2);
-
-        [TestMethod]
-        public void PerftResults_Position6_Depth3() =>
-            TestPerftResults(Position6, 3);
-
-        [TestMethod]
-        public void PerftResults_Position6_Depth4() =>
-            TestPerftResults(Position6, 4);
-
-        [TestMethod]
-        public void PerftResults_Position7_Depth1() =>
-            TestPerftResults(Position7, 1);
-
-        [TestMethod]
-        public void PerftResults_Position7_Depth2() =>
-            TestPerftResults(Position7, 2);
-
-        [TestMethod]
-        public void PerftResults_Position7_Depth3() =>
-            TestPerftResults(Position7, 3);
+        public void PerftResults_Position6_Depth5() =>
+            TestPerftResults(Position6, 5);
 
         [TestMethod]
         public void PerftResults_Position7_Depth4() =>
             TestPerftResults(Position7, 4);
 
         [TestMethod]
-        public void PerftResults_Position8_Depth1() =>
-            TestPerftResults(Position8, 1);
-
-        [TestMethod]
-        public void PerftResults_Position8_Depth2() =>
-            TestPerftResults(Position8, 2);
-
-        [TestMethod]
-        public void PerftResults_Position8_Depth3() =>
-            TestPerftResults(Position8, 3);
-
-        [TestMethod]
         public void PerftResults_Position8_Depth4() =>
             TestPerftResults(Position8, 4);
+
+        [TestMethod]
+        public void PerftResults_Position9_Depth6() =>
+            TestPerftResults(Position9, 6);
+
+        [TestMethod]
+        public void PerftResults_Position10_Depth7() =>
+            TestPerftResults(Position10, 7);
+
+        [TestMethod]
+        public void PerftResults_Position11_Depth7() =>
+            TestPerftResults(Position11, 7);
+
+        [TestMethod]
+        public void PerftResults_Position12_Depth7() =>
+            TestPerftResults(Position12, 7);
+
+        [TestMethod]
+        public void PerftResults_Position13_Depth8() =>
+            TestPerftResults(Position13, 8);
+
+        [TestMethod]
+        public void PerftResults_Position14_Depth7() =>
+            TestPerftResults(Position14, 7);
+
+        [TestMethod]
+        public void PerftResults_Position15_Depth5() =>
+            TestPerftResults(Position15, 5);
+
+        [TestMethod]
+        public void PerftResults_Position16_Depth5() =>
+            TestPerftResults(Position16, 5);
+
+        [TestMethod]
+        public void PerftResults_Position17_Depth7() =>
+            TestPerftResults(Position17, 7);
+
+        [TestMethod]
+        public void PerftResults_Position18_Depth6() =>
+            TestPerftResults(Position18, 6);
+
+        [TestMethod]
+        public void PerftResults_Position19_Depth8() =>
+            TestPerftResults(Position19, 8);
+
+        [TestMethod]
+        public void PerftResults_Position20_Depth8() =>
+            TestPerftResults(Position20, 8);
+
+        [TestMethod]
+        public void PerftResults_Position21_Depth10() =>
+            TestPerftResults(Position21, 10);
+
+        [TestMethod]
+        public void PerftResults_Position22_Depth9() =>
+            TestPerftResults(Position22, 9);
+
+        [TestMethod]
+        public void PerftResults_Position23_Depth7() =>
+            TestPerftResults(Position23, 7);
 
 
         private void TestPerftResults(string fen, int depth)
@@ -175,7 +140,7 @@ namespace Chess_Engine_Unit_Tests
             string moves = "";
             ConvertFromFen(fen);
 
-            Perft(depth, depth);
+            string results = PerftResults(depth);
 
             string correctResults = "";
 
@@ -193,7 +158,7 @@ namespace Chess_Engine_Unit_Tests
 
             StoreCorrectResults();
 
-            Assert.IsTrue(DoResultsMatch(LastPerftResults, correctResults));
+            Assert.IsTrue(DoResultsMatch(results, correctResults));
             stockfish.Dispose();
             
 
@@ -252,7 +217,7 @@ namespace Chess_Engine_Unit_Tests
                     bool found = results.Split(new[] { '\n' }).Select(l => l.Split(' ')[0][..^1]).Contains(move);
 
                     if (!found)
-                        Console.WriteLine($"\nLegal move {move} missing in position {fen} moves {moves}!");
+                        Console.WriteLine($"\nLegal move {move} missing in position {GetCurrentFen()} (moves {moves}).");
 
                     return found;
                 });
@@ -262,7 +227,7 @@ namespace Chess_Engine_Unit_Tests
             {
                 if (depth == 1)
                 {
-                    Console.WriteLine($"\nIllegal move {move} found in position {fen} moves {moves}!");
+                    Console.WriteLine($"\nIllegal move {move} found in position {GetCurrentFen()} (moves {moves}).");
                     return;
                 }
 
@@ -273,13 +238,12 @@ namespace Chess_Engine_Unit_Tests
                 int promotionType = move.Length == 5 ? Array.IndexOf(new[] { "", "p", "n", "b", "r", "q", "k" }, move.Substring(4, 1)) : 0;
                 Board.MakeMove(new(Board.PieceType(startIndex), 1UL << startIndex, 1UL << targetIndex, Board.PieceType(targetIndex), promotionType));
 
-                depth--;
-                Perft(depth, depth);
+                string results = PerftResults(--depth);
 
                 StoreCorrectResults();
 
                 // The DoResultsMatch function will check the new perft results and recursively call InvestigateMove until the root of the problem is found.
-                DoResultsMatch(LastPerftResults, correctResults);
+                DoResultsMatch(results, correctResults);
             }
         }
     }

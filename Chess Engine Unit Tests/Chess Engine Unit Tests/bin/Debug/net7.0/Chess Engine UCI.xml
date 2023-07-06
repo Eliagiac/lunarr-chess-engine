@@ -25,8 +25,56 @@
             Update the bitboards based on the Squares list (discontinued)
             </summary>
         </member>
+        <member name="T:Engine">
+            <summary>The <see cref="T:Engine"/> class contains the main features of the engine.</summary>
+        </member>
         <member name="F:Engine.Null">
-            <summary></summary>
+            <summary>Represents a value that is either not usable or incorrect.</summary>
+        </member>
+        <member name="F:Engine.Infinity">
+            <summary>The maximum evaluation of any position.</summary>
+        </member>
+        <member name="F:Engine.Checkmate">
+            <summary>The score given to a position with checkmate on the board.</summary>
+            <remarks>Positions with a forced mating sequence are given a score of
+            <see cref="F:Engine.Checkmate"/> - <c>distance from mate</c>. For example, <c>mate in 5</c> = <c>31995</c>.</remarks>
+        </member>
+        <member name="F:Engine.Draw">
+            <summary>The evaluation of a drawn position or stalemate.</summary>
+        </member>
+        <member name="F:Engine.s_searchStopwatch">
+            <summary><see cref="T:System.Diagnostics.Stopwatch"/> that keeps track of the total time taken by the current search.</summary>
+            <remarks>Note that it is not reset on different iterations of iterative deepening.</remarks>
+        </member>
+        <member name="F:Engine.s_lateMoveThresholds">
+            <summary>Minimum move index to use late move reductions, depending on total move count.</summary>
+        </member>
+        <member name="F:Engine.s_futilityMargin">
+            <summary>If the evaluation is too low compared to alpha (by at least <c><see cref="F:Engine.s_futilityMargin"/>[Improving 0/1][Depth]</c>) more moves will be skipped.</summary>
+            <remarks>The margin is lower if the evaluation has improved since the player's last turn, 
+            and is directly proportional to the depth. </remarks>
+        </member>
+        <member name="F:Engine.s_aspirationWindowsMultipliers">
+            <summary>Alpha and beta aspiration window increase factor.</summary>
+        </member>
+        <member name="F:Engine.s_lateMoveDepthReductions">
+            <summary>Depth reduction for late moves depending on the search depth and the current move number.</summary>
+            <remarks>Later moves will receive greater depth reductions.</remarks>
+        </member>
+        <member name="F:Engine.s_killerMoves">
+            <summary>Killer moves are quiet moves that caused a beta cutoff, indexed by <c>[KillerMoveIndex, Ply]</c>.<br />
+            If the same move is found in another position at the same ply, it will be prioritized.</summary>
+            <remarks>2 killer moves are stored at each ply. Storing more would increase the complexity of adding a new move.</remarks>
+        </member>
+        <member name="F:Engine.s_historyHeuristics">
+            <summary>Bonus based on the success of a move in other positions.</summary>
+            <remarks>Moves are identified using butterfly boards (https://www.chessprogramming.org/Butterfly_Boards) with [ColorIndex][StartSquareIndex, TargetSquareIndex].</remarks>
+        </member>
+        <member name="P:Engine.WasSearchAborted">
+            <summary>If the search was abruptly interrupted, the returned values will be unusable.</summary>
+        </member>
+        <member name="P:Engine.MainLine">
+            <summary>The best move found by the engine, and the best play sequence that follows it.</summary>
         </member>
         <member name="M:Engine.Search(Node,System.Int32,System.Int32,System.Int32,Line@,System.Boolean,System.UInt64,System.Boolean)">
             <summary>

@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "2ho5xFUx6IRyp3+R5iDUyx4sz2G0XcdB5VthJuCzoBMsoniwRoBlep0Vj9vyhKYYr+bv2Q4BgbXhWIl4uUI/Tg==",
+  "dgSpecHash": "lhlFalgLhteO3NKrHGlutIr+4S5iqLSw+nQPl9Mcjuk51xGWztJ8BIecyiEJqfuhshmyoBh4u71qsMBjmIFELg==",
   "success": true,
-  "projectFilePath": "C:\\Users\\eliag\\source\\repos\\Chess Engine Unit Tests\\Chess Engine Unit Tests\\Chess Engine Unit Tests.csproj",
+  "projectFilePath": "C:\\Users\\eliag\\OneDrive\\Documenti\\GitHub\\chess\\Chess Engine Unit Tests\\Chess Engine Unit Tests\\Chess Engine Unit Tests.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\eliag\\.nuget\\packages\\coverlet.collector\\3.1.2\\coverlet.collector.3.1.2.nupkg.sha512",
     "C:\\Users\\eliag\\.nuget\\packages\\microsoft.codecoverage\\17.3.2\\microsoft.codecoverage.17.3.2.nupkg.sha512",

@@ -9,37 +9,13 @@ MoveData.ComputeMoveData();
 MoveData.GenerateDirectionalMasks();
 MoveData.ComputeMagicBitboards();
 
-UseMoveOrdering = true;
-UseOpeningBook = false;
-LateMoveReductionMinimumTreshold = 1;
-LateMoveReductionPercentage = 1.0;
-UseTT = true;
-ResetTTOnEachSearch = false;
-ShallowDepthThreshold = 8;
-UseOpeningBook = false;
-InternalIterativeDeepeningDepthReduction = 5;
-ProbCutDepthReduction = 4;
-VerificationSearchMinimumDepth = 6;
-MultiPvCount = 1;
-
-Init();
-
+TT.Resize(64);
 
 ConvertFromFen(StartingFen);
 
 
-bool wait = false;
 while (true)
 {
-    //if (BestMoveFound)
-    //{
-    //    Console.WriteLine($"bestmove {MainLine.Move}");
-    //    BestMoveFound = false;
-    //    wait = false;
-    //}
-
-    if (wait) continue;
-
     string[] commands = Console.ReadLine().Split(' ');
 
     switch (commands[0])
@@ -128,16 +104,14 @@ while (true)
 
         case "go":
 
-            if (commands.Contains("multipv")) MultiPvCount = int.Parse(commands[Array.IndexOf(commands, "multipv") + 1]);
+            if (commands.Contains("multipv")) SetMultiPVCount(int.Parse(commands[Array.IndexOf(commands, "multipv") + 1]));
 
             switch (commands[1])
             {
                 case "movetime":
-                    UseTimeLimit = true;
-                    UseTimeManagement = false;
                     try
                     {
-                        TimeLimit = float.Parse(commands[2]) / 1000;
+                        SetSearchLimit(SearchLimit.Time, int.Parse(commands[2]));
                     }
                     catch (FormatException ex)
                     {
@@ -150,29 +124,24 @@ while (true)
                     break;
 
                 case "infinite":
-                    UseTimeLimit = false;
-                    UseTimeManagement = false;
-                    TimeLimit = 64; // Max depth.
+                    SetSearchLimit(SearchLimit.None, 0);
 
                     FindBestMove();
 
                     break;
 
                 case "depth":
-                    UseTimeLimit = false;
-                    UseTimeManagement = false;
-
-                    TimeLimit = float.Parse(commands[2]); // Max depth.
+                    SetSearchLimit(SearchLimit.Depth, int.Parse(commands[2]));
 
                     FindBestMove();
 
                     break;
 
                 default:
-                    UseTimeLimit = true;
-                    UseTimeManagement = true;
+                    // The optimum time will be set to roughly half the max time with a value of 2.
+                    const float optimumTimeFactor = 2f;
 
-                    int movesToGo = 0;
+                    int movesToGo = 40;
                     int totTime = 0;
                     int increment = 0;
 
@@ -202,30 +171,14 @@ while (true)
                         }
                     }
 
-                    // From Stockfish.
-                    OptimumTime = (Math.Max(totTime, 10));
-                    MaximumTime = (Math.Max(totTime, 10));
+                    int totTimeWithIncrement = 10 + totTime + (increment * movesToGo);
+                    int optimumTotTimeWithIncrement = 10 + totTime + (int)(increment * movesToGo * optimumTimeFactor);
 
-                    int hypMyTime = 0;
+                    SetSearchLimit(SearchLimit.TimeManagement, totTimeWithIncrement / movesToGo);
+                    SetOptimumTime(optimumTotTimeWithIncrement / (int)(movesToGo * optimumTimeFactor));
 
-                    // We calculate optimum time usage for different hypothetical "moves to go" values
-                    // and choose the minimum of calculated search time values. Usually the greatest
-                    // hypMTG gives the minimum values.
-                    for (int hypMTG = 1; hypMTG <= Math.Min(movesToGo > 0 ? movesToGo : 50, 50) ; hypMTG++)
-                    {
-                        // Calculate thinking time for hypothetical "moves to go"-value
-                        hypMyTime = totTime + increment * (hypMTG - 1);
-
-                        hypMyTime = Math.Max(hypMyTime, 0);
-
-                        int t1 = 10 + Remaining(hypMyTime, hypMTG, Ply, 0);
-                        int t2 = 10 + Remaining(hypMyTime, hypMTG, Ply, 1);
-
-                        OptimumTime = Math.Min(t1, OptimumTime);
-                        MaximumTime = Math.Min(t2, MaximumTime);
-                    }
-
-                    TimeLimit = (MaximumTime - 10) / 1000f;
+                    Console.WriteLine("Limit: " + totTimeWithIncrement / movesToGo);
+                    Console.WriteLine("Optimum: " + optimumTotTimeWithIncrement / (int)(movesToGo * optimumTimeFactor));
 
                     FindBestMove();
 
@@ -248,42 +201,9 @@ while (true)
 
         case "stop":
             AbortSearch();
-            wait = true;
             break;
 
         case "quit":
             return;
     }
-}
-
-
-// From Stockfish.
-int Remaining(int myTime, int movesToGo, int ply, int T)
-{
-    double TMaxRatio = (T == 0 ? 1.0 : 7.3);
-    double TStealRatio = (T == 0 ? 0.0 : 0.34);
-
-    double moveImportance = MoveImportance(ply);
-    double otherMovesImportance = 0.0;
-
-    for (int i = 1; i < movesToGo; ++i)
-        otherMovesImportance += MoveImportance(ply + 2 * i);
-
-    double ratio1 = (TMaxRatio * moveImportance) / (TMaxRatio * moveImportance + otherMovesImportance);
-    double ratio2 = (moveImportance + TStealRatio * otherMovesImportance) / (moveImportance + otherMovesImportance);
-
-    return (int)(myTime * Math.Min(ratio1, ratio2)); // Halve the time (for lack of better implementation).
-}
-
-// MoveImportance() is a skew-logistic function based on naive statistical
-// analysis of "how many games are still undecided after n half-moves". Game
-// is considered "undecided" as long as neither side has >275cp advantage.
-// Data was extracted from the CCRL game database with some simple filtering criteria.
-double MoveImportance(int ply)
-{
-    const double XScale = 6.85;
-    const double XShift = 64.5;
-    const double Skew = 0.171;
-
-    return Math.Pow((1 + Math.Exp((ply - XShift) / XScale)), -Skew) + 0.000000000001; // Ensure non-zero
 }

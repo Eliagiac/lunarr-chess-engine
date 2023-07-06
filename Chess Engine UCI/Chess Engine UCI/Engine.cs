@@ -23,18 +23,23 @@ public class Engine
 
     private const int MaxPly = 64;
 
+    private const int LateMoveReductionsMinimumThreshold = 1;
+    private const double LateMoveReductionsPercentage = 1.0;
+    private const int ShallowDepthThreshold = 8;
+    private const int InternalIterativeDeepeningDepthReduction = 5;
+    private const int ProbCutDepthReduction = 4;
+
+    private const bool ResetTTOnEachSearch = false;
+
 
     /// <summary><see cref="Stopwatch"/> that keeps track of the total time taken by the current search.</summary>
     /// <remarks>Note that it is not reset on different iterations of iterative deepening.</remarks>
     private static readonly Stopwatch s_searchStopwatch = new();
 
-    /// <summary>If the search was abruptly interrupted, the returned values will be unusable.</summary>
-    public static bool WasSearchAborted { get; private set; }
-
     /// <summary>Minimum move index to use late move reductions, depending on total move count.</summary>
     private static readonly int[] s_lateMoveThresholds = 
         Enumerable.Range(0, 300).Select(totalMoveCount => (int)(
-        (totalMoveCount + LateMoveReductionMinimumTreshold) - (totalMoveCount * LateMoveReductionPercentage))).ToArray();
+        (totalMoveCount + LateMoveReductionsMinimumThreshold) - (totalMoveCount * LateMoveReductionsPercentage))).ToArray();
 
     /// <summary>If the evaluation is too low compared to alpha (by at least <c><see cref="s_futilityMargin"/>[Improving 0/1][Depth]</c>) more moves will be skipped.</summary>
     /// <remarks>The margin is lower if the evaluation has improved since the player's last turn, 
@@ -44,21 +49,8 @@ public class Engine
         Enumerable.Range(0, 64).Select(depth => 165 * (depth - 1)).ToArray(),
     };
 
-    private static Move[,] s_killerMoves = new Move[2, MaxPly];
-
-    private static int s_maxExtensions;
-
-    /// <summary>The best move found by the engine, and the best play sequence that follows it.</summary>
-    public static Line? MainLine { get; private set; }
-    private static Line? s_currentMainLine;
-
-    private static CancellationTokenSource? s_abortSearchTimer;
-
+    /// <summary>Alpha and beta aspiration window increase factor.</summary>
     private static readonly int[] s_aspirationWindowsMultipliers = { 4, 4 };
-
-    /// <summary>Bonus based on the success of a move in other positions.</summary>
-    /// <remarks>Moves are identified using butterfly boards (https://www.chessprogramming.org/Butterfly_Boards) with [ColorIndex][StartSquareIndex, TargetSquareIndex].</remarks>
-    private static int[][,] s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
 
     /// <summary>Depth reduction for late moves depending on the search depth and the current move number.</summary>
     /// <remarks>Later moves will receive greater depth reductions.</remarks>
@@ -69,89 +61,129 @@ public class Engine
             if (depth == 0 || moveNumber == 0) return 0;
 
             return Max((int)Round(Log(depth) * Log(moveNumber) / 2f) - 1, 0);
-        }).ToArray()).ToArray();
+        }
+        ).ToArray()).ToArray();
 
-    public static float TimeLimit;
-    public static bool UseTimeLimit;
-    public static bool UseTimeManagement;
-    public static bool UseMoveOrdering;
-    public static int LateMoveReductionMinimumTreshold;
-    public static double LateMoveReductionPercentage;
-    public static ulong SearchNodes;
-    public static List<int> SearchNodesPerDepth;
-    public static List<string> BestMovesThisSearch;
-    public static bool UseTT;
-    public static bool ResetTTOnEachSearch;
-    public static bool UseOpeningBook;
-    public static int InternalIterativeDeepeningDepthReduction;
-    public static int ProbCutDepthReduction;
-    public static int VerificationSearchMinimumDepth;
-    public static int NullMovePrunes;
-    public static int MaxDepthReachedCount;
-    public static int FutilityPrunes;
-    public static int ShallowDepthThreshold;
-    public static int MoveCountBasedPrunes;
+    /// <summary>Killer moves are quiet moves that caused a beta cutoff, indexed by <c>[KillerMoveIndex, Ply]</c>.<br />
+    /// If the same move is found in another position at the same ply, it will be prioritized.</summary>
+    /// <remarks>2 killer moves are stored at each ply. Storing more would increase the complexity of adding a new move.</remarks>
+    private static Move[,] s_killerMoves = new Move[2, MaxPly];
 
-    public static int Ply;
+    private static int s_maxExtensions;
 
-    public static int OptimumTime;
-    public static int MaximumTime;
+    private static Line? s_currentMainLine;
 
-    public static int SelectiveDepth;
+    private static CancellationTokenSource? s_abortSearchTimer;
 
-    public static Node RootNode;
+    /// <summary>Bonus based on the success of a move in other positions.</summary>
+    /// <remarks>Moves are identified using butterfly boards (https://www.chessprogramming.org/Butterfly_Boards) with [ColorIndex][StartSquareIndex, TargetSquareIndex].</remarks>
+    private static int[][,] s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
 
-    public static int MultiPvCount;
+    private static int s_depthLimit;
+    private static int s_timeLimit;
+    private static int s_optimumTime;
 
-    public static List<Move> ExcludedRootMoves;
+    private static bool s_useDepthLimit;
+    private static bool s_useTimeLimit;
+    private static bool s_useTimeManagement;
+
+    private static int s_maxDepthReached;
 
 
-    private static int _totalSearchNodes;
+    private static int s_multiPvCount = 1;
 
-    public static string LastPerftResults;
+    private static List<Move> s_excludedRootMoves;
 
 
-    public static void Init()
+    private static int s_totalSearchNodes;
+
+
+    public enum SearchLimit
     {
-        TT.Resize(8);
+        None,
+        Depth,
+        Time,
+        TimeManagement,
     }
 
 
-    public static int Perft(int depth, int startingDepth, Move previousMove = null, Move ancestorMove = null)
+    /// <summary>If the search was abruptly interrupted, the returned values will be unusable.</summary>
+    public static bool WasSearchAborted { get; private set; }
+
+    /// <summary>The best move found by the engine, and the best play sequence that follows it.</summary>
+    public static Line? MainLine { get; private set; }
+
+
+    public static void SetSearchLimit(SearchLimit searchLimit, int limit)
     {
-        if (depth == startingDepth) LastPerftResults = "";
-        
-        if (depth == 0)
+        switch (searchLimit)
         {
-            if (startingDepth == 1)
-            {
-                Console.WriteLine($"{previousMove}: 1");
+            case SearchLimit.None:
+                s_useDepthLimit = true;
+                s_useTimeLimit = false;
+                s_useTimeManagement = false;
 
-                if (LastPerftResults != "") LastPerftResults += "\n";
-                LastPerftResults += $"{previousMove}: 1";
-            }
+                s_depthLimit = MaxPly;
+                break;
 
-            return 1;
+            case SearchLimit.Depth:
+                s_useDepthLimit = true;
+                s_useTimeLimit = false;
+                s_useTimeManagement = false;
+
+                s_depthLimit = limit;
+                break;
+
+            case SearchLimit.Time:
+                s_useDepthLimit = false;
+                s_useTimeLimit = true;
+                s_useTimeManagement = false;
+
+                s_timeLimit = limit;
+                break;
+
+            case SearchLimit.TimeManagement:
+                s_useDepthLimit = false;
+                s_useTimeLimit = true;
+                s_useTimeManagement = true;
+
+                s_timeLimit = limit;
+                break;
         }
+    }
+
+    public static void SetOptimumTime(int optimumTime) => s_optimumTime = optimumTime;
+
+    public static void SetMultiPVCount(int multiPVCount) => s_multiPvCount = multiPVCount;
+
+
+    public static string PerftResults(int depth)
+    {
+        List<string> results = new();
 
         var moves = Board.GenerateAllLegalMoves(promotionMode: 0);
+        foreach (var move in moves)
+        {
+            Board.MakeMove(move);
+            results.Add($"{move}: {Perft(depth - 1)}");
+            Board.UnmakeMove(move);
+        }
 
+        return string.Join('\n', results);
+    }
+
+    private static int Perft(int depth)
+    {
+        if (depth == 0) return 1;
+
+        var moves = Board.GenerateAllLegalMoves(promotionMode: 0);
         int numPositions = 0;
         foreach (var move in moves)
         {
             Board.MakeMove(move);
-            numPositions += Perft(depth - 1, startingDepth, move, previousMove);
+            numPositions += Perft(depth - 1);
             Board.UnmakeMove(move);
         }
-
-        if (depth == startingDepth - 1)
-        {
-            Console.WriteLine($"{previousMove}: {numPositions}");
-
-            if (LastPerftResults != "") LastPerftResults += "\n";
-            LastPerftResults += $"{previousMove}: {numPositions}";
-        }
-
         return numPositions;
     }
 
@@ -162,7 +194,7 @@ public class Engine
             StartSearch, TaskCreationOptions.LongRunning);
 
         s_abortSearchTimer = new();
-        if (UseTimeLimit) Task.Delay((int)(TimeLimit * 1000), s_abortSearchTimer.Token).ContinueWith((t) => AbortSearch());
+        if (s_useTimeLimit) Task.Delay(s_timeLimit, s_abortSearchTimer.Token).ContinueWith((t) => AbortSearch());
     }
 
     public static void AbortSearch()
@@ -174,26 +206,19 @@ public class Engine
     {
         s_abortSearchTimer?.Cancel();
 
-        Console.WriteLine($"bestmove {MainLine.Move}");
+        Console.WriteLine($"bestmove {MainLine?.Move?.ToString() ?? ""}");
     }
 
     private static void StartSearch()
     {
-        TT.IsEnabled = UseTT;
-
         WasSearchAborted = false;
 
-        SearchNodes = 0;
-        _totalSearchNodes = 0;
-
-        SearchNodesPerDepth = new();
+        s_totalSearchNodes = 0;
 
         Board.PositionHistory = new();
 
         MainLine = new();
         s_currentMainLine = new();
-
-        BestMovesThisSearch = new();
 
         if (ResetTTOnEachSearch) TT.Clear();
 
@@ -205,9 +230,9 @@ public class Engine
         int evaluation;
         do
         {
-            ExcludedRootMoves = new();
+            s_excludedRootMoves = new();
 
-            for (int pvIndex = 0; pvIndex < MultiPvCount; pvIndex++)
+            for (int pvIndex = 0; pvIndex < s_multiPvCount; pvIndex++)
             {
                 int alpha = -Infinity;
                 int beta = Infinity;
@@ -222,7 +247,7 @@ public class Engine
                     s_killerMoves = new Move[2, MaxPly];
                     s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
 
-                    SelectiveDepth = 0;
+                    s_maxDepthReached = 0;
 
                     // Maximum amount of search extensions inside any given branch.
                     // s_maxExtensions = depth -> the SelDepth may be up to twice the depth.
@@ -230,8 +255,8 @@ public class Engine
                     s_maxExtensions = depth;
 
 
-                    RootNode = new(0, SearchType.Normal);
-                    evaluation = Search(RootNode, depth, alpha, beta, out s_currentMainLine);
+                    Node root = new(0, SearchType.Normal);
+                    evaluation = Search(root, depth, alpha, beta, out s_currentMainLine);
 
                     bool searchFailed = false;
                     if (evaluation <= alpha)
@@ -249,7 +274,7 @@ public class Engine
                     alpha = Max(evaluation - alphaWindow, -Infinity);
                     beta = Min(evaluation + betaWindow, Infinity);
 
-                    if (!searchFailed) break;
+                    if (!searchFailed || WasSearchAborted) break;
                 }
 
 
@@ -303,28 +328,24 @@ public class Engine
 
                 if (!WasSearchAborted)
                 {
-                    RootNode.SetScore(evaluation);
-
                     //DepthReachedData = new(CurrentDepthReachedData);
                     //BestMovesThisSearch.Add(CurrentMainLine.Move.ToString());
                     MainLine = new(s_currentMainLine);
-                    SearchNodes = (ulong)_totalSearchNodes;
-                    SearchNodesPerDepth.Add(_totalSearchNodes);
 
                     Console.WriteLine($"info " +
                         $"depth {depth} " +
-                        $"seldepth {SelectiveDepth + 1} " +
+                        $"seldepth {s_maxDepthReached + 1} " +
                         $"multipv {pvIndex + 1} " +
                         $"score " +
                             (!IsMateScore(evaluation) ?
                             $"cp {evaluation} " :
                             $"mate {((evaluation > 0) ? "+" : "-")}{Ceiling((Checkmate - Abs(evaluation)) / 2.0)} ") +
-                        $"nodes {SearchNodes} " +
-                        $"nps {(int)Round(SearchNodes / (double)s_searchStopwatch.ElapsedMilliseconds * 1000)} " +
+                        $"nodes {s_totalSearchNodes} " +
+                        $"nps {(int)Round(s_totalSearchNodes / (double)s_searchStopwatch.ElapsedMilliseconds * 1000)} " +
                         $"time {s_searchStopwatch.ElapsedMilliseconds} " +
                         $"pv {MainLine}");
 
-                    ExcludedRootMoves.Add(MainLine?.Move);
+                    s_excludedRootMoves.Add(MainLine?.Move);
 
                     //Stream stream = new FileStream(AppDomain.CurrentDomain.BaseDirectory + "RootNode.txt", FileMode.Create, FileAccess.Write);
                     //
@@ -334,15 +355,15 @@ public class Engine
 
                 else break;
 
-                if (ExcludedRootMoves.Count >= Board.GenerateAllLegalMoves(promotionMode: 2).Count) break;
+                if (s_excludedRootMoves.Count >= Board.GenerateAllLegalMoves(promotionMode: 2).Count) break;
             }
 
             depth++;
         }
         while (
-        !WasSearchAborted &&
-        (!UseTimeManagement || s_searchStopwatch.ElapsedMilliseconds <= OptimumTime) &&
-        (UseTimeLimit || depth <= TimeLimit /* Time limit also represents the max depth. */));
+        !WasSearchAborted && 
+        (!s_useTimeManagement || s_searchStopwatch.ElapsedMilliseconds <= s_optimumTime) &&
+        (!s_useDepthLimit || depth <= s_depthLimit));
 
         s_searchStopwatch.Stop();
         FinishSearch();
@@ -382,7 +403,10 @@ public class Engine
         bool rootNode = ply == 0;
 
 
-        if (WasSearchAborted) return Null;
+        if (WasSearchAborted)
+        {
+            return Null;
+        }
 
         // Detect draws by repetition.
         if (IsDrawByRepetition(Board.ZobristKey)) return Draw;
@@ -403,7 +427,7 @@ public class Engine
         }
 
 
-        if (ply > SelectiveDepth) SelectiveDepth = ply;
+        if (ply > s_maxDepthReached) s_maxDepthReached = ply;
 
 
         // Mate Distance Pruning:
@@ -509,7 +533,7 @@ public class Engine
 
         // Rearrange the moves list to try to come across better moves earlier,
         // causing more beta cutoffs and a faster search overall.
-        if (UseMoveOrdering) OrderMoves(moves, ply);
+        OrderMoves(moves, ply);
 
 
         // Extend the search when in check.
@@ -562,7 +586,7 @@ public class Engine
         for (int i = 0; i < moves.Count; i++)
         {
             // Skip PV lines that have already been explored.
-            if (rootNode && ExcludedRootMoves.Any(m => m.Equals(moves[i]))) continue;
+            if (rootNode && s_excludedRootMoves.Any(m => m.Equals(moves[i]))) continue;
 
             // Restore this node's extension count.
             // The value is modified for each child node,
@@ -597,7 +621,7 @@ public class Engine
 
 
             // Update node count after pruning.
-            _totalSearchNodes++;
+            s_totalSearchNodes++;
 
 
             // Depth reduction.
@@ -706,8 +730,6 @@ public class Engine
                 {
                     // It's essential to unmake moves when pruning inside the moves loop.
                     Board.UnmakeMove(moves[i]);
-
-                    FutilityPrunes++;
                     return true;
                 }
 
@@ -724,8 +746,6 @@ public class Engine
                     !isCaptureOrPromotion && !givesCheck)
                 {
                     Board.UnmakeMove(moves[i]);
-
-                    MoveCountBasedPrunes++;
                     return true;
                 }
 
@@ -1026,8 +1046,6 @@ public class Engine
                     // Avoid returning unproven wins.
                     if (IsMateScore(score)) score = beta;
 
-                    NullMovePrunes++;
-
                     nullMovePruningScore = score;
 
                     node.NodeType = NodeType.PrunedNode;
@@ -1050,7 +1068,7 @@ public class Engine
 
                 // Note: should only generate moves with SEE score > probCutBeta - staticEvaluation.
                 var moves = Board.GenerateAllLegalMoves(capturesOnly: true, promotionMode: 2);
-                if (UseMoveOrdering) OrderMoves(moves, -1);
+                OrderMoves(moves, -1);
 
                 for (int i = 0; i < moves.Count; i++)
                 {
@@ -1124,11 +1142,6 @@ public class Engine
         {
             if (ply >= MaxPly)
             {
-                MaxDepthReachedCount++;
-
-                //if (CurrentDepthReachedData.Any(d => d.Depth == ply)) CurrentDepthReachedData.Find(d => d.Depth == ply).Count++;
-                //else CurrentDepthReachedData.Add(new(ply));
-
                 return true;
             }
 
@@ -1240,7 +1253,7 @@ public class Engine
         // possible because not all legal moves were generated.
 
 
-        if (UseMoveOrdering) OrderMoves(moves, -1);
+        OrderMoves(moves, -1);
 
         //bool isEndGame = gamePhase < EndgamePhaseScore;
 
@@ -1259,7 +1272,7 @@ public class Engine
 
             Board.MakeMove(moves[i]);
 
-            _totalSearchNodes++;
+            s_totalSearchNodes++;
 
             node.SearchType = SearchType.Quiescence;
             int score = -QuiescenceSearch(node + 1, -beta, -alpha, out Line nextLine);
@@ -1359,11 +1372,6 @@ public class Engine
         {
             if (ply >= MaxPly)
             {
-                MaxDepthReachedCount++;
-
-                //if (CurrentDepthReachedData.Any(d => d.Depth == ply)) CurrentDepthReachedData.Find(d => d.Depth == ply).Count++;
-                //else CurrentDepthReachedData.Add(new(ply));
-
                 return true;
             }
 

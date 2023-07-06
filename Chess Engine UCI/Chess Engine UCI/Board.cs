@@ -803,7 +803,8 @@ public class Board
                 {
                     if (PieceCount(AllOccupiedSquares & attackRayToKing) == 3) return false;
 
-                    if (pieceType == Pawn && move.TargetSquare == EnPassantSquare && 
+                    if (GetRank(attackerIndex) == GetRank(startSquareIndex) &&
+                        pieceType == Pawn && move.TargetSquare == EnPassantSquare && 
                         PieceCount(AllOccupiedSquares & attackRayToKing) == 4) return false;
                 }
 
