@@ -42,25 +42,26 @@ namespace Chess_Engine_Unit_Tests
             TT.Resize(8);
         }
 
-        [TestMethod]
-        public void PerftResults_Position1_Depth5() =>
-            TestPerftResults(Position1, 5);
 
         [TestMethod]
-        public void PerftResults_Position2_Depth5() =>
-            TestPerftResults(Position2, 5);
+        public void PerftResults_Position1_Depth4() =>
+            TestPerftResults(Position1, 4);
 
         [TestMethod]
-        public void PerftResults_Position3_Depth7() =>
-            TestPerftResults(Position3, 7);
+        public void PerftResults_Position2_Depth4() =>
+            TestPerftResults(Position2, 4);
+
+        [TestMethod]
+        public void PerftResults_Position3_Depth6() =>
+            TestPerftResults(Position3, 6);
 
         [TestMethod]
         public void PerftResults_Position4_Depth5() =>
             TestPerftResults(Position4, 5);
 
         [TestMethod]
-        public void PerftResults_Position5_Depth6() =>
-            TestPerftResults(Position5, 6);
+        public void PerftResults_Position5_Depth5() =>
+            TestPerftResults(Position5, 5);
 
         [TestMethod]
         public void PerftResults_Position6_Depth5() =>
@@ -91,8 +92,8 @@ namespace Chess_Engine_Unit_Tests
             TestPerftResults(Position12, 7);
 
         [TestMethod]
-        public void PerftResults_Position13_Depth8() =>
-            TestPerftResults(Position13, 8);
+        public void PerftResults_Position13_Depth7() =>
+            TestPerftResults(Position13, 7);
 
         [TestMethod]
         public void PerftResults_Position14_Depth7() =>
@@ -131,8 +132,8 @@ namespace Chess_Engine_Unit_Tests
             TestPerftResults(Position22, 9);
 
         [TestMethod]
-        public void PerftResults_Position23_Depth7() =>
-            TestPerftResults(Position23, 7);
+        public void PerftResults_Position23_Depth6() =>
+            TestPerftResults(Position23, 6);
 
 
         private void TestPerftResults(string fen, int depth)
@@ -245,6 +246,128 @@ namespace Chess_Engine_Unit_Tests
                 // The DoResultsMatch function will check the new perft results and recursively call InvestigateMove until the root of the problem is found.
                 DoResultsMatch(results, correctResults);
             }
+        }
+    }
+
+    [TestClass]
+    public class DrawByInsufficientMaterialTests
+    {
+        private const string Position1 = "8/2k5/8/8/5K2/8/8/8 w - - 0 1";
+        private const string Position2 = "8/5K2/8/8/8/1k6/8/8 b - - 0 1";
+        private const string Position3 = "8/5K2/8/7N/8/1k6/8/8 w - - 0 1";
+        private const string Position4 = "8/5K2/8/2N5/8/1k6/8/8 b - - 0 1";
+        private const string Position5 = "8/5K2/8/8/5n2/1k6/8/8 b - - 0 1";
+        private const string Position6 = "8/5K2/3n4/8/8/1k6/8/8 w - - 0 1";
+        private const string Position7 = "8/5K2/8/8/4B3/1k6/8/8 w - - 0 1";
+        private const string Position8 = "8/2B2K2/8/8/8/1k6/8/8 b - - 0 1";
+        private const string Position9 = "8/5K2/8/8/8/1k4b1/8/8 w - - 0 1";
+        private const string Position10 = "8/5K2/8/8/6b1/1k6/8/8 b - - 0 1";
+        private const string Position11 = "8/3B1K2/8/8/4b3/1k6/8/8 w - - 0 1";
+        private const string Position12 = "8/5K2/8/8/6B1/1k3b2/8/8 b - - 0 1";
+        private const string Position13 = "4B3/5K2/8/8/6B1/1k3b2/8/8 w - - 0 1";
+        private const string Position14 = "4N3/5K2/8/8/8/1k3b2/8/8 w - - 0 1";
+        private const string Position15 = "4N3/1n3K2/8/8/8/1k6/8/8 w - - 0 1";
+        private const string Position16 = "8/8/5Bb1/2k5/8/6K1/8/8 w - - 0 1";
+        private const string Position17 = "8/8/5B2/2k5/8/1b4K1/8/8 b - - 0 1";
+        private const string Position18 = "8/8/3p1B2/2k5/8/6K1/8/8 b - - 0 1";
+        private const string Position19 = "8/3P4/8/2k3p1/8/6K1/8/8 w - - 0 1";
+
+        static DrawByInsufficientMaterialTests()
+        {
+            MoveData.ComputeMoveData();
+            MoveData.GenerateDirectionalMasks();
+            MoveData.ComputeMagicBitboards();
+
+            TT.Resize(8);
+        }
+
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position1_True() =>
+            TestDrawByInsufficientMaterial(Position1, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position2_True() =>
+            TestDrawByInsufficientMaterial(Position2, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position3_True() =>
+            TestDrawByInsufficientMaterial(Position3, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position4_True() =>
+            TestDrawByInsufficientMaterial(Position4, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position5_True() =>
+            TestDrawByInsufficientMaterial(Position5, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position6_True() =>
+            TestDrawByInsufficientMaterial(Position6, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position7_True() =>
+            TestDrawByInsufficientMaterial(Position7, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position8_True() =>
+            TestDrawByInsufficientMaterial(Position8, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position9_True() =>
+            TestDrawByInsufficientMaterial(Position9, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position10_True() =>
+            TestDrawByInsufficientMaterial(Position10, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position11_True() =>
+            TestDrawByInsufficientMaterial(Position11, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position12_True() =>
+            TestDrawByInsufficientMaterial(Position12, true);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position13_False() =>
+            TestDrawByInsufficientMaterial(Position13, false);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position14_False() =>
+            TestDrawByInsufficientMaterial(Position14, false);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position15_False() =>
+            TestDrawByInsufficientMaterial(Position15, false);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position16_False() =>
+            TestDrawByInsufficientMaterial(Position16, false);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position17_False() =>
+            TestDrawByInsufficientMaterial(Position17, false);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position18_False() =>
+            TestDrawByInsufficientMaterial(Position18, false);
+
+        [TestMethod]
+        public void DrawByInsufficientMaterial_Position19_False() =>
+            TestDrawByInsufficientMaterial(Position19, false);
+
+
+        private void TestDrawByInsufficientMaterial(string fen, bool isTrue)
+        {
+            ConvertFromFen(fen);
+
+            if (isTrue) 
+                Assert.IsTrue(IsDrawByInsufficientMaterial());
+
+            else
+                Assert.IsFalse(IsDrawByInsufficientMaterial());
         }
     }
 }

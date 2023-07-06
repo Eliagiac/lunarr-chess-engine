@@ -92,7 +92,7 @@ public class Engine
 
     private static int s_multiPvCount = 1;
 
-    private static List<Move> s_excludedRootMoves;
+    private static List<Move> s_excludedRootMoves = new();
 
 
     private static int s_totalSearchNodes;
@@ -1487,15 +1487,42 @@ public class Engine
     /// <summary>If there is not enough material on the board for either player to checkate the opponent, it's a draw.</summary>
     public static bool IsDrawByInsufficientMaterial()
     {
-        return
-            PieceCount(Board.AllOccupiedSquares) == 2 || /* King vs king. */
-            (PieceCount(Board.OccupiedSquares[0]) == 2 && (Board.Bishops[0] != 0 || Board.Knights[0] != 0)) || /* King and bishop vs king or king and knight vs king. */
-            (PieceCount(Board.OccupiedSquares[1]) == 2 && (Board.Bishops[1] != 0 || Board.Knights[1] != 0)) || /* King vs king and bishop or king vs king and knight. */
-            ((PieceCount(Board.OccupiedSquares[0]) == 2 && PieceCount(Board.Bishops[0]) == 1) &&
-            (PieceCount(Board.OccupiedSquares[1]) == 2 && PieceCount(Board.Bishops[1]) == 1) &&
-            FirstSquareIndex(Board.Bishops[0]) % 2 == FirstSquareIndex(Board.Bishops[1]) % 2); /* King and bishop vs king and bishop with bishops of the same color. */
-    }
+        int whitePieceCount = PieceCount(Board.OccupiedSquares[0]);
+        int blackPieceCount = PieceCount(Board.OccupiedSquares[1]);
 
+        // It's not a draw if a player has more than 2 pieces.
+        if (whitePieceCount > 2 || blackPieceCount > 2) return false;
+
+        // King vs king.
+        if (whitePieceCount == 1 && blackPieceCount == 1) return true;
+
+
+        int whiteKnightCount = PieceCount(Board.Knights[0]);
+        int blackKnightCount = PieceCount(Board.Knights[1]);
+
+        // King and knight vs king.
+        if (whiteKnightCount == 1 && blackPieceCount == 1) return true;
+        if (blackKnightCount == 1 && whitePieceCount == 1) return true;
+
+
+        int whiteBishopCount = PieceCount(Board.Bishops[0]);
+        int blackBishopCount = PieceCount(Board.Bishops[1]);
+
+        // King and bishop vs king.
+        if (whiteBishopCount == 1 && blackPieceCount == 1) return true;
+        if (blackBishopCount == 1 && whitePieceCount == 1) return true;
+
+        // King and bishop vs king and bishop with bishops of the same color.
+        if (whitePieceCount == 2 && whiteBishopCount == 1 &&
+            blackPieceCount == 2 && blackBishopCount == 1)
+        {
+            if ((Board.Bishops[0] & Mask.LightSquares) != 0 && (Board.Bishops[1] & Mask.LightSquares) != 0) return true;
+            if ((Board.Bishops[0] & Mask.DarkSquares) != 0 && (Board.Bishops[1] & Mask.DarkSquares) != 0) return true;
+        }
+
+        return false;
+    }
+    
     public static bool IsCapture(Move move) =>
         move != null &&
         (move.CapturedPieceType != None);

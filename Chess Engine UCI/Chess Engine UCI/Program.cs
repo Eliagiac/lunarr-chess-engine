@@ -187,6 +187,25 @@ while (true)
 
             break;
 
+        case "setoption":
+            
+            if (commands[1] == "name")
+            {
+                switch (commands[2])
+                {
+                    case "Hash":
+
+                        if (commands[3] == "value")
+                        {
+                            TT.Resize(int.Parse(commands[4]));
+                        }
+
+                        break;
+                }
+            }
+
+            break;
+
         case "uci":
             Console.WriteLine("id name Engine");
             Console.WriteLine("id author Elia Giaccardi");
