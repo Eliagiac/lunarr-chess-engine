@@ -255,7 +255,7 @@ public class Engine
                     s_maxExtensions = depth;
 
 
-                    Node root = new(0, SearchType.Normal);
+                    Node root = new();
                     evaluation = Search(root, depth, alpha, beta, out s_currentMainLine);
 
                     bool searchFailed = false;
@@ -371,7 +371,7 @@ public class Engine
 
 
     /// <summary>
-    /// The Search function goes through every legal move,
+    /// The <see cref="Search"/> function goes through every legal move,
     /// then recursively calls itself on each of the opponent's responses
     /// until the depth reaches 0. <br /> Finally, the positions reached are evaluated.
     /// The path that leads to the best "forced evaluation" is then chosoen. <br />
@@ -379,22 +379,17 @@ public class Engine
     /// possibly finding more advanced tactics and better moves.
     /// </summary>
     /// <remarks>
-    /// The search tree is made up of search nodes.
-    /// Each node represents a certain position on the board,
-    /// reached after a specific sequence of moves (called a line). <br />
-    /// The parent of a node is the node above it in the tree, closer to the root.
-    /// The children of a node are all the nodes reached after 1 move, the grandchildren after 2 moves and so on. <br />
-    /// Sibling nodes are nodes at the same distance from the root (or <c>ply</c>). <br />
-    /// Pruning a branch means returning the search early in a node, speeding up the search in the parent node.
+    /// Terms such as evaluation, value and score all refer to the predicted quality of a position:
+    /// 'evaluation' (similarly to 'value' or 'eval') is used to describe approximations of the score, such as the values returned 
+    /// by the Evaluate() function, while 'score' is the value returned by the search function,
+    /// which is more accurate as it looked into future positions as well.
     /// </remarks>
     /// <param name="depth">The remaining depth to search before evaluating the positions reached.</param>
     /// <param name="alpha">The lower bound of the evaluation</param>
-    public static int Search(Node node, int depth, int alpha, int beta, out Line pvLine, bool useNullMovePruning = true, ulong previousCapture = 0, bool useMultiCut = true)
+    private static int Search(Node node, int depth, int alpha, int beta, out Line pvLine, bool useNullMovePruning = true, ulong previousCapture = 0, bool useMultiCut = true)
     {
         int ply = node.Ply;
         ref int extensions = ref node.Extensions;
-
-        SearchType parentSearchType = node.SearchType;
 
         // pvLine == null -> branch was pruned.
         // pvLine == empty -> node is an All-Node.
@@ -422,7 +417,6 @@ public class Engine
         // are available using the QuiescenceSearch function.
         if (depth <= 0)
         {
-            node.SearchType = SearchType.Quiescence;
             return QuiescenceSearch(node, alpha, beta, out pvLine);
         }
 
@@ -447,8 +441,8 @@ public class Engine
         int ttEval = TT.CorrectRetrievedMateScore(ttEntry.Evaluation, ply);
 
         // Store the best move found when this position was previously searched.
-        Line ttLine = ttHit ? ttEntry.Line : null;
-        Move ttMove = ttLine?.Move;
+        Line? ttLine = ttHit ? ttEntry.Line : null;
+        Move? ttMove = ttLine?.Move;
         bool ttMoveIsCapture = IsCaptureOrPromotion(ttMove);
         #endregion
 
@@ -468,13 +462,11 @@ public class Engine
 
         // Evaluation of the current position.
         ref int staticEvaluation = ref node.StaticEvaluation;
-
-        // Has the static evaluation improved since our last turn?
         bool hasStaticEvaluationImproved;
 
         // Approximation of the actual evaluation.
         // Found using the transposition table in case of a ttHit, otherwise evaluation = staticEvaluation.
-        // Note: might use results of lower depth searches. 
+        // Note: based on results of lower depth searches. 
         ref int evaluation = ref node.Evaluation;
 
         StoreStaticEvaluation(ref staticEvaluation, ref evaluation);
@@ -502,9 +494,6 @@ public class Engine
 
         if (ProbCut(ref staticEvaluation, ref pvLine, out int probCutScore)) return probCutScore;
         #endregion
-
-        // Reset search type after pruning.
-        node.SearchType = parentSearchType;
 
         // If the position is not in the transposition table,
         // save it with a reduced depth search for better move ordering.
@@ -570,16 +559,11 @@ public class Engine
         //    }
         //}
 
-        // The current node's extensions count will now be used to store its children's count.
-        // This value will be used at each iteration of the moves loop to restore it.
-        int extensionsBackup = extensions;
-
 
         // evaluationType == UpperBound -> node is an All-Node. All nodes were searched and none reached alpha. Alpha is returned.
         // evaluationType == Exact -> node is a PV-Node. All nodes were searched and some reached alpha. The new alpha is returned.
         // evaluationType == LowerBound -> node is a Cut-Node. Not all nodes were searched, because a beta cutoff occured. Beta is returned.
         EvaluationType evaluationType = EvaluationType.UpperBound;
-        node.NodeType = NodeType.AllNode;
 
         // Moves Loop:
         // Iterate through all legal moves and perform a depth - 1 search on each one.
@@ -587,13 +571,6 @@ public class Engine
         {
             // Skip PV lines that have already been explored.
             if (rootNode && s_excludedRootMoves.Any(m => m.Equals(moves[i]))) continue;
-
-            // Restore this node's extension count.
-            // The value is modified for each child node,
-            // so it needs to be reset here.
-            // Note: should be reset before pruning to ensure the proper value is used on each node.
-            extensions = extensionsBackup;
-
 
             // Make the move on the board.
             // The move must be unmade before moving on to the next one.
@@ -623,39 +600,36 @@ public class Engine
             // Update node count after pruning.
             s_totalSearchNodes++;
 
+            // If the branch wasn't pruned, create a new child node.
+            Node newNode = node.AddNewChild();
+            ref int score = ref newNode.Score;
+            ref int newExtensions = ref newNode.Extensions;
 
             // Depth reduction.
-            int R = 1;
+            int depthReduction = 1;
 
-            // Were late move reductions used on this move?
             bool usedLmr;
 
             // Reduce the depth of the next search if it is unlikely to reveal anything interesting.
             ReduceDepth();
 
             // Extend the depth of the next search if it is likely to be interesting.
-            ExtendDepth(ref extensions);
+            ExtendDepth(ref newExtensions);
 
 
             // Permorm a search on the new position with a depth reduced by R.
             // Note: the bounds need to be inverted (alpha = -beta, beta = -alpha), because what was previously the ceiling is now the score to beat, and viceversa.
             // Note: the score needs to be negated, because the evaluation in the point of view of the opponent is opposite to ours.
-            node.SearchType = SearchType.LateMoveReductionsNormal;
-            int score = -Search(node + 1, depth - R, -beta, -alpha, out Line nextLine);
-            node.Child.SetScore(score);
+            score = -Search(newNode, depth - depthReduction, -beta, -alpha, out Line nextLine);
 
             // In case late move reductions were used and the score exceeded alpha,
             // a re-search at full depth is needed to verify the score.
             if (usedLmr && score > alpha)
-            {
-                node.SearchType = SearchType.Normal;
-                score = -Search(node + 1, depth - 1, -beta, -alpha, out nextLine);
-                node.Child.SetScore(score);
-            }
+                score = -Search(newNode, depth - 1, -beta, -alpha, out nextLine);
 
 
             // Look for promotions that avoid a draw.
-            FindBetterPromotion();
+            //FindBetterPromotion();
 
 
             // Unmake the move on the board.
@@ -693,7 +667,6 @@ public class Engine
 
 
                 evaluationType = EvaluationType.Exact;
-                node.NodeType = NodeType.PVNode;
 
                 alpha = score;
 
@@ -709,15 +682,12 @@ public class Engine
                 if (score >= beta)
                 {
                     evaluationType = EvaluationType.LowerBound;
-                    node.NodeType = NodeType.CutNode;
 
                     TT.StoreEvaluation(depth, ply, beta, evaluationType, pvLine, staticEvaluation);
 
                     // If a quiet move caused a beta cutoff, update it's stats.
                     if (!isCapture) UpdateQuietMoveStats();
 
-                    // Reset search type before returning.
-                    node.SearchType = parentSearchType;
                     return beta;
                 }
             }
@@ -770,7 +740,7 @@ public class Engine
                         !moves[i].Equals(s_killerMoves[1, ply])))
                     {
                         usedLmr = true;
-                        R += s_lateMoveDepthReductions[Min(depth, 63)][Min(i, 63)];
+                        depthReduction += s_lateMoveDepthReductions[Min(depth, 63)][Min(i, 63)];
                     }
                 }
             }
@@ -802,7 +772,7 @@ public class Engine
                     ((moves[i].TargetSquare & Mask.SeventhRank) != 0))
                 {
                     extensions++;
-                    R--;
+                    depthReduction--;
                 }
 
                 //if (newExtensions >= s_maxExtensions) return;
@@ -816,35 +786,35 @@ public class Engine
             }
 
 
-            void FindBetterPromotion()
-            {
-                // Note: alternatives are only searched in case of a draw score.
-                // A possible improvement would be to search for any
-                // better promotion in case of, for example, a losing score.
-
-                if (moves[i].PromotionPiece != None && score == Draw)
-                {
-                    foreach (int promotionPiece in new int[] { Knight, Rook, Bishop })
-                    {
-                        // Unmake the previous promotion.
-                        Board.UnmakeMove(moves[i]);
-
-                        moves[i].PromotionPiece = promotionPiece;
-
-                        // Make the new promotion.
-                        Board.MakeMove(moves[i]);
-
-                        // Store the score of the new promotion.
-                        // Note: because it's a rare edge case, reductions are not used here. 
-                        // If this is found to be a bottleneck in the program, it could easily be optimized.
-                        score = -Search(node + 1, depth - 1, -beta, -alpha, out nextLine);
-                        node.Child.SetScore(score);
-
-                        // If a better promotion was found, exit the loop.
-                        if (score > Draw) break;
-                    }
-                }
-            }
+            //void FindBetterPromotion()
+            //{
+            //    // Note: alternatives are only searched in case of a draw score.
+            //    // A possible improvement would be to search for any
+            //    // better promotion in case of, for example, a losing score.
+            //
+            //    if (moves[i].PromotionPiece != None && score == Draw)
+            //    {
+            //        foreach (int promotionPiece in new int[] { Knight, Rook, Bishop })
+            //        {
+            //            // Unmake the previous promotion.
+            //            Board.UnmakeMove(moves[i]);
+            //
+            //            moves[i].PromotionPiece = promotionPiece;
+            //
+            //            // Make the new promotion.
+            //            Board.MakeMove(moves[i]);
+            //
+            //            // Store the score of the new promotion.
+            //            // Note: because it's a rare edge case, reductions are not used here. 
+            //            // If this is found to be a bottleneck in the program, it could easily be optimized.
+            //            score = -Search(node + 1, depth - 1, -beta, -alpha, out nextLine);
+            //            node.Child.SetScore(score);
+            //
+            //            // If a better promotion was found, exit the loop.
+            //            if (score > Draw) break;
+            //        }
+            //    }
+            //}
 
 
             void UpdateQuietMoveStats()
@@ -870,8 +840,6 @@ public class Engine
         // Once all legal moves have been searched, save the best score found in the transposition table and return it.
         TT.StoreEvaluation(depth, ply, alpha, evaluationType, pvLine, staticEvaluation);
 
-        // Reset search type before returning.
-        node.SearchType = parentSearchType;
         return alpha;
 
 
@@ -909,8 +877,6 @@ public class Engine
                 }
 
                 pvLine = TT.GetStoredLine();
-
-                node.NodeType = NodeType.TTCutoffNode;
                 return true;
             }
 
@@ -963,13 +929,10 @@ public class Engine
                 {
                     if (depth == 1)
                     {
-                        node.SearchType = SearchType.RazoringQuiescence;
                         int newScore = QuiescenceSearch(node, alpha, beta, out Line _);
-                        node.SetScore(newScore);
 
                         razoringScore = Max(newScore, score);
 
-                        node.NodeType = NodeType.PrunedNode;
                         return true;
                     }
 
@@ -978,16 +941,13 @@ public class Engine
 
                     if (score < beta && depth <= 3)
                     {
-                        node.SearchType = SearchType.RazoringQuiescence;
                         int newScore = QuiescenceSearch(node, alpha, beta, out Line _);
-                        node.SetScore(newScore);
 
                         // Verify the new score before returning it.
                         if (newScore < beta)
                         {
                             razoringScore = Max(newScore, score);
 
-                            node.NodeType = NodeType.PrunedNode;
                             return true;
                         }
                     }
@@ -1026,13 +986,13 @@ public class Engine
 
                 Board.MakeNullMove(move);
 
+                Node newNode = node.AddNewChild();
+                ref int score = ref newNode.Score;
 
                 // After the current turn is skipped, perform a reduced depth search.
                 const int R = 3;
 
-                node.SearchType = SearchType.NullMovePruningNormal;
-                int score = -Search(node + 1, depth - R, -beta, -beta + 1 /* We are only interested to know if the score can reach beta. */, out Line _, useNullMovePruning: false);
-                node.Child.SetScore(score);
+                score = -Search(newNode, depth - R, -beta, -beta + 1 /* We are only interested to know if the score can reach beta. */, out Line _, useNullMovePruning: false);
 
 
                 Board.UnmakeNullMove(move);
@@ -1048,7 +1008,6 @@ public class Engine
 
                     nullMovePruningScore = score;
 
-                    node.NodeType = NodeType.PrunedNode;
                     return true;
                 }
             }
@@ -1074,17 +1033,15 @@ public class Engine
                 {
                     Board.MakeMove(moves[i]);
 
+                    Node newNode = node.AddNewChild();
+
                     // Perform a preliminary qsearch to verify that the move holds.
-                    node.SearchType = SearchType.ProbCutQuiescence;
-                    probCutScore = -QuiescenceSearch(node + 1, -probCutBeta, -probCutBeta + 1, out Line probCutLine);
-                    node.Child.SetScore(probCutScore);
+                    probCutScore = -QuiescenceSearch(newNode, -probCutBeta, -probCutBeta + 1, out Line probCutLine);
 
                     // If the qsearch held, perform the regular search.
                     if (probCutScore >= probCutBeta)
                     {
-                        node.SearchType = SearchType.ProbCutNormal;
-                        probCutScore = -Search(node + 1, depth - ProbCutDepthReduction, -probCutBeta, -probCutBeta + 1, out probCutLine);
-                        node.Child.SetScore(probCutScore);
+                        probCutScore = -Search(newNode, depth - ProbCutDepthReduction, -probCutBeta, -probCutBeta + 1, out probCutLine);
                     }
 
                     Board.UnmakeMove(moves[i]);
@@ -1098,7 +1055,6 @@ public class Engine
                         TT.StoreEvaluation(depth - (ProbCutDepthReduction - 1 /* Here the effective depth is 1 higher than the reduced prob cut depth. */),
                             ply, probCutScore, EvaluationType.LowerBound, pvLine, staticEvaluation);
 
-                        node.NodeType = NodeType.PrunedNode;
                         return true;
                     }
                 }
@@ -1115,9 +1071,8 @@ public class Engine
             if (!rootNode /* Cannot use at the root because of MultiPV */ &&
                 depth > InternalIterativeDeepeningDepthReduction && ttMove == null)
             {
-                node.SearchType = SearchType.InternalIterativeDeepeningNormal;
-                int score = Search(node, depth - InternalIterativeDeepeningDepthReduction, alpha, beta, out Line _);
-                node.SetScore(score);
+                ref int score = ref node.Score;
+                score = Search(node, depth - InternalIterativeDeepeningDepthReduction, alpha, beta, out Line _);
 
                 ttEntry = TT.GetStoredEntry(out ttHit);
                 ttEval = TT.CorrectRetrievedMateScore(ttEntry.Evaluation, ply);
@@ -1262,7 +1217,6 @@ public class Engine
         // evaluationType == Exact -> node is a PV-Node. All nodes were searched and some reached alpha. The new alpha is returned.
         // evaluationType == LowerBound -> node is a Cut-Node. Not all nodes were searched, because a beta cutoff occured. Beta is returned.
         EvaluationType evaluationType = EvaluationType.UpperBound;
-        node.NodeType = NodeType.AllNode;
 
         for (int i = 0; i < moves.Count; i++)
         {
@@ -1274,9 +1228,10 @@ public class Engine
 
             s_totalSearchNodes++;
 
-            node.SearchType = SearchType.Quiescence;
-            int score = -QuiescenceSearch(node + 1, -beta, -alpha, out Line nextLine);
-            node.Child.SetScore(score);
+            Node newNode = node.AddNewChild();
+            ref int score = ref newNode.Score;
+
+            score = -QuiescenceSearch(newNode, -beta, -alpha, out Line nextLine);
 
             Board.UnmakeMove(moves[i]);
 
@@ -1285,7 +1240,6 @@ public class Engine
             if (score > alpha)
             {
                 evaluationType = EvaluationType.Exact;
-                node.NodeType = NodeType.PVNode;
 
                 alpha = score;
 
@@ -1301,7 +1255,6 @@ public class Engine
                 if (score >= beta)
                 {
                     evaluationType = EvaluationType.LowerBound;
-                    node.NodeType = NodeType.CutNode;
 
                     TT.StoreEvaluation(0, ply, beta, evaluationType, pvLine, staticEvaluation);
 
@@ -1323,7 +1276,6 @@ public class Engine
             {
                 pvLine = TT.GetStoredLine();
 
-                node.NodeType = NodeType.TTCutoffNode;
                 return true;
             }
 
@@ -1409,10 +1361,9 @@ public class Engine
         List<int> scores = new();
         foreach (Move move in moves)
         {
-            // A score given to each move based on various parameters.
-            // Moves with a higer score are likely to be better.
+            // Moves with a higher score are more likely to cause a beta cutoff,
+            // speeding up the search, so they will be searched first.
             int moveScore = 0;
-
 
             // Give the highest priority to the best move that was previosly found.
             if (move.Equals(ttMove)) moveScore += 30000;
@@ -1420,11 +1371,6 @@ public class Engine
             // Captures are sorted with a high priority.
             else if (move.CapturedPieceType != None)
             {
-                if (move.CapturedPieceType == King)
-                {
-                    Console.WriteLine("!");
-                }
-
                 // Captures are sorted using MVV-LVA (Most Valuable Victim - Least Valuable Attacker).
                 // A weak piece capturing a strong one will be given a
                 // higher priority than a strong piece capturing a weak one.
@@ -1435,20 +1381,15 @@ public class Engine
             else
             {
                 // Sort killer moves just below captures.
-                if (move.Equals(s_killerMoves[0, ply])) moveScore += 9000;
-                else if (move.Equals(s_killerMoves[1, ply])) moveScore += 8000;
+                if (move.Equals(s_killerMoves[0, ply])) moveScore += 10000;
+                else if (move.Equals(s_killerMoves[1, ply])) moveScore += 9000;
 
-                // Sort non-killer quiet moves by history heuristic.
+                // Sort non-killer quiet moves by history heuristics.
                 else
                 {
+                    int startSquareIndex = FirstSquareIndex(move.StartSquare);
                     int targetSquareIndex = FirstSquareIndex(move.TargetSquare);
-
-                    //if (History.Cast<int>().Any(x => x != 0))
-                    //{
-                    //    int a = 0;
-                    //}
-
-                    moveScore += s_historyHeuristics[Board.CurrentTurn][FirstSquareIndex(move.StartSquare), targetSquareIndex];
+                    moveScore += s_historyHeuristics[Board.CurrentTurn][startSquareIndex, targetSquareIndex];
 
                     //moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == None ? move.PieceType : move.PromotionPiece, targetSquareIndex, Board.CurrentTurn == 0, gamePhase);
                     //moveScore += GetPieceValue(move.PromotionPiece);
@@ -1523,11 +1464,11 @@ public class Engine
         return false;
     }
     
-    public static bool IsCapture(Move move) =>
+    private static bool IsCapture(Move? move) =>
         move != null &&
         (move.CapturedPieceType != None);
 
-    public static bool IsCaptureOrPromotion(Move move) =>
+    private static bool IsCaptureOrPromotion(Move? move) =>
         move != null &&
         (move.CapturedPieceType != None ||
         move.PromotionPiece != None);
@@ -1664,138 +1605,83 @@ public class Line
 /// The Node class holds all useful information about a node in the search tree.
 /// Given a reference to the root node of a tree, the entire tree can be accessed.
 /// </summary>
+/// <remarks>
+/// The search tree is made up of search nodes.
+/// Each node represents a certain position on the board,
+/// reached after a specific sequence of moves (called a line). <br />
+/// The parent of a node is the node above it in the tree, closer to the root.
+/// The children of a node are all the nodes reached after 1 move, the grandchildren after 2 moves and so on. <br />
+/// Sibling nodes are nodes at the same distance from the root (or <c>ply</c>). <br />
+/// Pruning a branch means returning the search early in a node, speeding up the search in the parent node.
+/// </remarks>
 public class Node
 {
-    /// <summary>
-    /// Depth navigated along this node's branch.
-    /// </summary>
+    /// <summary>Distance from the root node.</summary>
     public int Ply;
 
-    /// <summary>
-    /// 
-    /// </summary>
-    public SearchType SearchType;
-
-    /// <summary>
-    /// 
-    /// </summary>
-    public NodeType NodeType;
-
-
-    /// <summary>
-    /// Extension count from the root to this node.
-    /// </summary>
+    /// <summary>Extension count from the root to this node.</summary>
     public int Extensions;
 
-    /// <summary>
-    /// 
-    /// </summary>
+    /// <summary>The value returned by Evaluate() on the position of this node.</summary>
+    public int StaticEvaluation;
+    
+    /// <summary>An evaluation estimate of the position. Often more accurate than the static evaluation.</summary>
     public int Evaluation;
 
-    /// <summary>
-    /// 
-    /// </summary>
-    public int StaticEvaluation;
-
+    /// <summary>The score returned by the search function. Always the most accurate evaluation.</summary>
+    /// <remarks>Not set for leaf nodes.</remarks>
     public int Score;
 
+    /// <summary>The root of this node's tree.</summary>
+    public Node Root;
 
-    /// <summary>
-    /// 
-    /// </summary>
-    public Node Parent;
-    /// <summary>
-    /// 
-    /// </summary>
+    /// <summary>The node directly above this one in the tree.</summary>
+    public Node? Parent;
+
+    /// <summary>The nodes directly below this one in the tree.</summary>
     public List<Node> Children;
 
-    private int CurrentChildIndex;
 
-
-    public Node(int ply, SearchType searchType, Node parent = null)
+    /// <summary>Create a new root node.</summary>
+    public Node()
     {
-        Ply = ply;
-        SearchType = searchType;
-        Parent = parent;
+        Ply = 0;
+        Root = this;
+        Parent = null;
         Children = new();
-        CurrentChildIndex = 0;
     }
 
+    /// <summary>Create a new child node.</summary>
+    private Node(Node parent)
+    {
+        Ply = parent.Ply + 1;
+        Extensions = parent.Extensions;
+        Root = parent.Root;
+        Parent = parent;
+        Children = new();
+    }
 
-    /// <summary>
-    /// The last child that was added.
-    /// </summary>
-    public Node Child => Children.Last();
 
     public Node Grandparent => Parent?.Parent;
 
     public List<Node> Grandchildren => Children.SelectMany(c => c.Children).ToList();
 
 
-    public static Node operator -(Node node, int index)
+    public Node AddNewChild()
     {
-        Node result = node;
-        for (int i = 0; i < index; i++)
-        {
-            result = result.Parent;
-            if (result == null) break;
-        }
-        return result;
+        Node child = new(this);
+        Children.Add(child);
+        return child;
     }
 
-    /// <summary>
-    /// Navigate down the tree from <paramref name="node"/> following the current path <paramref name="depth"/> times. <br />
-    /// Any missing children will be added as necessary. <br />
-    /// Note: the behaviour changes if the required child is missing at the end: the CurrentChildIndex of the parent of the last node will increase by 1. <br />
-    /// Note: an alternative approach may be to use recursion.
-    /// </summary>
-    /// <param name="node"></param>
-    /// <param name="depth"></param>
-    /// <returns></returns>
-    public static Node operator +(Node node, int depth)
-    {
-        Node result = node;
-        for (int i = 0; i < depth; i++)
-        {
-            // Select the current child.
-            if (result.Children.Count > result.CurrentChildIndex)
-                result = result.Children[result.CurrentChildIndex];
-
-            // Add a new child node.
-            else
-            {
-                result.Children.Add(new(result.Ply + 1, result.SearchType, result) { Extensions = result.Extensions });
-
-                // Update the reference,
-                // then increment the CurrentChildIndex if the max depth was reached.
-                int childIndex = result.CurrentChildIndex;
-                if ((i == depth - 1)) result.CurrentChildIndex++;
-
-                result = result.Children[childIndex];
-
-            }
-        }
-
-        return result;
-    }
-
-    public override string ToString()
-    {
-        return
-            $"{Ply}," +
-            $"{Enum.GetName(typeof(SearchType), SearchType)}," +
-            $"{Enum.GetName(typeof(NodeType), NodeType)}," +
-            $"{(Children != null && Children.Count > 0 ? $"[{string.Join(";", Children)};]" : "[]")}";
-    }
-
-    public Node GetRoot()
-    {
-        Node result = this;
-        while (result != null && result.Ply > 0) result -= 1;
-        return result;
-    }
-
-    public void SetScore(int score) => Score = score;
+    //public override string ToString()
+    //{
+    //    return
+    //        $"{Ply}," +
+    //        $"{Enum.GetName(typeof(SearchType), SearchType)}," +
+    //        $"{Enum.GetName(typeof(NodeType), NodeType)}," +
+    //        $"{(Children != null && Children.Count > 0 ? $"[{string.Join(";", Children)};]" : "[]")}";
+    //}
 }
 
 public enum NodeType
