@@ -98,11 +98,20 @@ public class Engine
     private static int s_totalSearchNodes;
 
 
+    /// <summary>Type of limitation applied to the search.</summary>
     public enum SearchLimit
     {
+        /// <summary>The search will go on to reach a depth of <see cref="MaxPly"/>.</summary>
         None,
+
+        /// <summary>The search will go on until the specified <see cref="s_depthLimit"/> is reached.</summary>
         Depth,
+
+        /// <summary>The search will go on for <see cref="s_timeLimit"/> milliseconds.</summary>
         Time,
+
+        /// <summary>The search will stop automatically if <see cref="s_optimumTime"/> milliseconds have passed 
+        /// after a search is complete (inside the iterative deepening loop), or will otherwise be aborted after <see cref="s_timeLimit"/> milliseconds.</summary>
         TimeManagement,
     }
 
@@ -114,6 +123,10 @@ public class Engine
     public static Line? MainLine { get; private set; }
 
 
+    /// <summary>Select which type of limit the next search will use.</summary>
+    /// <remarks>Limits aren't automatically reset on each search.</remarks>
+    /// <param name="searchLimit">What type of limit is applied to the next search.</param>
+    /// <param name="limit">Ignored if searchLimit == SearchLimit.None.</param>
     public static void SetSearchLimit(SearchLimit searchLimit, int limit)
     {
         switch (searchLimit)
@@ -152,11 +165,16 @@ public class Engine
         }
     }
 
+    /// <summary>If using time management, set the optimum time for the next search.</summary>'
+    /// <remarks>Should only be used after the maximum time limit has been set and only when using time management.</remarks>
     public static void SetOptimumTime(int optimumTime) => s_optimumTime = optimumTime;
 
+    /// <summary>Set the amount of root moves that will each receive a separate evaluation.</summary>
     public static void SetMultiPVCount(int multiPVCount) => s_multiPvCount = multiPVCount;
 
-
+    
+    /// <summary>The total number of legal moves after each move in the current position and down the game tree until the desired depth is reached.</summary>
+    /// <returns>A string with each root move on a new line and the legal move count after it. For example, "a2a4: 20".</returns>
     public static string PerftResults(int depth)
     {
         List<string> results = new();
@@ -170,24 +188,26 @@ public class Engine
         }
 
         return string.Join('\n', results);
-    }
 
-    private static int Perft(int depth)
-    {
-        if (depth == 0) return 1;
 
-        var moves = Board.GenerateAllLegalMoves(promotionMode: 0);
-        int numPositions = 0;
-        foreach (var move in moves)
+        int Perft(int depth)
         {
-            Board.MakeMove(move);
-            numPositions += Perft(depth - 1);
-            Board.UnmakeMove(move);
+            if (depth == 0) return 1;
+
+            var moves = Board.GenerateAllLegalMoves(promotionMode: 0);
+            int numPositions = 0;
+            foreach (var move in moves)
+            {
+                Board.MakeMove(move);
+                numPositions += Perft(depth - 1);
+                Board.UnmakeMove(move);
+            }
+            return numPositions;
         }
-        return numPositions;
     }
 
 
+    /// <summary>Start a new search using the last applied limits and store the best move in <see cref="MainLine"/>.</summary>
     public static void FindBestMove()
     {
         Task.Factory.StartNew(
@@ -215,8 +235,6 @@ public class Engine
 
         s_totalSearchNodes = 0;
 
-        Board.PositionHistory = new();
-
         MainLine = new();
         s_currentMainLine = new();
 
@@ -225,18 +243,25 @@ public class Engine
         // Opening book not available in UCI mode.
 
         s_searchStopwatch.Restart();
-        int depth = 1;
 
         int evaluation;
+        
+        // Start at depth 1 and increase it until the search is stopped.
+        int depth = 1;
         do
         {
+            // Do a full depth search for the first s_multiPvCount root moves.
+            // After a move is searched it will be added to s_excludedRootMoves.
             s_excludedRootMoves = new();
-
             for (int pvIndex = 0; pvIndex < s_multiPvCount; pvIndex++)
             {
+                s_maxDepthReached = 0;
+
                 int alpha = -Infinity;
                 int beta = Infinity;
 
+                // After the first search (depth 1), the next searches will shrinken the windows to be close to the returned score.
+                // These are the initial window sizes.
                 int alphaWindow = 25;
                 int betaWindow = 25;
 
@@ -244,10 +269,7 @@ public class Engine
                 {
                     // Reset on each iteration because of better performance.
                     // This behaviour is not expected and further research is required.
-                    s_killerMoves = new Move[2, MaxPly];
-                    s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
-
-                    s_maxDepthReached = 0;
+                    ResetQuietMoveStats();
 
                     // Maximum amount of search extensions inside any given branch.
                     // s_maxExtensions = depth -> the SelDepth may be up to twice the depth.
@@ -256,23 +278,28 @@ public class Engine
 
 
                     Node root = new();
-                    evaluation = Search(root, depth, alpha, beta, out s_currentMainLine);
+                    ref int score = ref root.Score;
 
+                    score = Search(root, depth, alpha, beta, out s_currentMainLine);
+
+                    // If the score is outside the bounds, the search failed and a new search with wider bounds will be performed.
                     bool searchFailed = false;
-                    if (evaluation <= alpha)
+                    if (score <= alpha)
                     {
                         alphaWindow *= s_aspirationWindowsMultipliers[0];
                         searchFailed = true;
                     }
 
-                    if (evaluation >= beta)
+                    if (score >= beta)
                     {
                         betaWindow *= s_aspirationWindowsMultipliers[1];
                         searchFailed = true;
                     }
 
-                    alpha = Max(evaluation - alphaWindow, -Infinity);
-                    beta = Min(evaluation + betaWindow, Infinity);
+                    alpha = Max(score - alphaWindow, -Infinity);
+                    beta = Min(score + betaWindow, Infinity);
+
+                    evaluation = score;
 
                     if (!searchFailed || WasSearchAborted) break;
                 }
@@ -328,8 +355,6 @@ public class Engine
 
                 if (!WasSearchAborted)
                 {
-                    //DepthReachedData = new(CurrentDepthReachedData);
-                    //BestMovesThisSearch.Add(CurrentMainLine.Move.ToString());
                     MainLine = new(s_currentMainLine);
 
                     Console.WriteLine($"info " +
@@ -346,22 +371,18 @@ public class Engine
                         $"pv {MainLine}");
 
                     s_excludedRootMoves.Add(MainLine?.Move);
-
-                    //Stream stream = new FileStream(AppDomain.CurrentDomain.BaseDirectory + "RootNode.txt", FileMode.Create, FileAccess.Write);
-                    //
-                    //JsonSerializer.Serialize(stream, RootNode);
-                    //stream.Close();
                 }
 
                 else break;
 
+                // If all legal moves have been searched, exit the multi pv loop immediately.
                 if (s_excludedRootMoves.Count >= Board.GenerateAllLegalMoves(promotionMode: 2).Count) break;
             }
 
             depth++;
         }
-        while (
-        !WasSearchAborted && 
+        while 
+        (!WasSearchAborted && 
         (!s_useTimeManagement || s_searchStopwatch.ElapsedMilliseconds <= s_optimumTime) &&
         (!s_useDepthLimit || depth <= s_depthLimit));
 
@@ -374,7 +395,7 @@ public class Engine
     /// The <see cref="Search"/> function goes through every legal move,
     /// then recursively calls itself on each of the opponent's responses
     /// until the depth reaches 0. <br /> Finally, the positions reached are evaluated.
-    /// The path that leads to the best "forced evaluation" is then chosoen. <br />
+    /// The path that leads to the best "forced evaluation" is then chosen. <br />
     /// The greater the depth, the further into the future the computer will be able to see,
     /// possibly finding more advanced tactics and better moves.
     /// </summary>
@@ -391,26 +412,22 @@ public class Engine
         int ply = node.Ply;
         ref int extensions = ref node.Extensions;
 
-        // pvLine == null -> branch was pruned.
-        // pvLine == empty -> node is an All-Node.
-        pvLine = null;
-
         bool rootNode = ply == 0;
 
+        // pvLine == null -> branch was pruned.
+        // pvLine == empty -> the node is an All-Node.
+        pvLine = null;
 
-        if (WasSearchAborted)
-        {
-            return Null;
-        }
 
-        // Detect draws by repetition.
+        if (WasSearchAborted) return Null;
+
         if (IsDrawByRepetition(Board.ZobristKey)) return Draw;
 
         if (IsDrawByInsufficientMaterial()) return Draw;
 
 
         // Return the static evaluation immediately if the max ply was reached.
-        if (WasMaxPlyReached()) return Evaluate(out int _);
+        if (ply >= MaxPly) return Evaluate(out int _);
 
 
         // Once the depth reaches 0, keep searching until no more captures
@@ -420,13 +437,12 @@ public class Engine
             return QuiescenceSearch(node, alpha, beta, out pvLine);
         }
 
-
+        // Keep track of the highest depth reached this search.
         if (ply > s_maxDepthReached) s_maxDepthReached = ply;
 
 
         // Mate Distance Pruning:
-        // If a forced checkmate was found at a lower ply,
-        // prune this branch.
+        // If a forced checkmate was found at a lower ply, prune this branch.
         if (MateDistancePruning()) return alpha;
 
 
@@ -434,11 +450,11 @@ public class Engine
         // Was this position searched before?
         bool ttHit;
 
-        // Store transposition table entry. Should be accessed only if ttHit is true.
+        // Lookup transposition table entry. Should be accessed only if ttHit is true.
         TTEntry ttEntry = TT.GetStoredEntry(out ttHit);
 
-        // Lookup transposition evaluation. If the lookup fails, ttEval == LookupFailed.
-        int ttEval = TT.CorrectRetrievedMateScore(ttEntry.Evaluation, ply);
+        // Lookup transposition evaluation.
+        int ttEval = TT.GetStoredEvaluation(ply);
 
         // Store the best move found when this position was previously searched.
         Line? ttLine = ttHit ? ttEntry.Line : null;
@@ -1075,7 +1091,7 @@ public class Engine
                 score = Search(node, depth - InternalIterativeDeepeningDepthReduction, alpha, beta, out Line _);
 
                 ttEntry = TT.GetStoredEntry(out ttHit);
-                ttEval = TT.CorrectRetrievedMateScore(ttEntry.Evaluation, ply);
+                ttEval = TT.GetStoredEvaluation(ply);
 
                 ttLine = ttHit ? ttEntry.Line : null;
                 ttMove = ttLine?.Move;
@@ -1093,16 +1109,6 @@ public class Engine
             }
         }
 
-        bool WasMaxPlyReached()
-        {
-            if (ply >= MaxPly)
-            {
-                return true;
-            }
-
-            return false;
-        }
-
         void OneReplyExtension(ref int extensions)
         {
             if (!rootNode && extensions < s_maxExtensions && moves.Count == 1)
@@ -1115,6 +1121,7 @@ public class Engine
 
     /// <summary>
     /// The QuiescenceSearch function extends the normal Search, evaluating all legal captures.
+    /// For more information, see https://www.chessprogramming.org/Quiescence_Search.
     /// </summary>
     public static int QuiescenceSearch(Node node, int alpha, int beta, out Line pvLine)
     {
@@ -1123,8 +1130,6 @@ public class Engine
         // pvLine == null -> branch was pruned.
         // pvLine == empty -> node is an All-Node.
         pvLine = null;
-
-        bool rootNode = ply == 0;
 
 
         if (WasSearchAborted) return Null;
@@ -1149,7 +1154,7 @@ public class Engine
         TTEntry ttEntry = TT.GetStoredEntry(out ttHit);
 
         // Lookup transposition evaluation. If the lookup fails, ttEval == LookupFailed.
-        int ttEval = TT.CorrectRetrievedMateScore(ttEntry.Evaluation, ply);
+        int ttEval = TT.GetStoredEvaluation(ply);
 
         // Store the best move found when this position was previously searched.
         Line ttLine = ttHit ? ttEntry.Line : null;
@@ -1414,6 +1419,13 @@ public class Engine
             }
         }
     }
+
+    private static void ResetQuietMoveStats()
+    {
+        s_killerMoves = new Move[2, MaxPly];
+        s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
+    }
+    
 
     public static bool IsMateScore(int score)
     {

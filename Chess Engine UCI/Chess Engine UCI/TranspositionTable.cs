@@ -20,7 +20,7 @@ public class TT
     public static bool IsEnabled = true;
 
 
-    private static readonly ulong EntriesInOneMegabyte = (1024 * 1024) / (ulong)TTEntry.GetSize();
+    private static readonly ulong EntriesInOneMegabyte = (1024 * 1024) / (ulong)Marshal.SizeOf<TTEntry>();
 
     /// <summary>The size of the <see cref="Entries"/> array.</summary>
     /// <remarks>The default size is 8MB.</remarks>
@@ -62,7 +62,20 @@ public class TT
 		else ttHit = false;
 
 		return CurrentEntry;
-	}
+    }
+
+    public static int GetStoredEvaluation(int numPlySearched)
+    {
+        int score = CurrentEntry.Evaluation;
+
+        if (IsMateScore(score))
+        {
+            int sign = Math.Sign(score);
+            return (score * sign - numPlySearched) * sign;
+        }
+
+        return score;
+    }
 
     public static void ClearCurrentEntry() =>
         CurrentEntry = new();
@@ -87,29 +100,31 @@ public class TT
 
 		return score;
 	}
-
-    public static int CorrectRetrievedMateScore(int score, int numPlySearched) 
-	{
-		if (IsMateScore(score)) 
-		{
-			int sign = Math.Sign(score);
-			return (score * sign - numPlySearched) * sign;
-		}
-
-		return score;
-	}
 }
 
 public struct TTEntry
 {
-
+    /// <summary>The zobrist key of the position of this entry, used for indexing.</summary>
     public readonly ulong Key;
+
+    /// <summary>The score previously returned by a search on this position.</summary>
+    /// <remarks>It's called evaluation and not score as it might become outdated.</remarks>
     public readonly int Evaluation;
+
+    /// <summary>The depth of the search that generated this entry.</summary>
     public readonly int Depth;
+
+    /// <summary>The static evaluation of this position.</summary>
+    /// <remarks>Stored to avoid recomputing it if the position is encountered again.</remarks>
     public readonly int StaticEvaluation;
+
+    /// <summary>Whether this is the exact evaluation of the position or an upper or lower bound.</summary>
     public readonly EvaluationType EvaluationType;
+
+    /// <summary>The best move previously found in this position, and the best play sequence that follows it.</summary>
     public readonly Line Line;
 
+    /// <summary>Create a new <see cref="TTEntry"/> for the given position.</summary>
     public TTEntry(ulong key, int evaluation, int depth, int staticEvaluation, EvaluationType evaluationType, Line line)
     {
         Key = key;
@@ -119,9 +134,6 @@ public struct TTEntry
         EvaluationType = evaluationType;
         Line = line;
     }
-
-
-    public static int GetSize() => Marshal.SizeOf<TTEntry>();
 }
 
 /// <summary>

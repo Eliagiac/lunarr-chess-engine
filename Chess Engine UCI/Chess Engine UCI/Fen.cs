@@ -19,6 +19,7 @@ namespace Utilities
         public static void ConvertFromFen(string fen)
         {
             Board.Init();
+            Board.PositionHistory = new();
 
             string[] sections = fen.Split(' ');
 
