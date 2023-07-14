@@ -104,10 +104,14 @@ public class Evaluation
     /// Indexed by [OpenFile]</remarks>
     public static uint[] OpenFileNextToKingPenalty = { S(-20, -30), S(-40, -50) };
 
-    public static uint ColorWeaknessPenaltyPerPawn = S(-3, -8);
+    /// <summary>Penalty for each pawn of the same color of a bishop.</summary>
+    public static uint ColorWeaknessPenalty = S(-3, -8);
 
     public static uint KnightOutpostBonus = S(+54, +34);
     public static uint BishopOutpostBonus = S(+31, +25);
+
+    /// <summary>Bonus for a bishop or knight directly behind a pawn.</summary>
+    public static uint MinorPieceBehindPawnBonus = S(+18, +3);
 
 
     public const int OpeningPhaseScore = 15258;
@@ -117,6 +121,9 @@ public class Evaluation
     /// <summary>The bitboard of squares considered when computing the mobility of a piece.</summary>
     /// <remarks>Squares outside this area are not relevant when considering mobility.</remarks>
     private static ulong[] MobilityArea = new ulong[2];
+
+    /// <summary>The bitboard of squares considered when checking if a knight or bishop is an outpost.</summary>
+    private static ulong[] OutpostSquares = new ulong[2];
 
 
     public static int OldEvaluate(out int gamePhase)
@@ -387,10 +394,10 @@ public class Evaluation
             int darkBishopsCount = PieceCount(bishops & Mask.DarkSquares);
 
             // Give a penalty for the lack of a bishop on a light square, for each extra pawn on a dark square.
-            score += ColorWeaknessPenaltyPerPawn * (uint)(lightBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, darkPawnsCount - lightPawnsCount);
+            score += ColorWeaknessPenalty * (uint)(lightBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, darkPawnsCount - lightPawnsCount);
 
             // Give a penalty for the lack of a bishop on a light square, for each extra pawn on a dark square.
-            score += ColorWeaknessPenaltyPerPawn * (uint)(darkBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, lightPawnsCount - darkPawnsCount);
+            score += ColorWeaknessPenalty * (uint)(darkBishopsCount == 0 ? 1 : 0) * (uint)Math.Max(0, lightPawnsCount - darkPawnsCount);
 
             return score;
         }
@@ -452,28 +459,50 @@ public class Evaluation
 
     public static int Evaluate(out int gamePhase)
     {
+        // Before the evaluation can start, some constants need to be computed.
         uint evaluation = 0;
 
+        // The game phase will be used to interpolate between opening and endgame scores.
+        gamePhase = CurrentGamePhase();
 
-        // The opening material value is used to compute the game phase.
-        int whiteMaterial = OpeningValue(Board.MaterialScore[0]);
-        int blackMaterial = OpeningValue(Board.MaterialScore[1]);
-
-        int whitePawnMaterial = PieceCount(Board.Pawns[0]) * StaticPieceValues[Pawn][0];
-        int blackPawnMaterial = PieceCount(Board.Pawns[1]) * StaticPieceValues[Pawn][0];
-
-        gamePhase = (whiteMaterial + blackMaterial) - (whitePawnMaterial + blackPawnMaterial);
-
-
-        evaluation = Board.MaterialScore[0] - Board.MaterialScore[1];
-
-
+        // Squares outside the mobility area are irrelevant to mobility calculations.
         MobilityArea[0] = FindMobilityArea(0);
         MobilityArea[1] = FindMobilityArea(1);
+
+        // Knights and bishops on outpost squares are given a bonus.
+        OutpostSquares[0] = FindOutpostSquares(0, 1);
+        OutpostSquares[1] = FindOutpostSquares(1, 0);
+
+
+        // The first step to evaluating the position is getting the material and piece square tables score.
+        // These values are updated any time a move is made.
+        evaluation += Board.MaterialScore[0] - Board.MaterialScore[1];
+        evaluation += Board.PsqtScore[0] - Board.PsqtScore[1];
+
+
+        evaluation +=
+            EvaluatePieces(Knight, 0) - EvaluatePieces(Knight, 1) +
+            EvaluatePieces(Bishop, 0) - EvaluatePieces(Bishop, 1) +
+            EvaluatePieces(Rook, 0) - EvaluatePieces(Rook, 1) +
+            EvaluatePieces(Queen, 0) - EvaluatePieces(Queen, 1);
+
+        evaluation += KingSafetyScore(0, 1) - KingSafetyScore(1, 0);
 
 
         return Interpolate(evaluation, gamePhase) * (Board.CurrentTurn == 0 ? 1 : -1);
 
+
+        int CurrentGamePhase()
+        {
+            // The opening material value is used to compute the game phase.
+            int whiteMaterial = OpeningValue(Board.MaterialScore[0]);
+            int blackMaterial = OpeningValue(Board.MaterialScore[1]);
+
+            int whitePawnMaterial = PieceCount(Board.Pawns[0]) * StaticPieceValues[Pawn][0];
+            int blackPawnMaterial = PieceCount(Board.Pawns[1]) * StaticPieceValues[Pawn][0];
+
+            return (whiteMaterial + blackMaterial) - (whitePawnMaterial + blackPawnMaterial);
+        }
 
         ulong FindMobilityArea(int colorIndex)
         {
@@ -494,6 +523,51 @@ public class Evaluation
 
             return ~(excludedPawns | excludedPieces | excludedControlledSquares);
         }
+
+        ulong FindOutpostSquares(int colorIndex, int opponentColorIndex)
+        {
+            // An outpost must be in enemy territory.
+            ulong outpostRanks = colorIndex == 0 ? Mask.WhiteOutpostRanks : Mask.BlackOutpostRanks;
+
+            // An outpost must be protected by a pawn.
+            ulong pawnProtectedSquares = Board.PawnAttackedSquares[colorIndex];
+
+            // An outpost must not be attacked by an enemy pawn.
+            // Note: in Stockfish, instead of checking for enemy pawn attacks, the whole enemy pawn attack span is considered
+            // (all of the squares that could be attacked by an enemy pawn if it were to move up, until the edge of the board).
+            ulong enemyPawnAttackedSquares = Board.PawnAttackedSquares[opponentColorIndex];
+
+            return outpostRanks & pawnProtectedSquares & ~enemyPawnAttackedSquares;
+        }
+
+
+        uint KingSafetyScore(int colorIndex, int opponentColorIndex)
+        {
+            uint score = 0;
+
+            ulong friendlyPawns = Board.Pawns[colorIndex];
+            ulong opponentPawns = Board.Pawns[opponentColorIndex];
+
+            // A castled king gets a bonus if it has pawns in front of it.
+            if ((Board.Kings[colorIndex] & (colorIndex == 0 ? Mask.WhiteCastledKingPosition : Mask.BlackCastledKingPosition)) != 0)
+            {
+                score +=
+                    ShieldingPawnBonus[0] * (uint)PieceCount(friendlyPawns & Board.FirstShieldingPawns[Board.KingPosition[colorIndex]]) +
+                    ShieldingPawnBonus[1] * (uint)PieceCount(friendlyPawns & Board.SecondShieldingPawns[Board.KingPosition[colorIndex]]);
+            }
+
+            // If the file the king is on (or adjacent files) is open, the king is more exposed to attacks.
+            foreach (var file in Board.KingFiles[Board.GetFile(Board.KingPosition[colorIndex])])
+            {
+                if (PieceCount(friendlyPawns & file) == 0)
+                {
+                    if (PieceCount(opponentPawns & file) != 0) score += OpenFileNextToKingPenalty[0];
+                    else score += OpenFileNextToKingPenalty[1];
+                }
+            }
+
+            return score;
+        }
     }
 
     /// <summary>Compute the added score of all pieces of the specified type and color.</summary>
@@ -506,7 +580,10 @@ public class Evaluation
         {
             // Isolate the first piece.
             int pieceSquareIndex = FirstSquareIndex(pieces);
+            ulong pieceSquare = 1UL << pieceSquareIndex;
+
             pieces &= pieces - 1;
+
 
             // All of the squares attacked by this piece (including friendly pieces).
             // Note: Stockfish adds x-ray attacks of bishops and rooks, as well as the full line from the piece to the king if the piece is blocking an attack (should investigate since a pinned piece is always already attacking the king).
@@ -514,6 +591,32 @@ public class Evaluation
 
             // Add a bonus based on how many squares are attacked by this piece inside the mobility area.
             score += MobilityBonus[pieceType][PieceCount(attackedSquares & MobilityArea[pieceColor])];
+
+
+            if (pieceType == Knight || pieceType == Bishop)
+            {
+                // If a knight or bishop is in the opponent's territory, is defended
+                // by a pawn and is not under attack by an opponent pawn, it is considered an "outpost".
+                if ((pieceSquare & OutpostSquares[pieceColor]) != 0)
+                    score += pieceType == Knight ?
+                        KnightOutpostBonus : BishopOutpostBonus;
+
+
+                ulong squaresBehindPawns = pieceColor == 0 ? 
+                    Board.Pawns[pieceColor] >> 8 : Board.Pawns[pieceColor] << 8;
+
+                // A minor piece directly behind a pawn should be given a bonus.
+                if ((pieceSquare & squaresBehindPawns) != 0)
+                    score += MinorPieceBehindPawnBonus;
+            }
+
+            if (pieceType == Bishop)
+            {
+                ulong sameColorSquares = (pieceSquare & Mask.LightSquares) != 0 ? Mask.LightSquares : Mask.DarkSquares;
+
+                // Penalty for each pawn on a square of the same color as this bishop.
+                score += (uint)(ColorWeaknessPenalty * PieceCount(Board.Pawns[pieceColor] & sameColorSquares));
+            }
         }
 
         return score;

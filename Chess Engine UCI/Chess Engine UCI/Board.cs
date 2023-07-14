@@ -1105,6 +1105,8 @@ public struct Mask
     public const ulong DarkSquares = 0xaa55aa55aa55aa55;
     public const ulong BlackHalf = 0xffffffff18000000;
     public const ulong WhiteHalf = 0x18ffffffff;
+    public const ulong WhiteOutpostRanks = 0xffffff000000;
+    public const ulong BlackOutpostRanks = 0xffffff0000;
 }
 
 public enum Square
