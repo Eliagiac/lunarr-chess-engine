@@ -16,11 +16,11 @@ public class Evaluation
         new short[] {  781,  854 }, /* Knight */
         new short[] {  825,  915 }, /* Bishop */
         new short[] { 1276, 1380 }, /* Rook */
-        new short[] { 2538, 2682 }  /* Queen */
+        new short[] { 2538, 2682 }, /* Queen */
+        new short[] {    0,    0 }, /* King */
     };
 
     /// <summary>The default value of each piece type.</summary>
-    /// <remarks>Indexed by [PieceType].</remarks>
     public static uint[] PieceValues =
         StaticPieceValues.Select(s => S(s[0], s[1])).ToArray();
 
@@ -114,7 +114,12 @@ public class Evaluation
     public const int EndgamePhaseScore = 3915;
 
 
-    public static int Evaluate(out int gamePhase)
+    /// <summary>The bitboard of squares considered when computing the mobility of a piece.</summary>
+    /// <remarks>Squares outside this area are not relevant when considering mobility.</remarks>
+    private static ulong[] MobilityArea = new ulong[2];
+
+
+    public static int OldEvaluate(out int gamePhase)
     {
         short whiteEarlygameMaterial = EarlygameMaterial(0, out int whitePawnMaterial, out int whitePawnCount, out int whiteKnightCount, out int whiteBishopCount);
         short blackEarlygameMaterial = EarlygameMaterial(1, out int blackPawnMaterial, out int blackPawnCount, out int blackKnightCount, out int blackBishopCount);
@@ -324,10 +329,8 @@ public class Evaluation
                 Board.AllOccupiedSquares >> 8 :
                 Board.AllOccupiedSquares << 8;
 
-            ulong lowRanks = Board.Ranks[colorIndex][1] | Board.Ranks[colorIndex][2];
-
             ulong mobilityArea = ~(
-                (Board.Pawns[colorIndex] & (blockedSquares | lowRanks)) |   /* Exclude blocked pawns or pawns on a low rank. */
+                (Board.Pawns[colorIndex] & (blockedSquares | Board.LowRanks[colorIndex])) |   /* Exclude blocked pawns or pawns on a low rank. */
                 (Board.Kings[colorIndex] | Board.Queens[colorIndex]) |      /* Exclude our king/queens. */
                 Board.PawnAttackedSquares[colorIndex ^ 1]);                 /* Exclude squares controlled by enemy pawns. */
 
@@ -410,19 +413,6 @@ public class Evaluation
     }
 
 
-    public static int GetPieceValue(int piece)
-    {
-        switch (piece)
-        {
-            case Pawn :   return StaticPieceValues[Pawn][0];
-            case Knight:  return StaticPieceValues[Knight][0];
-            case Bishop:  return StaticPieceValues[Bishop][0];
-            case Rook:    return StaticPieceValues[Rook][0];
-            case Queen:   return StaticPieceValues[Queen][0];
-            default:            return 0;
-        }
-    }
-
     public static int GetGamePhase(int whiteMaterial, int blackMaterial, int whitePawnMaterial, int blackPawnMaterial) => 
         (whiteMaterial + blackMaterial) - (whitePawnMaterial + blackPawnMaterial);
 
@@ -457,6 +447,91 @@ public class Evaluation
             return ((mopUpScore * 10 * (OpeningPhaseScore - gamePhase)) / OpeningPhaseScore);
         }
         return 0;
+    }
+
+
+    public static int Evaluate(out int gamePhase)
+    {
+        uint evaluation = 0;
+
+
+        // The opening material value is used to compute the game phase.
+        int whiteMaterial = OpeningValue(Board.MaterialScore[0]);
+        int blackMaterial = OpeningValue(Board.MaterialScore[1]);
+
+        int whitePawnMaterial = PieceCount(Board.Pawns[0]) * StaticPieceValues[Pawn][0];
+        int blackPawnMaterial = PieceCount(Board.Pawns[1]) * StaticPieceValues[Pawn][0];
+
+        gamePhase = (whiteMaterial + blackMaterial) - (whitePawnMaterial + blackPawnMaterial);
+
+
+        evaluation = Board.MaterialScore[0] - Board.MaterialScore[1];
+
+
+        MobilityArea[0] = FindMobilityArea(0);
+        MobilityArea[1] = FindMobilityArea(1);
+
+
+        return Interpolate(evaluation, gamePhase) * (Board.CurrentTurn == 0 ? 1 : -1);
+
+
+        ulong FindMobilityArea(int colorIndex)
+        {
+            ulong blockedSquares = colorIndex == 0 ?
+                Board.AllOccupiedSquares >> 8 :
+                Board.AllOccupiedSquares << 8;
+
+            // Exclude pawns that are blocked or on the first two ranks.
+            ulong excludedPawns = Board.Pawns[colorIndex] & (blockedSquares | Board.LowRanks[colorIndex]);
+
+            // Exclude our king and queens.
+            ulong excludedPieces = Board.Kings[colorIndex] | Board.Queens[colorIndex];
+
+            // Exclude squares controlled by enemy panwns.
+            ulong excludedControlledSquares = Board.PawnAttackedSquares[colorIndex ^ 1];
+
+            // TODO: Exclude pieces that are blocking an attack to our king.
+
+            return ~(excludedPawns | excludedPieces | excludedControlledSquares);
+        }
+    }
+
+    /// <summary>Compute the added score of all pieces of the specified type and color.</summary>
+    private static uint EvaluatePieces(int pieceType, int pieceColor)
+    {
+        uint score = 0;
+        
+        ulong pieces = Board.Pieces[pieceType][pieceColor];
+        while (pieces != 0)
+        {
+            // Isolate the first piece.
+            int pieceSquareIndex = FirstSquareIndex(pieces);
+            pieces &= pieces - 1;
+
+            // All of the squares attacked by this piece (including friendly pieces).
+            // Note: Stockfish adds x-ray attacks of bishops and rooks, as well as the full line from the piece to the king if the piece is blocking an attack (should investigate since a pinned piece is always already attacking the king).
+            ulong attackedSquares = Board.AttacksFrom(pieceSquareIndex, pieceType, Board.AllOccupiedSquares);
+
+            // Add a bonus based on how many squares are attacked by this piece inside the mobility area.
+            score += MobilityBonus[pieceType][PieceCount(attackedSquares & MobilityArea[pieceColor])];
+        }
+
+        return score;
+    }
+
+
+    /// <summary>Compute the material of the specified player in the current position.</summary>
+    /// <remarks>The material score should be updated on every move. 
+    /// This function should only be called on board initialization.</remarks>
+    public static uint ComputeMaterial(int colorIndex)
+    {
+        uint material = 0;
+        material += (uint)PieceCount(Board.Pawns[colorIndex]) * PieceValues[Pawn];
+        material += (uint)PieceCount(Board.Knights[colorIndex]) * PieceValues[Knight];
+        material += (uint)PieceCount(Board.Bishops[colorIndex]) * PieceValues[Bishop];
+        material += (uint)PieceCount(Board.Rooks[colorIndex]) * PieceValues[Rook];
+        material += (uint)PieceCount(Board.Queens[colorIndex]) * PieceValues[Queen];
+        return material;
     }
 }
 
@@ -756,9 +831,13 @@ public class PieceSquareTables
 public struct Score
 {
     // A score is stored in a single unsigned integer,
-    // where the first 16 bits store the endgame score
-    // and the last 16 bits store the opening score.
+    // where the first 16 bits store the endgame value
+    // and the last 16 bits store the opening value.
     public static uint S(short opening, short endgame) => (((uint)endgame) << 16) + (uint)opening;
+
+    public static int OpeningValue(uint score) => (short)(score & 0x0000ffff);
+
+    public static int EndgameValue(uint score) => (short)(score & 0xffff0000);
 
     public static int Interpolate(uint score, int gamePhase)
     {

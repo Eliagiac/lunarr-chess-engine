@@ -82,6 +82,9 @@ namespace Utilities
 
             Board.PsqtScore[0] = PieceSquareTables.EvaluateAllPsqt(0);
             Board.PsqtScore[1] = PieceSquareTables.EvaluateAllPsqt(1);
+
+            Board.MaterialScore[0] = Evaluation.ComputeMaterial(0);
+            Board.MaterialScore[1] = Evaluation.ComputeMaterial(1);
         }
 
         public static string GetCurrentFen()

@@ -44,8 +44,7 @@ public class Board
     // All the squares currently attacked by a color.
     //public static ulong[] AttackedSquares = new ulong[2];
 
-    // All the squares currently attacked by pawns of a specific color.
-    // Used for move ordering.
+    /// <summary>Bitboards of the squares currently attacked by pawns of the given color.</summary>
     public static ulong[] PawnAttackedSquares = new ulong[2];
 
 
@@ -140,6 +139,13 @@ public class Board
         0xff },
     };
 
+    /// <summary>Bitboards of the second and third rank for each color.</summary>
+    public static ulong[] LowRanks =
+    {
+        Ranks[0][1] | Ranks[0][2],
+        Ranks[1][1] | Ranks[1][2],
+    };
+
     public static ulong[,] Spans;
     public static ulong[,] Fills;
 
@@ -158,6 +164,8 @@ public class Board
 
     public static uint[] PsqtScore;
 
+    public static uint[] MaterialScore;
+
 
     public static void Init()
     {
@@ -173,6 +181,7 @@ public class Board
         };
         PositionHistory = new();
         PsqtScore = new uint[2];
+        MaterialScore = new uint[2];
 
 
         Fills = new ulong[2, 64];
@@ -581,7 +590,10 @@ public class Board
         // Update the Zobrist key.
         ZobristKey ^= PieceKeys[pieceType, colorIndex, squareIndex];
 
-        // Update piesce square tables score.
+        // Update material score.
+        MaterialScore[colorIndex] += Evaluation.PieceValues[pieceType];
+
+        // Update piece square tables score.
         PsqtScore[colorIndex] += PieceSquareTables.ReadScore(pieceType, squareIndex, colorIndex == 0);
     }
 
@@ -607,7 +619,10 @@ public class Board
         // Update the Zobrist key.
         ZobristKey ^= PieceKeys[pieceType, colorIndex, squareIndex];
 
-        // Update piesce square tables score.
+        // Update material score.
+        MaterialScore[colorIndex] -= Evaluation.PieceValues[pieceType];
+
+        // Update piece square tables score.
         PsqtScore[colorIndex] -= PieceSquareTables.ReadScore(pieceType, squareIndex, colorIndex == 0);
     }
 
@@ -976,7 +991,7 @@ public class Board
             (MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) & (Bishops[opponentColorIndex] | Queens[opponentColorIndex]));
     }
 
-    // Not available for pawns and kings.
+    /// <summary>Bitboard of all the squares attacked by the specified piece, including enemy and friendly captures.</summary>
     public static ulong AttacksFrom(int squareIndex, int pieceType, ulong occupiedSquares)
     {
         return

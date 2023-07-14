@@ -18,7 +18,8 @@ namespace Utilities
             if (bitboard == 0) return 0;
             return 63 - BitOperations.LeadingZeroCount(bitboard);
         }
-
+        
+        /// <summary>The amount of pieces in a bitboard (or generically the amount of positive bits).</summary>
         public static int PieceCount(ulong bitboard)
         {
             return BitOperations.PopCount(bitboard);

@@ -245,7 +245,7 @@ public class Engine
         s_searchStopwatch.Restart();
 
         int evaluation;
-        
+
         // Start at depth 1 and increase it until the search is stopped.
         int depth = 1;
         do
@@ -381,8 +381,8 @@ public class Engine
 
             depth++;
         }
-        while 
-        (!WasSearchAborted && 
+        while
+        (!WasSearchAborted &&
         (!s_useTimeManagement || s_searchStopwatch.ElapsedMilliseconds <= s_optimumTime) &&
         (!s_useDepthLimit || depth <= s_depthLimit));
 
@@ -421,9 +421,10 @@ public class Engine
 
         if (WasSearchAborted) return Null;
 
-        if (IsDrawByRepetition(Board.ZobristKey)) return Draw;
+        // Check for a draw, but never return early at the root.
+        if (!rootNode && IsDrawByRepetition(Board.ZobristKey)) return Draw;
 
-        if (IsDrawByInsufficientMaterial()) return Draw;
+        if (!rootNode && IsDrawByInsufficientMaterial()) return Draw;
 
 
         // Return the static evaluation immediately if the max ply was reached.
@@ -1434,7 +1435,7 @@ public class Engine
 
 
     /// <summary>If a position is reached three times, it's a draw.</summary>
-    public static bool IsDrawByRepetition(ulong key) => Board.PositionHistory.Count(other => other == key) >= 2;
+    public static bool IsDrawByRepetition(ulong key) => Board.PositionHistory.Count(other => other == key) >= 3;
 
 
     /// <summary>If there is not enough material on the board for either player to checkate the opponent, it's a draw.</summary>
