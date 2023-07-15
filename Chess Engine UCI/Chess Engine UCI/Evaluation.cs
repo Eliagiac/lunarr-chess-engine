@@ -479,15 +479,22 @@ public class Evaluation
         evaluation += Board.MaterialScore[0] - Board.MaterialScore[1];
         evaluation += Board.PsqtScore[0] - Board.PsqtScore[1];
 
-
+        // Add bonuses to each piece based on various positional considerations.
         evaluation +=
-            EvaluatePieces(Pawn, 0, 1) - EvaluatePieces(Pawn, 1, 0) +
             EvaluatePieces(Knight, 0, 1) - EvaluatePieces(Knight, 1, 0) +
             EvaluatePieces(Bishop, 0, 1) - EvaluatePieces(Bishop, 1, 0) +
             EvaluatePieces(Rook, 0, 1) - EvaluatePieces(Rook, 1, 0) +
             EvaluatePieces(Queen, 0, 1) - EvaluatePieces(Queen, 1, 0);
 
+        // Give a score to the pawn structure of the position.
+        evaluation += EvaluatePawnStructure(0, 1) - EvaluatePawnStructure(1, 0);
+
+        // Add bonuses for a well defended king.
         evaluation += KingSafetyScore(0, 1) - KingSafetyScore(1, 0);
+
+        // Give a bonus to bishop and knight pairs depending on whether the position is open or closed.
+        bool isPositionOpen = PieceCount(Board.AllOccupiedSquares) < 24;
+        evaluation += PiecePairBonus(0, isPositionOpen) - PiecePairBonus(1, isPositionOpen);
 
 
         return Interpolate(evaluation, gamePhase) * (Board.CurrentTurn == 0 ? 1 : -1);
@@ -569,11 +576,22 @@ public class Evaluation
 
             return score;
         }
+
+        uint PiecePairBonus(int color, bool isPositionOpen)
+        {
+            uint bonus = 0;
+            if (PieceCount(Board.Knights[color]) >= 2) bonus += KnightPairBonus[isPositionOpen ? 1 : 0];
+            if (PieceCount(Board.Bishops[color]) >= 2) bonus += BishopPairBonus[isPositionOpen ? 1 : 0];
+            return bonus;
+        }
     }
 
     /// <summary>Compute the added score of all pieces of the specified type and color.</summary>
     private static uint EvaluatePieces(int pieceType, int color, int opponentColor)
     {
+        // Pawn and king evaluation is done separately.
+        if (pieceType == Pawn || pieceType == King) return 0;
+
         uint score = 0;
         
         ulong pieces = Board.Pieces[pieceType][color];
@@ -581,79 +599,90 @@ public class Evaluation
         {
             // Isolate the first piece.
             int squareIndex = FirstSquareIndex(pieces);
-            ulong square = 1UL << squareIndex;
-
             pieces &= pieces - 1;
 
+            ulong square = 1UL << squareIndex;
 
-            if (pieceType == Pawn)
+
+            // All of the squares attacked by this piece (including friendly pieces).
+            // Note: Stockfish adds x-ray attacks of bishops and rooks, as well as the full line from the piece to the king if the piece is blocking an attack (should investigate since a pinned piece is always already attacking the king).
+            ulong attackedSquares = Board.AttacksFrom(squareIndex, pieceType, Board.AllOccupiedSquares);
+
+            // Add a bonus based on how many squares are attacked by this piece inside the mobility area.
+            score += MobilityBonus[pieceType][PieceCount(attackedSquares & MobilityArea[color])];
+
+
+            if (pieceType == Knight || pieceType == Bishop)
             {
-                // Keep track of the pawn structure (instead of using 'pieces', where each analysed piece is removed).
-                ulong pawns = Board.Pieces[Pawn][color];
-                ulong opponentPawns = Board.Pieces[Pawn][opponentColor];
+                // If a knight or bishop is in the opponent's territory, is defended
+                // by a pawn and is not under attack by an opponent pawn, it is considered an "outpost".
+                if ((square & OutpostSquares[color]) != 0)
+                    score += pieceType == Knight ?
+                        KnightOutpostBonus : BishopOutpostBonus;
 
-                int file = Board.GetFile(squareIndex);
 
-                // If there are no enemy pawns on this or adjacent files,
-                // and the pawn doesn't have another friendly pawn in front,
-                // it is considered a "passed pawn".
-                if ((Board.Spans[color, squareIndex] & opponentPawns) == 0 &&
-                    (Board.Fills[color, squareIndex] & pawns) == 0)
-                    score += PassedPawnBonus[file];
+                ulong squaresBehindPawns = color == 0 ?
+                    Board.Pawns[color] >> 8 : Board.Pawns[color] << 8;
 
-                // If this pawn isn't the only one in the file, it is considered doubled and deserves a penalty.
-                // Each of the pawns on file will receive the penalty.
-                if (PieceCount(Board.Files[file] & pawns) >= 2) 
-                    score += DoubledPawnPenalty;
-
-                // If there are no friendly pawns in the pawn's neighbouring
-                // files, it is considered an "isolated pawn".
-                if ((Board.NeighbouringFiles[file] & pawns) == 0) 
-                    score += IsolatedPawnPenalty;
-
-                // If there are no friendly pawns protecting the pawn
-                // and its stop square is attacked by an enemy pawn,
-                // it is considered a "backward pawn".
-                if ((pawns & Board.BackwardProtectors[color, squareIndex]) == 0 &&
-                    (Board.StopSquare[color, squareIndex] & Board.PawnAttackedSquares[opponentColor]) != 0)
-                    score += BackwardPawnPenalty;
+                // A minor piece directly behind a pawn should be given a bonus.
+                if ((square & squaresBehindPawns) != 0)
+                    score += MinorPieceBehindPawnBonus;
             }
 
-            else
+            if (pieceType == Bishop)
             {
-                // All of the squares attacked by this piece (including friendly pieces).
-                // Note: Stockfish adds x-ray attacks of bishops and rooks, as well as the full line from the piece to the king if the piece is blocking an attack (should investigate since a pinned piece is always already attacking the king).
-                ulong attackedSquares = Board.AttacksFrom(squareIndex, pieceType, Board.AllOccupiedSquares);
+                ulong sameColorSquares = (square & Mask.LightSquares) != 0 ? Mask.LightSquares : Mask.DarkSquares;
 
-                // Add a bonus based on how many squares are attacked by this piece inside the mobility area.
-                score += MobilityBonus[pieceType][PieceCount(attackedSquares & MobilityArea[color])];
-
-
-                if (pieceType == Knight || pieceType == Bishop)
-                {
-                    // If a knight or bishop is in the opponent's territory, is defended
-                    // by a pawn and is not under attack by an opponent pawn, it is considered an "outpost".
-                    if ((square & OutpostSquares[color]) != 0)
-                        score += pieceType == Knight ?
-                            KnightOutpostBonus : BishopOutpostBonus;
-
-
-                    ulong squaresBehindPawns = color == 0 ?
-                        Board.Pawns[color] >> 8 : Board.Pawns[color] << 8;
-
-                    // A minor piece directly behind a pawn should be given a bonus.
-                    if ((square & squaresBehindPawns) != 0)
-                        score += MinorPieceBehindPawnBonus;
-                }
-
-                if (pieceType == Bishop)
-                {
-                    ulong sameColorSquares = (square & Mask.LightSquares) != 0 ? Mask.LightSquares : Mask.DarkSquares;
-
-                    // Penalty for each pawn on a square of the same color as this bishop.
-                    score += (uint)(ColorWeaknessPenalty * PieceCount(Board.Pawns[color] & sameColorSquares));
-                }
+                // Penalty for each pawn on a square of the same color as this bishop.
+                score += (uint)(ColorWeaknessPenalty * PieceCount(Board.Pawns[color] & sameColorSquares));
             }
+        }
+
+        return score;
+    }
+
+    /// <summary>Evaluate the given player's pawn structure.</summary>
+    private static uint EvaluatePawnStructure(int color, int opponentColor)
+    {
+        uint score = 0;
+
+        ulong pieces = Board.Pieces[Pawn][color];
+        while (pieces != 0)
+        {
+            // Isolate the first pawn.
+            int squareIndex = FirstSquareIndex(pieces);
+            pieces &= pieces - 1;
+
+            // Keep track of the pawn structure (instead of using 'pieces', where each analysed piece is removed).
+            ulong pawns = Board.Pieces[Pawn][color];
+            ulong opponentPawns = Board.Pieces[Pawn][opponentColor];
+
+            int file = Board.GetFile(squareIndex);
+
+
+            // If there are no enemy pawns on this or adjacent files,
+            // and the pawn doesn't have another friendly pawn in front,
+            // it is considered a "passed pawn".
+            if ((Board.Spans[color, squareIndex] & opponentPawns) == 0 &&
+                (Board.Fills[color, squareIndex] & pawns) == 0)
+                score += PassedPawnBonus[file];
+
+            // If this pawn isn't the only one in the file, it is considered doubled and deserves a penalty.
+            // Each of the pawns on file will receive the penalty.
+            if (PieceCount(Board.Files[file] & pawns) >= 2)
+                score += DoubledPawnPenalty;
+
+            // If there are no friendly pawns in the pawn's neighbouring
+            // files, it is considered an "isolated pawn".
+            if ((Board.NeighbouringFiles[file] & pawns) == 0)
+                score += IsolatedPawnPenalty;
+
+            // If there are no friendly pawns protecting the pawn
+            // and its stop square is attacked by an enemy pawn,
+            // it is considered a "backward pawn".
+            if ((pawns & Board.BackwardProtectors[color, squareIndex]) == 0 &&
+                (Board.StopSquare[color, squareIndex] & Board.PawnAttackedSquares[opponentColor]) != 0)
+                score += BackwardPawnPenalty;
         }
 
         return score;
