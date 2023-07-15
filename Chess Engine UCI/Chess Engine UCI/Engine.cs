@@ -179,7 +179,7 @@ public class Engine
     {
         List<string> results = new();
 
-        var moves = Board.GenerateAllLegalMoves(promotionMode: 0);
+        var moves = Board.GenerateAllLegalMoves();
         foreach (var move in moves)
         {
             Board.MakeMove(move);
@@ -194,7 +194,7 @@ public class Engine
         {
             if (depth == 0) return 1;
 
-            var moves = Board.GenerateAllLegalMoves(promotionMode: 0);
+            var moves = Board.GenerateAllLegalMoves();
             int numPositions = 0;
             foreach (var move in moves)
             {
@@ -376,7 +376,7 @@ public class Engine
                 else break;
 
                 // If all legal moves have been searched, exit the multi pv loop immediately.
-                if (s_excludedRootMoves.Count >= Board.GenerateAllLegalMoves(promotionMode: 2).Count) break;
+                if (s_excludedRootMoves.Count >= Board.GenerateAllLegalMoves().Count) break;
             }
 
             depth++;
@@ -518,8 +518,7 @@ public class Engine
 
 
         // Generate a list of all the moves currently available.
-        var moves = Board.GenerateAllLegalMoves(
-            promotionMode: 2 /* Only queen promotions. Note: other promotions are tried if these end in a draw.*/);
+        var moves = Board.GenerateAllLegalMoves();
 
 
         // If no legal moves were found, it's either
@@ -1043,7 +1042,7 @@ public class Engine
                 int probCutBeta = beta + 191 - 54 * (hasStaticEvaluationImproved ? 1 : 0);
 
                 // Note: should only generate moves with SEE score > probCutBeta - staticEvaluation.
-                var moves = Board.GenerateAllLegalMoves(capturesOnly: true, promotionMode: 2);
+                var moves = Board.GenerateAllLegalMoves(capturesOnly: true);
                 OrderMoves(moves, -1);
 
                 for (int i = 0; i < moves.Count; i++)
@@ -1208,7 +1207,7 @@ public class Engine
         if (alpha < evaluation) alpha = evaluation;
 
 
-        var moves = Board.GenerateAllLegalMoves(capturesOnly: true, promotionMode: 2);
+        var moves = Board.GenerateAllLegalMoves(capturesOnly: true);
 
         // Note: checking for checkmate or stalemate here is not
         // possible because not all legal moves were generated.

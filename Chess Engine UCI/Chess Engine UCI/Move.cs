@@ -28,6 +28,13 @@ public class Move
         EnPassantTargetBackup = currentEnPassantTarget ?? Board.EnPassantTarget;
     }
 
+    // Used for move generation.
+    public enum MoveType
+    {
+        Normal,
+        Sliding,
+        Pawn
+    }
 
     public bool Equals(Move other)
     {
