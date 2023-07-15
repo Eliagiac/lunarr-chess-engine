@@ -709,7 +709,17 @@ public class Board
             switch (moveType)
             {
                 case MoveType.Normal:
+
                     moves = MoveData.Moves[pieceType][squareIndex, 0];
+
+                    // Check if the king is allowed to castle.
+                    if (pieceType == King)
+                    {
+                        ulong relevantOccupiedSquares = AllOccupiedSquares & (0x6eUL << (CurrentTurn * 56));
+                        ulong relevantCastlingRights = CastlingRights & (CurrentTurn == 0 ? Mask.WhiteInitialCastlingRights : Mask.BlackInitialCastlingRights);
+                        moves |= relevantCastlingRights & ~(relevantOccupiedSquares << 1 | relevantOccupiedSquares | relevantOccupiedSquares >> 1);
+                    }
+
                     break;
 
                 case MoveType.Sliding:

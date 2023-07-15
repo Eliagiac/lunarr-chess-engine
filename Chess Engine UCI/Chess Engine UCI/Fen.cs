@@ -127,10 +127,10 @@ namespace Utilities
             fen += Board.CurrentTurn == 0 ? "w" : "b";
 
             fen += " ";
-            if ((Board.CastlingRights | Mask.WhiteKingsideCastling) != 0) fen += "K";
-            if ((Board.CastlingRights | Mask.WhiteQueensideCastling) != 0) fen += "Q";
-            if ((Board.CastlingRights | Mask.BlackKingsideCastling) != 0) fen += "k";
-            if ((Board.CastlingRights | Mask.BlackQueensideCastling) != 0) fen += "q";
+            if ((Board.CastlingRights & Mask.WhiteKingsideCastling) != 0) fen += "K";
+            if ((Board.CastlingRights & Mask.WhiteQueensideCastling) != 0) fen += "Q";
+            if ((Board.CastlingRights & Mask.BlackKingsideCastling) != 0) fen += "k";
+            if ((Board.CastlingRights & Mask.BlackQueensideCastling) != 0) fen += "q";
 
             fen += " ";
             if (Board.EnPassantSquare != 0)
