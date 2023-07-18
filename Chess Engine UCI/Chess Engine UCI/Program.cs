@@ -177,9 +177,6 @@ while (true)
                     SetSearchLimit(SearchLimit.TimeManagement, totTimeWithIncrement / movesToGo);
                     SetOptimumTime(optimumTotTimeWithIncrement / (int)(movesToGo * optimumTimeFactor));
 
-                    Console.WriteLine("Limit: " + totTimeWithIncrement / movesToGo);
-                    Console.WriteLine("Optimum: " + optimumTotTimeWithIncrement / (int)(movesToGo * optimumTimeFactor));
-
                     FindBestMove();
 
                     break;

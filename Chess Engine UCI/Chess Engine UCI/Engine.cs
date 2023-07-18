@@ -175,18 +175,27 @@ public class Engine
     
     /// <summary>The total number of legal moves after each move in the current position and down the game tree until the desired depth is reached.</summary>
     /// <returns>A string with each root move on a new line and the legal move count after it. For example, "a2a4: 20".</returns>
-    public static string PerftResults(int depth)
+    public static string PerftResults(int depth, bool showSpeed = false)
     {
+        Stopwatch perftStopwatch = new();
+        perftStopwatch.Start();
+
         List<string> results = new();
 
         var moves = Board.GenerateAllLegalMoves();
+        int totNumPositions = 0;
         foreach (var move in moves)
         {
             Board.MakeMove(move);
-            results.Add($"{move}: {Perft(depth - 1)}");
+
+            int numPositions = Perft(depth - 1);
+            totNumPositions += numPositions;
+            results.Add($"{move}: {numPositions}");
+
             Board.UnmakeMove(move);
         }
 
+        if (showSpeed) Console.WriteLine(totNumPositions / (perftStopwatch.ElapsedMilliseconds / 1000f));
         return string.Join('\n', results);
 
 
@@ -226,7 +235,7 @@ public class Engine
     {
         s_abortSearchTimer?.Cancel();
 
-        Console.WriteLine($"bestmove {MainLine?.Move?.ToString() ?? ""}");
+        UCI.Bestmove(MainLine?.Move?.ToString() ?? "");
     }
 
     private static void StartSearch()
@@ -244,7 +253,7 @@ public class Engine
 
         s_searchStopwatch.Restart();
 
-        int evaluation;
+        int evaluation = Null;
 
         // Start at depth 1 and increase it until the search is stopped.
         int depth = 1;
@@ -257,14 +266,22 @@ public class Engine
             {
                 s_maxDepthReached = 0;
 
-                int alpha = -Infinity;
-                int beta = Infinity;
-
                 // After the first search (depth 1), the next searches will shrinken the windows to be close to the returned score.
                 // These are the initial window sizes.
                 int alphaWindow = 25;
                 int betaWindow = 25;
 
+                int alpha = -Infinity;
+                int beta = Infinity;
+
+                if (depth >= 2)
+                {
+                    alpha = evaluation - alphaWindow;
+                    beta = evaluation + betaWindow;
+                }
+
+
+                int failedHighCounter = 0;
                 while (true)
                 {
                     // Reset on each iteration because of better performance.
@@ -280,7 +297,8 @@ public class Engine
                     Node root = new();
                     ref int score = ref root.Score;
 
-                    score = Search(root, depth, alpha, beta, out s_currentMainLine);
+                    score = Search(root, depth - failedHighCounter, alpha, beta, out s_currentMainLine);
+                    bool isUpperbound = score <= alpha;
 
                     // If the score is outside the bounds, the search failed and a new search with wider bounds will be performed.
                     bool searchFailed = false;
@@ -294,6 +312,7 @@ public class Engine
                     {
                         betaWindow *= s_aspirationWindowsMultipliers[1];
                         searchFailed = true;
+                        failedHighCounter++;
                     }
 
                     alpha = Max(score - alphaWindow, -Infinity);
@@ -302,6 +321,19 @@ public class Engine
                     evaluation = score;
 
                     if (!searchFailed || WasSearchAborted) break;
+
+                    // Update the UI when the search fails.
+                    else if (searchFailed)
+                        UCI.PV(
+                            depth: depth,
+                            seldepth: s_maxDepthReached + 1,
+                            multipv: pvIndex + 1,
+                            evaluation: evaluation,
+                            evaluationType: isUpperbound ? "upperbound" : "lowerbound",
+                            nodes: s_totalSearchNodes,
+                            nps: (int)Round(s_totalSearchNodes / (s_searchStopwatch.ElapsedMilliseconds / 1000f)),
+                            time: s_searchStopwatch.ElapsedMilliseconds,
+                            pv: MainLine.ToString());
                 }
 
 
@@ -357,18 +389,16 @@ public class Engine
                 {
                     MainLine = new(s_currentMainLine);
 
-                    Console.WriteLine($"info " +
-                        $"depth {depth} " +
-                        $"seldepth {s_maxDepthReached + 1} " +
-                        $"multipv {pvIndex + 1} " +
-                        $"score " +
-                            (!IsMateScore(evaluation) ?
-                            $"cp {evaluation} " :
-                            $"mate {((evaluation > 0) ? "+" : "-")}{Ceiling((Checkmate - Abs(evaluation)) / 2.0)} ") +
-                        $"nodes {s_totalSearchNodes} " +
-                        $"nps {(int)Round(s_totalSearchNodes / (double)s_searchStopwatch.ElapsedMilliseconds * 1000)} " +
-                        $"time {s_searchStopwatch.ElapsedMilliseconds} " +
-                        $"pv {MainLine}");
+                    UCI.PV(
+                        depth: depth, 
+                        seldepth: s_maxDepthReached + 1, 
+                        multipv: pvIndex + 1, 
+                        evaluation: evaluation, 
+                        evaluationType: "",
+                        nodes: s_totalSearchNodes, 
+                        nps: (int)Round(s_totalSearchNodes / (double)s_searchStopwatch.ElapsedMilliseconds * 1000),
+                        time: s_searchStopwatch.ElapsedMilliseconds,
+                        pv: MainLine.ToString());
 
                     s_excludedRootMoves.Add(MainLine?.Move);
                 }
@@ -455,7 +485,7 @@ public class Engine
         TTEntry ttEntry = TT.GetStoredEntry(out ttHit);
 
         // Lookup transposition evaluation.
-        int ttEval = TT.GetStoredEvaluation(ply);
+        int ttEval = TT.GetStoredEvaluation(ply, alpha, beta);
 
         // Store the best move found when this position was previously searched.
         Line? ttLine = ttHit ? ttEntry.Line : null;
@@ -526,10 +556,7 @@ public class Engine
         if (moves.Count == 0)
         {
             // Checkmate.
-            if (Board.IsKingInCheck[Board.CurrentTurn])
-            {
-                return -(Checkmate - ply); // Mated in [ply].
-            }
+            if (Board.IsKingInCheck[Board.CurrentTurn]) return MatedIn(ply);
 
             // Stalemate.
             else return Draw;
@@ -587,6 +614,13 @@ public class Engine
         {
             // Skip PV lines that have already been explored.
             if (rootNode && s_excludedRootMoves.Any(m => m.Equals(moves[i]))) continue;
+
+            // Update the UI on the search progress.
+            if (rootNode && s_searchStopwatch.ElapsedMilliseconds > 3000)
+                UCI.Currmove(
+                    depth: depth,
+                    currmove: moves[i].ToString(),
+                    currmovenumber: i + 1);
 
             // Make the move on the board.
             // The move must be unmade before moving on to the next one.
@@ -659,29 +693,6 @@ public class Engine
             // A new best move was found!
             if (score > alpha)
             {
-                // Verification Search:
-                // When a new best move is found at a high depth, and the score
-                // is significantly higher than the previous best score,
-                // the best line found should be verified at a slightly deeper depth.
-                //if (depth >= VerificationSearchMinimumDepth &&
-                //    score - alpha >= 1 && !nextLine.Cleanup())
-                //{
-                //    var old = Board.ZobristKey;
-                //    // Reach the end of the computer's "plan".
-                //    nextLine.MakeMoves();
-                //
-                //    Search(node.Child, depth - R, -beta, -alpha, evaluationData, out Line newNextLine);
-                //
-                //    nextLine.UnmakeMoves();
-                //    if (Board.ZobristKey != old)
-                //    {
-                //        Console.WriteLine("!!!");
-                //    }
-                //
-                //    nextLine = newNextLine;
-                //}
-
-
                 evaluationType = EvaluationType.Exact;
 
                 alpha = score;
@@ -863,9 +874,11 @@ public class Engine
         {
             if (!rootNode)
             {
-                // Limit alpha and beta to the losing and winning scores respectively.
-                alpha = Max(alpha, -Checkmate + ply);
-                beta = Min(beta, Checkmate - (ply + 1));
+                // The worst possible outcome is that the player is currently in checkmate.
+                alpha = Max(alpha, MatedIn(ply));
+
+                // The best case scenario is that we deliver a mate on the next move.
+                beta = Min(beta, MateIn(ply + 1));
 
                 // Prune if a shorter mating sequence was found.
                 if (alpha >= beta) return true;
@@ -1091,7 +1104,7 @@ public class Engine
                 score = Search(node, depth - InternalIterativeDeepeningDepthReduction, alpha, beta, out Line _);
 
                 ttEntry = TT.GetStoredEntry(out ttHit);
-                ttEval = TT.GetStoredEvaluation(ply);
+                ttEval = TT.GetStoredEvaluation(ply, alpha, beta);
 
                 ttLine = ttHit ? ttEntry.Line : null;
                 ttMove = ttLine?.Move;
@@ -1154,7 +1167,7 @@ public class Engine
         TTEntry ttEntry = TT.GetStoredEntry(out ttHit);
 
         // Lookup transposition evaluation. If the lookup fails, ttEval == LookupFailed.
-        int ttEval = TT.GetStoredEvaluation(ply);
+        int ttEval = TT.GetStoredEvaluation(ply, alpha, beta);
 
         // Store the best move found when this position was previously searched.
         Line ttLine = ttHit ? ttEntry.Line : null;
@@ -1204,6 +1217,7 @@ public class Engine
         // Set the lower bound to the static evaluation.
         // Based on the assumption that the position is not Zugzwang
         // (https://www.chessprogramming.org/Quiescence_Search#Standing_Pat).
+        // Note: this must always be done, otherwise if no captures are available the score returned may be invalid.
         if (alpha < evaluation) alpha = evaluation;
 
 
@@ -1280,7 +1294,6 @@ public class Engine
             if (ttHit && ttEval != Null)
             {
                 pvLine = TT.GetStoredLine();
-
                 return true;
             }
 
@@ -1427,10 +1440,27 @@ public class Engine
     }
     
 
+    /// <summary>Returns true if the given score is a forced checkmate (positive or negative).</summary>
     public static bool IsMateScore(int score)
     {
         return score != Null && Abs(score) >= Checkmate - MaxPly;
     }
+
+    /// <summary>Returns true if the given score is a positive forced checkmate.</summary>
+    public static bool IsMateWinScore(int score)
+    {
+        return score != Null && score >= Checkmate - MaxPly;
+    }
+
+    /// <summary>Returns true if the given score is a negative forced checkmate.</summary>
+    public static bool IsMateLossScore(int score)
+    {
+        return score != Null && score <= -Checkmate + MaxPly;
+    }
+
+    public static int MateIn(int ply) => Checkmate - ply;
+
+    public static int MatedIn(int ply) => -Checkmate + ply;
 
 
     /// <summary>If a position is reached three times, it's a draw.</summary>

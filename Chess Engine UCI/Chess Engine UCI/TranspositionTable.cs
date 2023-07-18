@@ -64,41 +64,51 @@ public class TT
 		return CurrentEntry;
     }
 
-    public static int GetStoredEvaluation(int numPlySearched)
+    /// <summary>Get the stored evaluation of the current position.</summary>
+    /// <remarks>This function ensures returned values are either exact or in line with the current boundaries. <br />
+    /// The returned values may be outside of the bounds (see https://www.chessprogramming.org/Fail-Soft).</remarks>
+    public static int GetStoredEvaluation(int ply, int alpha, int beta)
     {
         int score = CurrentEntry.Evaluation;
 
-        if (IsMateScore(score))
-        {
-            int sign = Math.Sign(score);
-            return (score * sign - numPlySearched) * sign;
-        }
+        // Stored checkmate scores are always the max value. Correct them to account for the distance from mate.
+        if (IsMateWinScore(score)) score = MateIn(ply);
+        else if (IsMateLossScore(score)) score = MatedIn(ply);
 
-        return score;
+
+        if (CurrentEntry.EvaluationType == EvaluationType.Exact)
+            return score;
+
+        if (CurrentEntry.EvaluationType == EvaluationType.LowerBound && score >= beta)
+            return score;
+
+        if (CurrentEntry.EvaluationType == EvaluationType.UpperBound && score <= alpha)
+            return score;
+
+
+        // Lookup failed.
+        return Null;
     }
 
     public static void ClearCurrentEntry() =>
         CurrentEntry = new();
 
-	public static void StoreEvaluation(int depth, int numPlySearched, int evaluation, EvaluationType evaluationType, Line line, int staticEvaluation) 
+	public static void StoreEvaluation(int depth, int ply, int evaluation, EvaluationType evaluationType, Line line, int staticEvaluation) 
 	{
 		// Don't store incorrect values.
 		if (!IsEnabled || WasSearchAborted || evaluation == Null) return;
 
 		if (depth >= CurrentEntry.Depth) 
-            CurrentEntry = new TTEntry(Board.ZobristKey, CorrectMateScoreForStorage(evaluation, numPlySearched), depth, staticEvaluation, evaluationType, line);
+            CurrentEntry = new TTEntry(Board.ZobristKey, CorrectMateScoreForStorage(evaluation, ply), depth, staticEvaluation, evaluationType, line);
 	}
 
 
-	public static int CorrectMateScoreForStorage(int score, int numPlySearched) 
+	public static int CorrectMateScoreForStorage(int score, int ply) 
 	{
-		if (IsMateScore(score)) 
-		{
-			int sign = Math.Sign(score);
-			return (score * sign + numPlySearched) * sign;
-		}
+        if (IsMateWinScore(score)) return Checkmate;
+        if (IsMateLossScore(score)) return -Checkmate;
 
-		return score;
+        return score;
 	}
 }
 
