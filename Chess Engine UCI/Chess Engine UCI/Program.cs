@@ -100,8 +100,6 @@ while (true)
                 }
             }
 
-            GetCurrentFen();
-
             break;
 
         case "go":

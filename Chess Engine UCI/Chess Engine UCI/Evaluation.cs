@@ -675,12 +675,12 @@ public struct Score
 
     public static int OpeningValue(uint score) => (short)(score & 0x0000ffff);
 
-    public static int EndgameValue(uint score) => (short)(score & 0xffff0000);
+    public static int EndgameValue(uint score) => (short)((score & 0xffff0000) >> 16);
 
     public static int Interpolate(uint score, int gamePhase)
     {
         short opening = (short)(score & 0x0000ffff);
-        short endgame = (short)(score & 0xffff0000);
+        short endgame = (short)((score & 0xffff0000) >> 16);
 
         int result;
 
