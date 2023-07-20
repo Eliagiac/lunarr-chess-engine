@@ -13,6 +13,12 @@ TT.Resize(64);
 
 ConvertFromFen(StartingFen);
 
+// BUG: When lmr is not decreased by 1 double the nodes are searched. Also, increasing lmr when not improving slows down further.
+// Both of these are supposed to create a definite decrease in nodes searched.
+
+// TODO: The engine very often fails and has to research in aspiration windows.
+
+// BUG: If the engine loses on time, it gets stuck with "Engine already calculating!"
 
 while (true)
 {
@@ -139,9 +145,9 @@ while (true)
 
                 default:
                     // The optimum time will be set to roughly half the max time with a value of 2.
-                    const float optimumTimeFactor = 2f;
+                    const float optimumTimeFactor = 1.8f;
 
-                    int movesToGo = 40;
+                    int movesToGo = 45;
                     int totTime = 0;
                     int increment = 0;
 
@@ -213,6 +219,8 @@ while (true)
             break;
 
         case "ucinewgame":
+            AbortSearch();
+            TT.Clear();
             break;
 
         case "stop":

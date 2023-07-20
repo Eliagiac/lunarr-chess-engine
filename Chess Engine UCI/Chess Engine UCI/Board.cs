@@ -1075,7 +1075,9 @@ public struct Mask
     public const ulong BlackRank = 0xff00000000000000;
     public const ulong WhiteCastledKingPosition = 0xe7;
     public const ulong BlackCastledKingPosition = 0xe700000000000000;
-    public const ulong SeventhRank = 0xff00000000ff00;
+
+    /// <summary>White's and black's seventh ranks.</summary>
+    public const ulong SeventhRanks = 0xff00000000ff00;
     public const ulong LightSquares = 0x55aa55aa55aa55aa;
     public const ulong DarkSquares = 0xaa55aa55aa55aa55;
     public const ulong BlackHalf = 0xffffffff18000000;
