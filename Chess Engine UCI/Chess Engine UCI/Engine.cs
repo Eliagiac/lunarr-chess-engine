@@ -3,6 +3,7 @@ using static Utilities.Bitboard;
 using static System.Math;
 using static Piece;
 using static Evaluation;
+using System.Numerics;
 
 /// <summary>The <see cref="Engine"/> class contains the main features of the engine.</summary>
 public class Engine
@@ -58,7 +59,8 @@ public class Engine
 
             if (depth == 0 || moveNumber == 0) return reductions;
 
-            double reduction = Log(depth) * Log(moveNumber) / 2f;
+            // Reduction amounts are from a 2019 Stocfish version.
+            double reduction = Log(depth) * Log(moveNumber) / 1.95f;
 
             // Set improving reduction.
             reductions[1] = Max((int)Round(reduction), 0);
@@ -239,10 +241,8 @@ public class Engine
         if (s_useTimeLimit) Task.Delay(s_timeLimit, s_abortSearchTimer.Token).ContinueWith((t) => AbortSearch());
     }
 
-    public static void AbortSearch()
-    {
+    public static void AbortSearch() =>
         WasSearchAborted = true;
-    }
 
     public static void FinishSearch()
     {
@@ -254,8 +254,6 @@ public class Engine
 
     private static void StartSearch()
     {
-        
-        
         s_totalSearchNodes = 0;
 
         MainLine = new();
@@ -654,7 +652,7 @@ public class Engine
                     TT.StoreEvaluation(depth, ply, beta, evaluationType, pvLine, staticEvaluation);
 
                     // If a quiet move caused a beta cutoff, update it's stats.
-                    if (!isCapture) UpdateQuietMoveStats();
+                    if (!isCapture) UpdateQuietMoveStats(moves[i], depth, ply);
 
                     return beta;
                 }
@@ -731,58 +729,11 @@ public class Engine
                 //if (CanExtend() && moves[i].PromotionPiece != Piece.None)
                 //    depthReduction--;
             }
-
-
-            //void FindBetterPromotion()
-            //{
-            //    // Note: alternatives are only searched in case of a draw score.
-            //    // A possible improvement would be to search for any
-            //    // better promotion in case of, for example, a losing score.
-            //
-            //    if (moves[i].PromotionPiece != None && score == Draw)
-            //    {
-            //        foreach (int promotionPiece in new int[] { Knight, Rook, Bishop })
-            //        {
-            //            // Unmake the previous promotion.
-            //            Board.UnmakeMove(moves[i]);
-            //
-            //            moves[i].PromotionPiece = promotionPiece;
-            //
-            //            // Make the new promotion.
-            //            Board.MakeMove(moves[i]);
-            //
-            //            // Store the score of the new promotion.
-            //            // Note: because it's a rare edge case, reductions are not used here. 
-            //            // If this is found to be a bottleneck in the program, it could easily be optimized.
-            //            score = -Search(node + 1, depth - 1, -beta, -alpha, out nextLine);
-            //            node.Child.SetScore(score);
-            //
-            //            // If a better promotion was found, exit the loop.
-            //            if (score > Draw) break;
-            //        }
-            //    }
-            //}
-
-
-            void UpdateQuietMoveStats()
-            {
-                // Moves with the same start and target square will be boosted in move ordering.
-                s_historyHeuristics[Board.CurrentTurn][FirstSquareIndex(moves[i].StartSquare), FirstSquareIndex(moves[i].TargetSquare)] += depth * depth;
-
-                StoreKillerMove(moves[i], ply);
-            }
         }
+        
 
         // Store killer move in case the best move found is quiet, even if it didn't cause a beta cutoff.
-        // Disabled because of ambiguous performance.
-
-        // In case of an all-node, the pvLine will have a null move.
-        //if (pvLine.Move?.CapturedPieceType == Piece.None)
-        //{
-        //    History[FirstSquareIndex(pvLine.Move.StartSquare), FirstSquareIndex(pvLine.Move.TargetSquare)] += depth * depth;
-        //
-        //    StoreKillerMove(pvLine.Move, ply);
-        //}
+        if (pvLine.Move?.CapturedPieceType == None) UpdateQuietMoveStats(pvLine.Move, depth, ply);
 
         // Once all legal moves have been searched, save the best score found in the transposition table and return it.
         TT.StoreEvaluation(depth, ply, alpha, evaluationType, pvLine, staticEvaluation);
@@ -1040,7 +991,7 @@ public class Engine
     /// The QuiescenceSearch function extends the normal Search, evaluating all legal captures.
     /// For more information, see https://www.chessprogramming.org/Quiescence_Search.
     /// </summary>
-    public static int QuiescenceSearch(Node node, int alpha, int beta, out Line pvLine)
+    private static int QuiescenceSearch(Node node, int alpha, int beta, out Line pvLine)
     {
         
         
@@ -1256,12 +1207,21 @@ public class Engine
     }
 
 
-    public static void StoreKillerMove(Move move, int ply)
+    private static void StoreKillerMove(Move move, int ply)
     {
         if (s_killerMoves[0, ply] != null && !s_killerMoves[0, ply].Equals(move))
             s_killerMoves[1, ply] = new(s_killerMoves[0, ply]);
 
         s_killerMoves[0, ply] = move;
+    }
+
+    private static void UpdateQuietMoveStats(Move move, int depth, int ply)
+    {
+        // Moves with the same start and target square will be boosted in move ordering.
+        s_historyHeuristics[Board.CurrentTurn][FirstSquareIndex(move.StartSquare), FirstSquareIndex(move.TargetSquare)] += depth * depth;
+
+        // If the same move is available in a different position, it will be prioritized.
+        StoreKillerMove(move, ply);
     }
 
 
