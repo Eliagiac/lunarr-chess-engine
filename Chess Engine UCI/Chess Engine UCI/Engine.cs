@@ -79,7 +79,8 @@ public class Engine
     private static Move[,] s_killerMoves = new Move[2, MaxPly];
 
     /// <summary>Bonus based on the success of a move in other positions.</summary>
-    /// <remarks>Moves are identified using butterfly boards (https://www.chessprogramming.org/Butterfly_Boards) with [ColorIndex][StartSquareIndex, TargetSquareIndex].</remarks>
+    /// <remarks>Moves are identified using butterfly boards (https://www.chessprogramming.org/Butterfly_Boards) 
+    /// with [ColorIndex][StartSquareIndex, TargetSquareIndex].</remarks>
     private static int[][,] s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
 
     /// <summary><see cref="Stopwatch"/> that keeps track of the total time taken by the current search.</summary>
@@ -244,7 +245,7 @@ public class Engine
     public static void AbortSearch() =>
         WasSearchAborted = true;
 
-    public static void FinishSearch()
+    private static void FinishSearch()
     {
         s_abortSearchTimer?.Cancel();
         WasSearchAborted = false;
@@ -384,23 +385,25 @@ public class Engine
     /// <summary>
     /// The <see cref="Search"/> function goes through every legal move,
     /// then recursively calls itself on each of the opponent's responses
-    /// until the depth reaches 0. <br /> Finally, the positions reached are evaluated.
-    /// The path that leads to the best "forced evaluation" is then chosen. <br />
+    /// until the depth reaches 0. Finally, the positions reached are evaluated. <br />
+    /// The path that leads to the position with the best evaluation is then chosen. <br />
     /// The greater the depth, the further into the future the computer will be able to see,
     /// possibly finding more advanced tactics and better moves.
     /// </summary>
     /// <remarks>
     /// Terms such as evaluation, value and score all refer to the predicted quality of a position:
-    /// 'evaluation' (similarly to 'value' or 'eval') is used to describe approximations of the score, such as the values returned 
-    /// by the Evaluate() function, while 'score' is the value returned by the search function,
-    /// which is more accurate as it looked into future positions as well.
+    /// 'evaluation' (similarly to 'value' or 'eval') is used to describe approximations of the score, 
+    /// such as the values returned by the Evaluate() function, whereas 'score' is the value returned 
+    /// by the search function, which is more accurate as future moves were taken into consideration as well.
     /// </remarks>
     /// <param name="depth">The remaining depth to search before evaluating the positions reached.</param>
-    /// <param name="alpha">The lower bound of the evaluation</param>
+    /// <param name="alpha">The lower bound of the evaluation. Inside the search, only values above 
+    /// alpha will be considered. If alpha is returned because moves reached the minimum score, 
+    /// the search will fail-low and the actual score may be lower.</param>
+    /// <param name="beta">The upper bound of the evaluation. If a value greater or equal to beta 
+    /// is found, the search will fail-high and the actual score may be higher.</param>
     private static int Search(Node node, int depth, int alpha, int beta, out Line pvLine, bool useNullMovePruning = true, ulong previousCapture = 0, bool useMultiCut = true)
     {
-        
-        
         int ply = node.Ply;
 
         bool rootNode = ply == 0;
@@ -413,7 +416,7 @@ public class Engine
         if (WasSearchAborted) return Null;
 
         // Check for a draw, but never return early at the root.
-        if (!rootNode && IsDrawByRepetition(Board.ZobristKey)) return Draw;
+        if (!rootNode && IsDrawByRepetition()) return Draw;
 
         if (!rootNode && IsDrawByInsufficientMaterial()) return Draw;
 
@@ -497,20 +500,19 @@ public class Engine
 
         // Null Move Pruning:
         // Explained here: https://www.chessprogramming.org/Null_Move_Pruning.
-        if (NullMovePruning(ref evaluation, out int nullMovePruningScore)) return nullMovePruningScore;
+        if (NullMovePruning(evaluation, staticEvaluation, out int nullMovePruningScore)) return nullMovePruningScore;
 
 
         if (ProbCut(ref staticEvaluation, ref pvLine, out int probCutScore)) return probCutScore;
         #endregion
 
-        // If the position is not in the transposition table,
-        // save it with a reduced depth search for better move ordering.
+        // If the position is not in the transposition table insert it by
+        // performing a reduced depth search, for better move ordering.
         InternalIterativeDeepening();
 
 
         // Generate a list of all the moves currently available.
         var moves = Board.GenerateAllLegalMoves();
-
 
         // If no legal moves were found, it's either
         // checkmate for the current player or stalemate.
@@ -523,14 +525,13 @@ public class Engine
             else return Draw;
         }
 
-
-        // Rearrange the moves list to try to come across better moves earlier,
-        // causing more beta cutoffs and a faster search overall.
+        // Rearrange the moves list to reach better moves earlier,
+        // hoping for a beta-cutoff to occur as soon as possible.
         OrderMoves(moves, ply);
 
 
         // The new depth may receive depth extensions, so by separating it from
-        // the initial depth we can keep using that to make decisions.
+        // the initial depth we can keep using that to make decisions on pruning.
         int newDepth = depth - 1;
 
         // Extend the search when in check.
@@ -541,33 +542,34 @@ public class Engine
         //if (CanExtend() && moves.Count == 1) newDepth++;
 
 
-        // evaluationType == UpperBound -> node is an All-Node. All nodes were searched and none reached alpha. Alpha is returned.
-        // evaluationType == Exact -> node is a PV-Node. All nodes were searched and some reached alpha. The new alpha is returned.
-        // evaluationType == LowerBound -> node is a Cut-Node. Not all nodes were searched, because a beta cutoff occured. Beta is returned.
+        // The evaluation type shows how the score returned by the search compares to the actual score.
         EvaluationType evaluationType = EvaluationType.UpperBound;
 
         // Moves Loop:
         // Iterate through all legal moves and perform a depth - 1 search on each one.
         for (int i = 0; i < moves.Count; i++)
         {
+            Move move = moves[i];
+
             // Skip PV lines that have already been explored.
-            if (rootNode && s_excludedRootMoves.Any(m => m.Equals(moves[i]))) continue;
+            if (rootNode && s_excludedRootMoves.Any(m => m.Equals(move))) continue;
 
             // Update the UI on the search progress.
             if (rootNode && s_searchStopwatch.ElapsedMilliseconds > 3000)
                 UCI.Currmove(
                     depth: depth,
-                    currmove: moves[i].ToString(),
+                    currmove: move.ToString(),
                     currmovenumber: i + 1);
+
 
             // Make the move on the board.
             // The move must be unmade before moving on to the next one.
-            Board.MakeMove(moves[i]);
+            Board.MakeMove(move);
 
 
             // Store information on the move for pruning purposes.
-            bool isCapture = IsCapture(moves[i]);
-            bool isCaptureOrPromotion = IsCaptureOrPromotion(moves[i]);
+            bool isCapture = IsCapture(move);
+            bool isCaptureOrPromotion = IsCaptureOrPromotion(move);
 
             bool givesCheck = Board.IsKingInCheck[Board.CurrentTurn];
 
@@ -617,13 +619,9 @@ public class Engine
                 score = -Search(newNode, depth - 1, -beta, -alpha, out nextLine);
 
 
-            // Look for promotions that avoid a draw.
-            //FindBetterPromotion();
-
-
             // Unmake the move on the board.
             // This must be done before moving onto the next move.
-            Board.UnmakeMove(moves[i]);
+            Board.UnmakeMove(move);
 
 
             // If the search was aborted, don't return incorrect values.
@@ -636,23 +634,22 @@ public class Engine
 
                 alpha = score;
 
-                pvLine.Move = moves[i];
+                pvLine.Move = move;
                 pvLine.Next = nextLine;
 
                 // Fail-High:
-                // If the score is higher than beta, it means the move is
-                // too good for the opponent and this node will be avoided.
-                // There's no need to look at any other moves since we already know this one is worse than we can afford.
-                // Note: beta is usually either negativeInfinity or -alpha of the parent node.
-                // This means that no cutoffs can occur until the first branch of the root has been explored up to a leaf node.
+                // If the score is higher than beta, it means the move is too good for the
+                // opponent and this node will be avoided. There's no need to look at any
+                // other moves since we already know this one is worse than we can afford.
                 if (score >= beta)
                 {
+                    // The score was limited to beta, thus the actual score may be higher.
                     evaluationType = EvaluationType.LowerBound;
 
                     TT.StoreEvaluation(depth, ply, beta, evaluationType, pvLine, staticEvaluation);
 
-                    // If a quiet move caused a beta cutoff, update it's stats.
-                    if (!isCapture) UpdateQuietMoveStats(moves[i], depth, ply);
+                    // If a quiet move caused a beta-cutoff, update it's stats.
+                    if (!isCapture) UpdateQuietMoveStats(move, depth, ply);
 
                     return beta;
                 }
@@ -665,7 +662,7 @@ public class Engine
                 !isCaptureOrPromotion && !givesCheck)
                 {
                     // It's essential to unmake moves when pruning inside the moves loop.
-                    Board.UnmakeMove(moves[i]);
+                    Board.UnmakeMove(move);
                     return true;
                 }
 
@@ -676,12 +673,12 @@ public class Engine
             {
                 useLateMovePruning = !rootNode &&
                     depth < ShallowDepthThreshold &&
-                    i > LateMovePruningThreshold(depth);
+                    i > LateMovePruningThreshold(depth, hasStaticEvaluationImproved);
 
                 if (useLateMovePruning &&
                     !isCaptureOrPromotion && !givesCheck)
                 {
-                    Board.UnmakeMove(moves[i]);
+                    Board.UnmakeMove(move);
                     return true;
                 }
 
@@ -700,10 +697,10 @@ public class Engine
                     // Don't reduce captures, promotions and killer moves,
                     // unless we are past the moveCountBasedPruningThreshold (very late moves).
                     if (useLateMovePruning ||
-                        (moves[i].CapturedPieceType == None &&
-                        moves[i].PromotionPiece == None &&
-                        !moves[i].Equals(s_killerMoves[0, ply]) &&
-                        !moves[i].Equals(s_killerMoves[1, ply])))
+                        (move.CapturedPieceType == None &&
+                        move.PromotionPiece == None &&
+                        !move.Equals(s_killerMoves[0, ply]) &&
+                        !move.Equals(s_killerMoves[1, ply])))
                     {
                         usedLmr = true;
 
@@ -716,23 +713,23 @@ public class Engine
             void ExtendDepth()
             {
                 // Capture extension.
-                //if (moves[i].CapturedPieceType != Piece.None)
+                //if (move.CapturedPieceType != Piece.None)
                 //    depthReduction--;
 
                 // Passed pawn extension (when a pawn is pushed to the seventh rank).
                 // Note: unexpectedly, passed pawn extensions actually decrease the amount of nodes searched.
-                if (CanExtend() && moves[i].PieceType == Pawn &&
-                    ((moves[i].TargetSquare & Mask.SeventhRanks) != 0))
+                if (CanExtend() && move.PieceType == Pawn &&
+                    ((move.TargetSquare & Mask.SeventhRanks) != 0))
                     depthReduction--;
 
                 // Promotion extension.
-                //if (CanExtend() && moves[i].PromotionPiece != Piece.None)
+                //if (CanExtend() && move.PromotionPiece != Piece.None)
                 //    depthReduction--;
             }
         }
         
 
-        // Store killer move in case the best move found is quiet, even if it didn't cause a beta cutoff.
+        // Store killer move in case the best move found is quiet, even if it didn't cause a beta-cutoff.
         if (pvLine.Move?.CapturedPieceType == None) UpdateQuietMoveStats(pvLine.Move, depth, ply);
 
         // Once all legal moves have been searched, save the best score found in the transposition table and return it.
@@ -874,25 +871,27 @@ public class Engine
             return false;
         }
 
-        bool NullMovePruning(ref int evaluation, out int nullMovePruningScore)
+        bool NullMovePruning(int evaluation, int staticEvaluation, out int nullMovePruningScore)
         {
             nullMovePruningScore = Null;
 
-            if (!rootNode && !inCheck && useNullMovePruning &&
-                depth > 2 && evaluation >= beta)
+            // Values and implementation are from Stockfish.
+            if (!rootNode && !inCheck && useNullMovePruning && 
+                evaluation >= beta && evaluation >= staticEvaluation)
             {
-                // Used for backup data storage.
                 NullMove move = new();
-
                 Board.MakeNullMove(move);
+
 
                 Node newNode = node.AddNewChild();
                 ref int score = ref newNode.Score;
 
-                // After the current turn is skipped, perform a reduced depth search.
-                const int R = 3;
+                // The depth reduction depends on the static evaluation and depth.
+                int depthReduction = Min((evaluation - beta) / 168, 7) + depth / 3 + 3;
 
-                score = -Search(newNode, depth - R, -beta, -beta + 1 /* We are only interested to know if the score can reach beta. */, out Line _, useNullMovePruning: false);
+                // Perform a null-window search, since we are only interested to know if the score can reach beta.
+                // For more information, see: https://www.chessprogramming.org/Null_Window.
+                score = -Search(newNode, depth - depthReduction, -beta, -beta + 1, out Line _, useNullMovePruning: false);
 
 
                 Board.UnmakeNullMove(move);
@@ -900,14 +899,10 @@ public class Engine
                 if (WasSearchAborted) return false;
                 if (score >= beta)
                 {
-                    // Note: score is not always equal to beta here because of,
-                    // for example, a reduced depth of 0, where the static evaluation is returned.
-
                     // Avoid returning unproven wins.
                     if (IsMateScore(score)) score = beta;
 
                     nullMovePruningScore = score;
-
                     return true;
                 }
             }
@@ -915,23 +910,26 @@ public class Engine
             return false;
         }
 
-        // Following the Stockfish implementation.
         bool ProbCut(ref int staticEvaluation, ref Line pvLine, out int probCutScore)
         {
             probCutScore = Null;
 
+            // Following the Stockfish implementation.
+            int probCutBeta = beta + 168 - (hasStaticEvaluationImproved ? 61 : 0);
+
+            // Note: Stockfish adds the condition !(ttHit && ttEntry.Depth >= depth - 3 && ttEval != Null && ttEval < probCutBeta).
+            // Adding it makes the search significantly slower, so it's currently avoided. This shouldn't have an effect on functionality.
             if (!rootNode && depth > ProbCutDepthReduction && !IsMateScore(beta))
             {
-                // Value from Stockfish.
-                int probCutBeta = beta + 191 - 54 * (hasStaticEvaluationImproved ? 1 : 0);
-
                 // Note: should only generate moves with SEE score > probCutBeta - staticEvaluation.
                 var moves = Board.GenerateAllLegalMoves(capturesOnly: true);
                 OrderMoves(moves, -1);
 
                 for (int i = 0; i < moves.Count; i++)
                 {
-                    Board.MakeMove(moves[i]);
+                    Move move = moves[i];
+
+                    Board.MakeMove(move);
 
                     Node newNode = node.AddNewChild();
 
@@ -944,11 +942,11 @@ public class Engine
                         probCutScore = -Search(newNode, depth - ProbCutDepthReduction, -probCutBeta, -probCutBeta + 1, out probCutLine);
                     }
 
-                    Board.UnmakeMove(moves[i]);
+                    Board.UnmakeMove(move);
 
                     if (probCutScore >= probCutBeta)
                     {
-                        pvLine.Move = moves[i];
+                        pvLine.Move = move;
                         pvLine.Next = probCutLine;
 
                         // Save ProbCut data into transposition table.
@@ -968,8 +966,8 @@ public class Engine
         {
             // If no move is stored in the transposition table for this position,
             // perform a reduced depth search and update the transposition values.
-            if (!rootNode /* Cannot use at the root because of MultiPV */ &&
-                depth > InternalIterativeDeepeningDepthReduction && ttMove == null)
+            if (!rootNode && ttMove == null &&
+                depth > InternalIterativeDeepeningDepthReduction)
             {
                 ref int score = ref node.Score;
                 score = Search(node, depth - InternalIterativeDeepeningDepthReduction, alpha, beta, out Line _);
@@ -988,13 +986,11 @@ public class Engine
     }
 
     /// <summary>
-    /// The QuiescenceSearch function extends the normal Search, evaluating all legal captures.
-    /// For more information, see https://www.chessprogramming.org/Quiescence_Search.
+    /// The QuiescenceSearch function extends the normal Search, evaluating all legal captures. <br />
+    /// For more information, see <see href="https://www.chessprogramming.org/Quiescence_Search"/>.
     /// </summary>
     private static int QuiescenceSearch(Node node, int alpha, int beta, out Line pvLine)
     {
-        
-        
         int ply = node.Ply;
 
         // pvLine == null -> branch was pruned.
@@ -1083,24 +1079,17 @@ public class Engine
         // Note: checking for checkmate or stalemate here is not
         // possible because not all legal moves were generated.
 
-
         OrderMoves(moves, -1);
 
-        //bool isEndGame = gamePhase < EndgamePhaseScore;
 
-
-        // evaluationType == UpperBound -> node is an All-Node. All nodes were searched and none reached alpha. Alpha is returned.
-        // evaluationType == Exact -> node is a PV-Node. All nodes were searched and some reached alpha. The new alpha is returned.
-        // evaluationType == LowerBound -> node is a Cut-Node. Not all nodes were searched, because a beta cutoff occured. Beta is returned.
         EvaluationType evaluationType = EvaluationType.UpperBound;
 
         for (int i = 0; i < moves.Count; i++)
         {
-            // Delta pruning
-            //if (!isEndGame)
-            //    if (GetPieceValue(move.CapturedPieceType) + 200 <= alpha) continue;
+            Move move = moves[i];
 
-            Board.MakeMove(moves[i]);
+            Board.MakeMove(move);
+
 
             s_totalSearchNodes++;
 
@@ -1109,7 +1098,8 @@ public class Engine
 
             score = -QuiescenceSearch(newNode, -beta, -alpha, out Line nextLine);
 
-            Board.UnmakeMove(moves[i]);
+
+            Board.UnmakeMove(move);
 
 
             // A new best move was found!
@@ -1119,15 +1109,9 @@ public class Engine
 
                 alpha = score;
 
-                pvLine.Move = moves[i];
+                pvLine.Move = move;
                 pvLine.Next = nextLine;
 
-                // Fail-High:
-                // If the score is higher than beta, it means the move is
-                // too good for the opponent and the parent node will be avoided.
-                // There's no need to look at any other moves since we already know that this one is worse than we can afford.
-                // Note: beta is either negativeInfinity or -alpha of the parent node.
-                // This means that no cutoffs can occur until the first branch of the root has been explored fully.
                 if (score >= beta)
                 {
                     evaluationType = EvaluationType.LowerBound;
@@ -1226,10 +1210,11 @@ public class Engine
 
 
     /// <summary>
-    /// Order <paramref name="moves"/> based on the likelihood of a move being strong in the current position.
+    /// Rearrange the moves in <paramref name="moves"/> based on the likelihood of each move being 
+    /// strong in the current position. <br /> If better moves are listed first, it's more likely 
+    /// to get an early beta-cutoff (<see href="https://www.chessprogramming.org/Beta-Cutoff"/>)
     /// </summary>
-    /// <param name="moves">Move list to order</param>
-    /// <param name="ply">Current ply in the search tree. Used to compare killer moves</param>
+    /// <param name="ply">Current ply in the search tree. Used to compare killer moves.</param>
     private static void OrderMoves(List<Move> moves, int ply)
     {
         // Save time by returning early if there aren't multiple moves to sort.
@@ -1245,7 +1230,7 @@ public class Engine
         List<int> scores = new();
         foreach (Move move in moves)
         {
-            // Moves with a higher score are more likely to cause a beta cutoff,
+            // Moves with a higher score are more likely to cause a beta-cutoff,
             // speeding up the search, so they will be searched first.
             int moveScore = 0;
 
@@ -1330,10 +1315,9 @@ public class Engine
     public static int MatedIn(int ply) => -Checkmate + ply;
 
 
-    // Note: checking if the position has repeated twice is currently the only possible implementation.
-    // Checking for three-fold repetition would also require checking if the opponent is able to make a draw.
     /// <summary>If a position is reached three times, it's a draw.</summary>
-    public static bool IsDrawByRepetition(ulong key) => Board.PositionHistory.Count(other => other == key) >= 2;
+    /// <remarks>The current implementation returns true even if the position was only reached twice.</remarks>
+    public static bool IsDrawByRepetition() => Board.PositionHistory.Count(other => other == Board.ZobristKey) >= 2;
 
 
     /// <summary>If there is not enough material on the board for either player to checkate the opponent, it's a draw.</summary>
@@ -1443,8 +1427,13 @@ public class Engine
     };
 
 
-    // Values from Stockfish: https://github.com/official-stockfish/Stockfish/blob/master/src/search.cpp#L77-L80
-    private static int LateMovePruningThreshold(int depth) => (3 + depth * depth) / 2;
+    private static int LateMovePruningThreshold(int depth, bool improving)
+    {
+        // Values from Stockfish: https://github.com/official-stockfish/Stockfish/blob/master/src/search.cpp#L78-L81.
+        
+        if (improving) return 3 + depth * depth;
+        else return (3 + depth * depth) / 2;
+    }
 }
 
 public class Line

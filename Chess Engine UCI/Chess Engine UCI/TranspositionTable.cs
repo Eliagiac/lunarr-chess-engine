@@ -157,18 +157,14 @@ public enum EvaluationType
     Exact = 3,
 
     /// <summary>The node is a Cut-Node.</summary>
-    /// <remarks>
-    /// A beta-cutoff caused some moves to be skipped,
-    /// so the score is a lower bound of the evaluation
-    /// (the exact evaluation may be higher).
-    /// </remarks>
+    /// <remarks>A beta-cutoff caused some moves to be skipped,
+    /// so the score is a lower bound of the evaluation (the
+    /// exact evaluation may be higher).</remarks>
     LowerBound = 2,
 
     /// <summary>The node is an All-Node.</summary>
-    /// <remarks>
-    /// No moves exceeded alpha, so the score 
-    /// is an upper bound of the evaluation
-    /// (the exact evaluation may be lower).
+    /// <remarks>No moves exceeded alpha, so the score is an upper bound of 
+    /// the evaluation (the exact evaluation may be lower).
     /// </remarks>
     UpperBound = 1
 }
