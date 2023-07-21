@@ -3,7 +3,7 @@ using static Utilities.Fen;
 using static Engine;
 
 
-Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
+Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
 
 MoveData.ComputeMoveData();
 MoveData.GenerateDirectionalMasks();
@@ -13,12 +13,6 @@ TT.Resize(64);
 
 ConvertFromFen(StartingFen);
 
-// BUG: When lmr is not decreased by 1 double the nodes are searched. Also, increasing lmr when not improving slows down further.
-// Both of these are supposed to create a definite decrease in nodes searched.
-
-// TODO: The engine very often fails and has to research in aspiration windows.
-
-// BUG: If the engine loses on time, it gets stuck with "Engine already calculating!"
 
 while (true)
 {
@@ -210,7 +204,7 @@ while (true)
             break;
 
         case "uci":
-            Console.WriteLine("id name Engine");
+            Console.WriteLine("id name White Widow");
             Console.WriteLine("id author Elia Giaccardi");
             break;
 
