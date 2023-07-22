@@ -2,11 +2,15 @@
 
 Chess engine written in C#, compliant with the UCI protocol.
 
+There's a few options to play against White Widow:
+- Challenge the bot on Lichess: https://lichess.org/@/WhiteWidowBot.
+- Run the excecutable file found in [Releases](https://github.com/Eliagiac/white-widow/releases), using a chess GUI such as [Arena](http://www.playwitharena.de/).
+
 ## Board Representation and Move Generation
 
 Positions are represented with 12 [bitboards](https://www.chessprogramming.org/Bitboards), one for each piece type, where each positive bit signifies an occupied square.
 
-Move generation uses [magic bitboards](https://www.chessprogramming.org/Magic_Bitboards) for sliding pieces and pre-computed move data for the others.
+Move generation uses [magic bitboards](https://www.chessprogramming.org/Magic_Bitboards) for sliding pieces and pre-computed move data for normal pieces.
 
 ## Search
 
