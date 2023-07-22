@@ -92,6 +92,7 @@ public class Engine
     private static CancellationTokenSource? s_abortSearchTimer;
 
 
+    private static int s_moveOverhead = 10;
     private static int s_depthLimit;
     private static int s_timeLimit;
     private static int s_optimumTime;
@@ -136,6 +137,12 @@ public class Engine
     /// <summary>The best move found by the engine, and the best play sequence that follows it.</summary>
     public static Line? MainLine { get; private set; }
 
+
+    /// <summary>Specify an estimate of the time taken to play a move (lag).</summary>
+    public static void SetMoveOverhead(int moveOverhead) => s_moveOverhead = moveOverhead;
+
+    /// <summary>Returns the current move overhead estimate.</summary>
+    public static int GetMoveOverhead() => s_moveOverhead;
 
     /// <summary>Select which type of limit the next search will use.</summary>
     /// <remarks>Limits aren't automatically reset on each search.</remarks>
@@ -373,7 +380,7 @@ public class Engine
             depth++;
         }
         while
-        (!WasSearchAborted &&
+        (!WasSearchAborted && depth < MaxPly &&
         (!s_useTimeManagement || s_searchStopwatch.ElapsedMilliseconds <= s_optimumTime) &&
         (!s_useDepthLimit || depth <= s_depthLimit));
 

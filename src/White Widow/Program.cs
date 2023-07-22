@@ -141,7 +141,7 @@ while (true)
                     // The optimum time will be set to roughly half the max time with a value of 2.
                     const float optimumTimeFactor = 1.8f;
 
-                    int movesToGo = 45;
+                    int movesToGo = 40;
                     int totTime = 0;
                     int increment = 0;
 
@@ -171,7 +171,10 @@ while (true)
                         }
                     }
 
-                    int totTimeWithIncrement = 10 + totTime + (increment * movesToGo);
+                    // The time limit must be accurate and take into consideration the estimated move overhead.
+                    int totTimeWithIncrement = 10 + totTime + increment * (movesToGo - 1) - GetMoveOverhead() * (movesToGo + 2);
+
+                    // The optimum time is meant to allow the search to end early if enough time has passed.
                     int optimumTotTimeWithIncrement = 10 + totTime + (int)(increment * movesToGo * optimumTimeFactor);
 
                     SetSearchLimit(SearchLimit.TimeManagement, totTimeWithIncrement / movesToGo);
@@ -191,12 +194,19 @@ while (true)
                 switch (commands[2])
                 {
                     case "Hash":
-
-                        if (commands[3] == "value")
-                        {
+                        if (commands[3] == "value") 
                             TT.Resize(int.Parse(commands[4]));
-                        }
 
+                        break;
+
+                    case "Move Overhead":
+                        if (commands[3] == "value")
+                            SetMoveOverhead(int.Parse(commands[4]));
+
+                        break;
+
+                    case "Threads":
+                        // Multithreading is not currently supported.
                         break;
                 }
             }
@@ -206,6 +216,10 @@ while (true)
         case "uci":
             Console.WriteLine("id name White Widow");
             Console.WriteLine("id author Elia Giaccardi");
+            Console.WriteLine("option name Hash type spin default 64 min 1 max 33554432");
+            Console.WriteLine("option name Move Overhead type spin default 10 min 0 max 5000");
+            Console.WriteLine("option name Threads type spin default 1 min 1 max 1");
+            Console.WriteLine("uciok");
             break;
 
         case "isready":
