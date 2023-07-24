@@ -274,8 +274,7 @@ public class Engine
         // Start searching on every thread
         for (int i = 0; i < s_threadCount; i++)
         {
-            s_threads[i] = new();
-            Task.Factory.StartNew(() => StartSearching(initialBoard, s_threads[i], i == 0), TaskCreationOptions.LongRunning);
+            Task.Factory.StartNew(() => StartSearching(initialBoard), TaskCreationOptions.LongRunning);
         }
 
         s_abortSearchTimer = new();
@@ -298,10 +297,11 @@ public class Engine
     /// <remarks>Other threads may be activated depending on the on <see cref="s_threadCount"/>.</remarks>
     /// <param name="board">The starting position given to all threads.</param>
     /// <param name="isMainSearchThread">UI search updates will only be sent if isMainThread is true.</param>
-    private static void StartSearching(Board board, ThreadInfo threadInfo, bool isMainSearchThread)
+    private static void StartSearching(Board board)
     {
+        ThreadInfo threadInfo = new();
+
         t_board = board;
-        t_isMainSearchThread = isMainSearchThread;
 
         t_totalSearchNodes = 0;
 
@@ -1475,6 +1475,33 @@ public class Engine
         if (improving) return 3 + depth * depth;
         else return (3 + depth * depth) / 2;
     }
+
+
+    /// <summary>Stores information on the search progress and results of a thread, to be accessed from outside the thread.</summary>
+    /// <remarks>Information that's only used inside the thread should not be stored here.</remarks>
+    private class ThreadInfo
+    {
+        public Line MainLine = new();
+
+        /// <summary>
+        /// When a new <see cref="ThreadInfo"/> object is created, it's stored in the first available slot 
+        /// of <see cref="s_threads"/> and ThreadStatic information on this thread is updated.
+        /// </summary>
+        public ThreadInfo()
+        {
+            for (int i = 0; i < s_threads.Length; i++)
+            {
+                // Store this ThreadInfo object in the first empty slot.
+                if (s_threads[i] == null)
+                {
+                    t_isMainSearchThread = i == 0;
+
+                    s_threads[i] = this;
+                    break;
+                }
+            }
+        }
+    }
 }
 
 public class Line
@@ -1606,13 +1633,6 @@ public class Node
     //        $"{Enum.GetName(typeof(NodeType), NodeType)}," +
     //        $"{(Children != null && Children.Count > 0 ? $"[{string.Join(";", Children)};]" : "[]")}";
     //}
-}
-
-/// <summary>Stores information on the search progress and results of a thread, to be accessed from outside the thread.</summary>
-/// <remarks>Information that's only used inside the thread should not be stored here.</remarks>
-public class ThreadInfo
-{
-    public Line MainLine = new();
 }
 
 public enum NodeType
