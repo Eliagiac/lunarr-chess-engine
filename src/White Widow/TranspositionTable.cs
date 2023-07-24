@@ -6,59 +6,60 @@ using static Engine;
 /// Information about these entries such as their evaluation can quickly be looked up to avoid calculating it again.</summary>
 public class TT
 {
-    /// <summary>A table containing information about specific positions, <br />
-    /// indexed based on the <see cref="Board.ZobristKey"/> of the position.</summary>
-    public static TTEntry[] Entries = new TTEntry[_tableSize];
-
-    /// <summary>The index of the current position in the <see cref="Entries"/> array based on the <see cref="Board.ZobristKey"/>.</summary>
-    /// <remarks>Must be updated any time the position changes using <see cref="CalculateCurrentEntryIndex"/>.</remarks>
-    public static ulong CurrentEntryIndex;
-
-
     /// <summary>If the transposition table is disabled, 
     /// <see cref="StoreEvaluation"/> will return early.</summary>
     public static bool IsEnabled = true;
 
-
     private static readonly ulong EntriesInOneMegabyte = (1024 * 1024) / (ulong)Marshal.SizeOf<TTEntry>();
+
 
     /// <summary>The size of the <see cref="Entries"/> array.</summary>
     /// <remarks>The default size is 8MB.</remarks>
-    private static ulong _tableSize = 8 * EntriesInOneMegabyte;
+    private static ulong s_tableSize = 8 * EntriesInOneMegabyte;
+
+    /// <summary>A table containing information about specific positions, <br />
+    /// indexed based on the <see cref="Board.ZobristKey"/> of the position.</summary>
+    private static TTEntry[] s_entries = new TTEntry[s_tableSize];
+
+    /// <summary>The index of the current position in the <see cref="Entries"/> array based on the <see cref="Board.ZobristKey"/>.</summary>
+    /// <remarks>Must be updated any time the position changes using <see cref="CalculateCurrentEntryIndex"/>.</remarks>
+    [ThreadStatic]
+    private static ulong t_currentEntryIndex;
 
 
     /// <summary>Generate a new transposition table of the specified size (in megabytes).</summary>
+    /// <remarks>The <see cref="Resize"/> function must be called on every thread.</remarks>
     /// <param name="sizeInMegabytes">The size of the <see cref="Entries"/> array in megabytes.</param>
     public static void Resize(int sizeInMegabytes)
     {
-        _tableSize = (ulong)sizeInMegabytes * EntriesInOneMegabyte;
+        s_tableSize = (ulong)sizeInMegabytes * EntriesInOneMegabyte;
 
-        Entries = new TTEntry[_tableSize];
+        s_entries = new TTEntry[s_tableSize];
     }
 
     /// <summary>Reset the <see cref="Entries"/> array.</summary>
-    public static void Clear() => 
-        Entries = new TTEntry[_tableSize];
+    public static void Clear() =>
+        s_entries = new TTEntry[s_tableSize];
 
     /// <summary>Update the <see cref="CurrentEntryIndex"/> based on the position on the board.</summary>
-    public static void CalculateCurrentEntryIndex() => 
-        CurrentEntryIndex = MultiplyHigh64Bits(Board.ZobristKey, _tableSize);
+    public static void CalculateCurrentEntryIndex(Board board) =>
+        t_currentEntryIndex = MultiplyHigh64Bits(board.ZobristKey, s_tableSize);
 
 
     /// <summary>The entry at the <see cref="CurrentEntryIndex"/>.</summary>
     private static TTEntry CurrentEntry
     {
-        get => Entries[CurrentEntryIndex];
-        set => Entries[CurrentEntryIndex] = value;
+        get => s_entries[t_currentEntryIndex];
+        set => s_entries[t_currentEntryIndex] = value;
     }
 
     public static Move GetStoredMove() => CurrentEntry.Line?.Move;
 
     public static Line GetStoredLine() => CurrentEntry.Line;
 
-	public static TTEntry GetStoredEntry(out bool ttHit)
+	public static TTEntry GetStoredEntry(Board board, out bool ttHit)
 	{
-		if (CurrentEntry.Key == Board.ZobristKey) ttHit = true;
+		if (CurrentEntry.Key == board.ZobristKey) ttHit = true;
 		else ttHit = false;
 
 		return CurrentEntry;
@@ -93,13 +94,13 @@ public class TT
     public static void ClearCurrentEntry() =>
         CurrentEntry = new();
 
-	public static void StoreEvaluation(int depth, int ply, int evaluation, EvaluationType evaluationType, Line line, int staticEvaluation) 
+	public static void StoreEvaluation(Board board, int depth, int ply, int evaluation, EvaluationType evaluationType, Line line, int staticEvaluation) 
 	{
 		// Don't store incorrect values.
 		if (!IsEnabled || WasSearchAborted || evaluation == Null) return;
 
 		if (depth >= CurrentEntry.Depth) 
-            CurrentEntry = new TTEntry(Board.ZobristKey, CorrectMateScoreForStorage(evaluation, ply), depth, staticEvaluation, evaluationType, line);
+            CurrentEntry = new TTEntry(board.ZobristKey, CorrectMateScoreForStorage(evaluation, ply), depth, staticEvaluation, evaluationType, line);
 	}
 
 

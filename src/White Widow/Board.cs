@@ -6,47 +6,40 @@ using static Move;
 public class Board
 {
     // List representation of the board.
-    public static int[] Squares { get; set; }
+    public int[] Squares { get; set; }
 
     // Bitboard representations of the board.
-    public static Dictionary<int, ulong[]> Pieces { get; set; }
+    public Dictionary<int, ulong[]> Pieces { get; set; }
 
 
-    public static ulong[] Pawns => Pieces[Pawn];
-    public static ulong[] Knights => Pieces[Knight];
-    public static ulong[] Bishops => Pieces[Bishop];
-    public static ulong[] Rooks => Pieces[Rook];
-    public static ulong[] Queens => Pieces[Queen];
-    public static ulong[] Kings => Pieces[King];
+    public ulong[] Pawns => Pieces[Pawn];
+    public ulong[] Knights => Pieces[Knight];
+    public ulong[] Bishops => Pieces[Bishop];
+    public ulong[] Rooks => Pieces[Rook];
+    public ulong[] Queens => Pieces[Queen];
+    public ulong[] Kings => Pieces[King];
 
 
     // 0 = white to move.
     // 1 = black to move.
-    public static int CurrentTurn { get; set; }
-    public static int OpponentTurn { get; set; }
+    public int CurrentTurn { get; set; }
+    public int OpponentTurn { get; set; }
 
 
     // Board information storage for quick lookup.
-    public static ulong[] OccupiedSquares = new ulong[2];
-    public static ulong AllOccupiedSquares;
+    public ulong[] OccupiedSquares = new ulong[2];
+    public ulong AllOccupiedSquares;
 
-    public static ulong[] SlidingPieces = new ulong[2];
-    public static ulong AllSlidingPieces;
+    public ulong[] SlidingPieces = new ulong[2];
+    public ulong AllSlidingPieces;
 
-    public static int[] KingPosition = new int[2];
+    public int[] KingPosition = new int[2];
 
-    public static bool[] IsKingInCheck = new bool[2];
+    public bool[] IsKingInCheck = new bool[2];
 
-
-    // All the squares currently attacked by each piece.
-    // Updated every time a move is made/unmade.
-    //public static ulong[,] Attacks = new ulong[2, 64];
-
-    // All the squares currently attacked by a color.
-    //public static ulong[] AttackedSquares = new ulong[2];
 
     /// <summary>Bitboards of the squares currently attacked by pawns of the given color.</summary>
-    public static ulong[] PawnAttackedSquares = new ulong[2];
+    public ulong[] PawnAttackedSquares = new ulong[2];
 
 
     // En passant is the only move that allows the capture of
@@ -54,12 +47,12 @@ public class Board
     // so it needs some extra variables.
 
     // Square where en passant can be performed (3rd or 6th rank).
-    public static ulong EnPassantSquare;
+    public ulong EnPassantSquare;
     // Square with the en passant target (4th or 5th rank).
-    public static ulong EnPassantTarget;
+    public ulong EnPassantTarget;
 
-    public static ulong EnPassantSquareBackup;
-    public static ulong EnPassantTargetBackup;
+    public ulong EnPassantSquareBackup;
+    public ulong EnPassantTargetBackup;
 
 
     // Castling is a move that allows the king to move 2 squares
@@ -72,7 +65,7 @@ public class Board
     // 5. The king must not travel through, or land on a square that is attacked by an enemy piece.
 
     // The positive bits represent the squares the king can castle to.
-    public static ulong CastlingRights;
+    public ulong CastlingRights;
 
 
     // 64-bit key that is unique to (almost) every position.
@@ -80,7 +73,7 @@ public class Board
     // compared to the amount of possible chess positions, but the tradeoff
     // is necessary since Zobrist Hashing is (to my knowledge) the fastest and most efficient
     // method of retrieving a unique key used to look up the position in a transposition table.
-    public static ulong ZobristKey;
+    public ulong ZobristKey;
 
 
     public static ulong[] Files =
@@ -160,15 +153,15 @@ public class Board
 
     // Contains the history of zobrist keys of the game.
     // Used to detect draws by repetition.
-    public static Stack<ulong> PositionHistory;
+    public Stack<ulong> PositionHistory;
 
 
-    public static uint[] PsqtScore;
+    public uint[] PsqtScore;
 
-    public static uint[] MaterialScore;
+    public uint[] MaterialScore;
 
 
-    public static void Init()
+    public void Reset()
     {
         Squares = new int[64];
         Pieces = new()
@@ -281,7 +274,7 @@ public class Board
     }
 
 
-    public static void UpdateBoardInformation(ulong startSquare = 0, ulong targetSquare = 0, bool enPassant = false, ulong enPassantTarget = 0, bool castling = false, ulong castledRookSquare = 0, ulong castledRookTarget = 0)
+    public void UpdateBoardInformation(ulong startSquare = 0, ulong targetSquare = 0, bool enPassant = false, ulong enPassantTarget = 0, bool castling = false, ulong castledRookSquare = 0, ulong castledRookTarget = 0)
     {
         KingPosition[0] = FirstSquareIndex(Kings[0]);
         KingPosition[1] = FirstSquareIndex(Kings[1]);
@@ -314,7 +307,7 @@ public class Board
         PawnAttackedSquares[1] = ((Pawns[1] & ~Files[0]) >> 9) | ((Pawns[1] & ~Files[7]) >> 7);
     }
 
-    public static void UpdateAllOccupiedSquares()
+    public void UpdateAllOccupiedSquares()
     {
         UpdateOccupiedSquares(0);
         UpdateOccupiedSquares(1);
@@ -330,7 +323,7 @@ public class Board
     }
 
 
-    public static void MakeMove(Move move)
+    public void MakeMove(Move move)
     {
         int pieceTypeOrPromotion = move.PromotionPiece == None ? move.PieceType : move.PromotionPiece;
 
@@ -422,7 +415,7 @@ public class Board
         OpponentTurn ^= 1;
         ZobristKey ^= BlackToMoveKey;
 
-        TT.CalculateCurrentEntryIndex();
+        TT.CalculateCurrentEntryIndex(this);
 
         PositionHistory.Push(ZobristKey);
 
@@ -474,7 +467,7 @@ public class Board
         }
     }
 
-    public static void UnmakeMove(Move move)
+    public void UnmakeMove(Move move)
     {
         int pieceTypeOrPromotedPawn = move.PromotionPiece == None ? move.PieceType : Pawn;
         int pieceTypeOrPromotion = move.PromotionPiece == None ? move.PieceType : move.PromotionPiece;
@@ -554,7 +547,7 @@ public class Board
 
         UpdateBoardInformation(move.TargetSquare, move.StartSquare, enPassant, EnPassantTarget, castledRookSquare != 0, castledRookTarget, castledRookSquare);
 
-        TT.CalculateCurrentEntryIndex();
+        TT.CalculateCurrentEntryIndex(this);
 
         PositionHistory.Pop();
 
@@ -569,7 +562,7 @@ public class Board
         }
     }
 
-    private static void AddPiece(ulong square, int pieceType, int colorIndex)
+    private void AddPiece(ulong square, int pieceType, int colorIndex)
     {
         int squareIndex = FirstSquareIndex(square);
 
@@ -598,7 +591,7 @@ public class Board
         PsqtScore[colorIndex] += PieceSquareTables.ReadScore(pieceType, squareIndex, colorIndex == 0);
     }
 
-    private static void RemovePiece(ulong square, int pieceType, int colorIndex)
+    private void RemovePiece(ulong square, int pieceType, int colorIndex)
     {
         int squareIndex = FirstSquareIndex(square);
 
@@ -627,7 +620,7 @@ public class Board
         PsqtScore[colorIndex] -= PieceSquareTables.ReadScore(pieceType, squareIndex, colorIndex == 0);
     }
 
-    public static uint FourBitCastlingRights()
+    public uint FourBitCastlingRights()
     {
         return (uint)
         ((CastlingRights >> 6) | /* White kingside castling. */
@@ -638,7 +631,7 @@ public class Board
     }
 
 
-    public static void MakeNullMove(NullMove move)
+    public void MakeNullMove(NullMove move)
     {
         move.EnPassantSquareBackup = EnPassantSquare;
         move.EnPassantTargetBackup = EnPassantTarget;
@@ -657,10 +650,10 @@ public class Board
         CurrentTurn ^= 1;
         OpponentTurn ^= 1;
 
-        TT.CalculateCurrentEntryIndex();
+        TT.CalculateCurrentEntryIndex(this);
     }
 
-    public static void UnmakeNullMove(NullMove move)
+    public void UnmakeNullMove(NullMove move)
     {
         // Remove old en passant square.
         ZobristKey ^= EnPassantFileKeys[0];
@@ -676,11 +669,11 @@ public class Board
         CurrentTurn ^= 1;
         OpponentTurn ^= 1;
 
-        TT.CalculateCurrentEntryIndex();
+        TT.CalculateCurrentEntryIndex(this);
     }
 
 
-    public static List<Move> GenerateAllLegalMoves(bool capturesOnly = false)
+    public List<Move> GenerateAllLegalMoves(bool capturesOnly = false)
     {
         List<Move> movesList = new();
         movesList.AddRange(GenerateLegalMoves(Pawn,   MoveType.Pawn,      capturesOnly, false));
@@ -692,7 +685,7 @@ public class Board
         return movesList;
     }
 
-    private static List<Move> GenerateLegalMoves(int pieceType, MoveType moveType, bool capturesOnly, bool friendlyCaptures)
+    private List<Move> GenerateLegalMoves(int pieceType, MoveType moveType, bool capturesOnly, bool friendlyCaptures)
     {
         List<Move> movesList = new();
 
@@ -753,21 +746,21 @@ public class Board
 
                 if (pieceType == Pawn && (targetSquare & Mask.PromotionRanks) != 0)
                 {
-                    Move move = new(pieceType, square, targetSquare, PieceType(targetSquareIndex), Queen);
+                    Move move = new(this, pieceType, square, targetSquare, PieceType(targetSquareIndex), Queen);
 
                     // If one promotion is legal, all of them are.
                     if (IsLegal(move))
                     {
                         movesList.Add(move);
-                        movesList.Add(new(pieceType, square, targetSquare, PieceType(targetSquareIndex), Knight));
-                        movesList.Add(new(pieceType, square, targetSquare, PieceType(targetSquareIndex), Bishop));
-                        movesList.Add(new(pieceType, square, targetSquare, PieceType(targetSquareIndex), Rook));
+                        movesList.Add(new(this, pieceType, square, targetSquare, PieceType(targetSquareIndex), Knight));
+                        movesList.Add(new(this, pieceType, square, targetSquare, PieceType(targetSquareIndex), Bishop));
+                        movesList.Add(new(this, pieceType, square, targetSquare, PieceType(targetSquareIndex), Rook));
                     }
                 }
 
                 else
                 {
-                    Move move = new(pieceType, square, targetSquare, PieceType(targetSquareIndex));
+                    Move move = new(this, pieceType, square, targetSquare, PieceType(targetSquareIndex));
                     if (IsLegal(move)) movesList.Add(move);
                 }
             }
@@ -776,7 +769,7 @@ public class Board
         return movesList;
     }
 
-    public static bool IsLegal(Move move)
+    public bool IsLegal(Move move)
     {
         int startSquareIndex = FirstSquareIndex(move.StartSquare);
         int targetSquareIndex = FirstSquareIndex(move.TargetSquare);
@@ -913,7 +906,7 @@ public class Board
     /// <summary>
     /// Update the list representation of the board
     /// </summary>
-    public static void UpdateSquares()
+    public void UpdateSquares()
     {
         Squares = new int[64];
 
@@ -944,7 +937,7 @@ public class Board
     // Any square that is attacked by a piece could always attack that piece back
     // if there was a piece of the same type on the square. For pawns, this
     // assumption only holds true if the color of the attacker is inverted.
-    public static ulong AttackersTo(int squareIndex, int colorIndex, int opponentColorIndex, ulong occupiedSquares)
+    public ulong AttackersTo(int squareIndex, int colorIndex, int opponentColorIndex, ulong occupiedSquares)
     {
         return
             (MoveData.Moves[Pawn][squareIndex, colorIndex + 4]                & Pawns[opponentColorIndex]) |
@@ -954,12 +947,12 @@ public class Board
             (MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares)   & (Bishops[opponentColorIndex] | Queens[opponentColorIndex]));
     }
 
-    public static ulong PawnAttackersTo(int squareIndex, int colorIndex, int opponentColorIndex)
+    public ulong PawnAttackersTo(int squareIndex, int colorIndex, int opponentColorIndex)
     {
         return MoveData.Moves[Pawn][squareIndex, colorIndex + 4] & Pawns[opponentColorIndex];
     }
 
-    public static ulong SlidingAttackersTo(int squareIndex, int colorIndex, int opponentColorIndex, ulong occupiedSquares)
+    public ulong SlidingAttackersTo(int squareIndex, int colorIndex, int opponentColorIndex, ulong occupiedSquares)
     {
         return
             (MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) & (Rooks[opponentColorIndex] | Queens[opponentColorIndex])) |
@@ -967,7 +960,7 @@ public class Board
     }
 
     /// <summary>Bitboard of all the squares attacked by the specified piece, including enemy and friendly captures.</summary>
-    public static ulong AttacksFrom(int squareIndex, int pieceType, ulong occupiedSquares)
+    public ulong AttacksFrom(int squareIndex, int pieceType, ulong occupiedSquares)
     {
         return
             pieceType == Knight ? MoveData.Moves[Knight][squareIndex, 0] :
@@ -992,7 +985,7 @@ public class Board
         return squareIndex >= 0 && squareIndex < 64;
     }
 
-    public static int PieceType(int squareIndex, bool slidingPiecesOnly = false)
+    public int PieceType(int squareIndex, bool slidingPiecesOnly = false)
     {
         int pieceType = Squares[squareIndex].PieceType();
         return
@@ -1000,19 +993,19 @@ public class Board
             (pieceType.IsSlidingPiece() ? pieceType : None);
     }
 
-    public static int PieceColor(int squareIndex)
+    public int PieceColor(int squareIndex)
     {
         return Squares[squareIndex].PieceColor();
     }
 
-    public static int PieceColorIndex(int squareIndex)
+    public int PieceColorIndex(int squareIndex)
     {
         return Squares[squareIndex].PieceColor() >> 3;
     }
 
-    public static bool IsSlidingPiece(ulong square) => (AllSlidingPieces & square) != 0;
+    public bool IsSlidingPiece(ulong square) => (AllSlidingPieces & square) != 0;
 
-    public static bool RemovePins(ulong square, ulong mask, ref ulong moves)
+    public bool RemovePins(ulong square, ulong mask, ref ulong moves)
     {
         if (PieceCount(AllOccupiedSquares & mask) == 3)
         {

@@ -97,24 +97,24 @@ namespace Utilities
 		/// Generate a unique key based on the current board state. <br />
 		/// Should only be used on board initialization.
 		/// </summary>
-		public static ulong CalculateZobristKey()
+		public static ulong CalculateZobristKey(Board board)
 		{
 			ulong key = 0;
 
 			for (int squareIndex = 0; squareIndex < 64; squareIndex++)
 			{
-				int pieceType = Board.PieceType(squareIndex);
-				int pieceColorIndex = Board.PieceColor(squareIndex) == Piece.White ? 0 : 1;
+				int pieceType = board.PieceType(squareIndex);
+				int pieceColorIndex = board.PieceColor(squareIndex) == Piece.White ? 0 : 1;
 
 				if (pieceType != Piece.None) key ^= PieceKeys[pieceType, pieceColorIndex, squareIndex];
 			}
 
-			if (Board.CurrentTurn == 1) key ^= BlackToMoveKey;
+			if (board.CurrentTurn == 1) key ^= BlackToMoveKey;
 
-            key ^= CastlingRightsKeys[Board.FourBitCastlingRights()];
+            key ^= CastlingRightsKeys[board.FourBitCastlingRights()];
 
-			int enPassantFileIndex = Board.EnPassantSquare != 0 ? 
-				Board.GetFile(FirstSquareIndex(Board.EnPassantSquare)) + 1 : 
+			int enPassantFileIndex = board.EnPassantSquare != 0 ?
+                Board.GetFile(FirstSquareIndex(board.EnPassantSquare)) + 1 : 
 				0;
 
             key ^= EnPassantFileKeys[enPassantFileIndex];

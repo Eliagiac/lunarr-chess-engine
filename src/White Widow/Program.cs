@@ -11,8 +11,14 @@ MoveData.ComputeMagicBitboards();
 
 TT.Resize(64);
 
-ConvertFromFen(StartingFen);
 
+// The board variable will keep a reference to the main thread's board.
+Board board = new();
+
+board = SetPosition(StartingFen);
+
+
+// BUG: Console.WriteLine is not working inside StartSearching. It only works when debugging line-by-line, or jumping into that function and then clicking continue).
 
 while (true)
 {
@@ -26,22 +32,22 @@ while (true)
             {
                 // Load the starting position.
                 case "startpos":
-                    ConvertFromFen(StartingFen);
+                    board = SetPosition(StartingFen);
                     break;
 
                 // Load an opening position.
                 case "opening":
-                    ConvertFromFen("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10 ");
+                    board = SetPosition("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10 ");
                     break;
 
                 // Load a middlegame position.
                 case "midgame":
-                    ConvertFromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+                    board = SetPosition("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
                     break;
 
                 // Load an endgame position.
                 case "endgame":
-                    ConvertFromFen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - ");
+                    board = SetPosition("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - ");
                     break;
 
                 default:
@@ -54,7 +60,7 @@ while (true)
 
                     try
                     {
-                        ConvertFromFen(commands[1]);
+                        board = SetPosition(commands[1]);
                     }
                     catch (Exception ex)
                     {
@@ -87,7 +93,7 @@ while (true)
                                 int startIndex = (int)Enum.Parse(typeof(Square), commands[i].Substring(0, 2));
                                 int targetIndex = (int)Enum.Parse(typeof(Square), commands[i].Substring(2, 2));
                                 int promotionType = commands[i].Length == 5 ? Array.IndexOf(new[] { "", "p", "n", "b", "r", "q", "k" }, commands[i].Substring(4, 1)) : 0;
-                                Board.MakeMove(new(Board.PieceType(startIndex), 1UL << startIndex, 1UL << targetIndex, Board.PieceType(targetIndex), promotionType));
+                                board.MakeMove(new(board, board.PieceType(startIndex), 1UL << startIndex, 1UL << targetIndex, board.PieceType(targetIndex), promotionType));
                             }
                             catch (Exception ex)
                             {
@@ -150,19 +156,19 @@ while (true)
                         switch (commands[i])
                         {
                             case "wtime":
-                                if (Board.CurrentTurn == 0) totTime = int.Parse(commands[i + 1]);
+                                if (board.CurrentTurn == 0) totTime = int.Parse(commands[i + 1]);
                                 break;
 
                             case "btime":
-                                if (Board.CurrentTurn == 1) totTime = int.Parse(commands[i + 1]);
+                                if (board.CurrentTurn == 1) totTime = int.Parse(commands[i + 1]);
                                 break;
 
                             case "winc":
-                                if (Board.CurrentTurn == 0) increment = int.Parse(commands[i + 1]);
+                                if (board.CurrentTurn == 0) increment = int.Parse(commands[i + 1]);
                                 break;
 
                             case "binc":
-                                if (Board.CurrentTurn == 1) increment = int.Parse(commands[i + 1]);
+                                if (board.CurrentTurn == 1) increment = int.Parse(commands[i + 1]);
                                 break;
 
                             case "movestogo":
@@ -206,7 +212,9 @@ while (true)
                         break;
 
                     case "Threads":
-                        // Multithreading is not currently supported.
+                        if (commands[3] == "value")
+                            SetThreadCount(int.Parse(commands[4]));
+
                         break;
                 }
             }
