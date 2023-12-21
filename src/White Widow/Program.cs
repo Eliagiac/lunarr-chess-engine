@@ -18,7 +18,8 @@ Board board = new();
 board = SetPosition(StartingFen);
 
 
-// BUG: Console.WriteLine is not working inside StartSearching. It only works when debugging line-by-line, or jumping into that function and then clicking continue).
+// BUG: Increasing thread count decreses nps.
+// BUG: To the move e2e4, the bot always responds a7a5 (on lichess).
 
 while (true)
 {
@@ -194,13 +195,13 @@ while (true)
             break;
 
         case "setoption":
-            
+
             if (commands[1] == "name")
             {
                 switch (commands[2])
                 {
                     case "Hash":
-                        if (commands[3] == "value") 
+                        if (commands[3] == "value")
                             TT.Resize(int.Parse(commands[4]));
 
                         break;

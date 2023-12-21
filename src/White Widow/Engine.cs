@@ -269,12 +269,14 @@ public class Engine
 
         // Since this function is called on the main thread, t_board stores the initial board.
         Board initialBoard = t_board;
+
         s_threads = new ThreadInfo[s_threadCount];
 
         // Start searching on every thread
         for (int i = 0; i < s_threadCount; i++)
         {
-            Task.Factory.StartNew(() => StartSearching(initialBoard), TaskCreationOptions.LongRunning);
+            // Clone the initial board by creating a new board and applying its fen string to it.
+            Task.Factory.StartNew(() => StartSearching(ConvertFromFen(new(), GetCurrentFen(initialBoard))));
         }
 
         s_abortSearchTimer = new();
@@ -768,7 +770,7 @@ public class Engine
                 //    depthReduction--;
             }
         }
-        
+
 
         // Store killer move in case the best move found is quiet, even if it didn't cause a beta-cutoff.
         if (pvLine.Move?.CapturedPieceType == None) UpdateQuietMoveStats(pvLine.Move, depth, ply);
