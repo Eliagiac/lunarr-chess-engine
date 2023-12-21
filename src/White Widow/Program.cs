@@ -237,5 +237,8 @@ while (true)
 
         case "quit":
             return;
+
+        case "print":
+            break;
     }
 }

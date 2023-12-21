@@ -31,6 +31,7 @@ public class Move
     // Used for move generation.
     public enum MoveType
     {
+        None,
         Normal,
         Sliding,
         Pawn

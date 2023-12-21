@@ -17,7 +17,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Chess Engine UCI\Chess Engine UCI\Chess Engine UCI.csproj" />
+    <Reference Include="White Widow">
+      <HintPath>..\..\src\White Widow\bin\Release\net7.0\White Widow.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>
