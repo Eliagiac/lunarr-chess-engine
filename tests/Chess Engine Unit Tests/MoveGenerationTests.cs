@@ -30,6 +30,7 @@ namespace Chess_Engine_Unit_Tests
         private const string Position21 = "K1k5/8/P7/8/8/8/8/8 w - - 0 1";
         private const string Position22 = "8/k1P5/8/1K6/8/8/8/8 w - - 0 1";
         private const string Position23 = "8/8/2k5/5q2/5n2/8/5K2/8 b - - 0 1";
+        private const string Position24 = "rnbqkbnr/pppppppp/8/8/3P4/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1";
 
         private const string StockfishPath = @"C:\Users\eliag\OneDrive\Documenti\GitHub\Stockfish-VisualStudio\bin\Debug\x64\Stockfish.exe";
 
@@ -134,6 +135,10 @@ namespace Chess_Engine_Unit_Tests
         [TestMethod]
         public void PerftResults_Position23_Depth6() =>
             TestPerftResults(Position23, 6);
+
+        [TestMethod]
+        public void PerftResults_Position24_Depth3() =>
+            TestPerftResults(Position23, 3);
 
 
         private void TestPerftResults(string fen, int depth)

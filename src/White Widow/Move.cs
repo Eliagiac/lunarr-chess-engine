@@ -7,6 +7,9 @@ public class Move
     public ulong StartSquare;
     public ulong TargetSquare;
 
+    public int StartSquareIndex;
+    public int TargetSquareIndex;
+
     public int CapturedPieceType;
 
     public int PromotionPiece;
@@ -16,11 +19,13 @@ public class Move
     public ulong EnPassantSquareBackup;
     public ulong EnPassantTargetBackup;
 
-    public Move(int pieceType, ulong startSquare, ulong targetSquare, int capturedPieceType = Piece.None, int promotionPiece = Piece.None, ulong? currentCastlingRights = null, ulong? currentEnPassantSquare = null, ulong? currentEnPassantTarget = null)
+    public Move(int pieceType, ulong startSquare, ulong targetSquare, int startSquareIndex, int targetSquareIndex, int capturedPieceType = Piece.None, int promotionPiece = Piece.None, ulong? currentCastlingRights = null, ulong? currentEnPassantSquare = null, ulong? currentEnPassantTarget = null)
     {
         PieceType = pieceType;
         StartSquare = startSquare;
         TargetSquare = targetSquare;
+        StartSquareIndex = startSquareIndex;
+        TargetSquareIndex = targetSquareIndex;
         CapturedPieceType = capturedPieceType;
         PromotionPiece = promotionPiece;
         CastlingRightsBackup = currentCastlingRights ?? Board.CastlingRights;

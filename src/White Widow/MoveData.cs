@@ -1,11 +1,19 @@
 using static Utilities.Bitboard;
+using static PrecomputedMoveData;
 
-public class MoveData
+public class PrecomputedMoveData
 {
     public static Dictionary<int, ulong[,]> Moves;
 
-    public static ulong[,] Masks;
-    public static Dictionary<int, ulong[,]> SpecificMasks;
+    /// <summary>
+    /// Used for sliding pieces only, <see cref="XRay"/> gives the full line of sight of a piece of a given type from its square to the target.
+    /// </summary>
+    public static Dictionary<int, ulong[,]> XRay;
+
+    /// <summary>
+    /// Bitboards containing all squares between two squares in a straight line, either on the same rank or file, or on the same diagonal.
+    /// </summary>
+    public static ulong[,] Line;
 
     public static Dictionary<int, MagicBitboard[]> MagicBitboards;
 
@@ -112,8 +120,8 @@ public class MoveData
 
     public static void GenerateDirectionalMasks()
     {
-        Masks = new ulong[64, 64];
-        SpecificMasks = new()
+        Line = new ulong[64, 64];
+        XRay = new()
         {
             [Piece.Bishop] = new ulong[64, 64],
             [Piece.Rook] = new ulong[64, 64],
@@ -129,9 +137,9 @@ public class MoveData
 
                 while (Board.CheckBoundaries(target) && Board.GetFile(target) == Board.GetFile(square) + BishopDirections[diagonalDirection].offset * distance)
                 {
-                    Masks[square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Masks[square, target - BishopDirections[diagonalDirection].direction] : 0);
-                    SpecificMasks[Piece.Bishop][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Masks[square, target - BishopDirections[diagonalDirection].direction] : 0);
-                    SpecificMasks[Piece.Queen][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Masks[square, target - BishopDirections[diagonalDirection].direction] : 0);
+                    Line[square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - BishopDirections[diagonalDirection].direction] : 0);
+                    XRay[Piece.Bishop][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - BishopDirections[diagonalDirection].direction] : 0);
+                    XRay[Piece.Queen][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - BishopDirections[diagonalDirection].direction] : 0);
 
                     target += BishopDirections[diagonalDirection].direction;
                     distance++;
@@ -145,9 +153,9 @@ public class MoveData
 
                 while (Board.CheckBoundaries(target) && Board.GetFile(target) == Board.GetFile(square) + RookDirections[orthogonalDirection].offset * distance)
                 {
-                    Masks[square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Masks[square, target - RookDirections[orthogonalDirection].direction] : 0);
-                    SpecificMasks[Piece.Rook][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Masks[square, target - RookDirections[orthogonalDirection].direction] : 0);
-                    SpecificMasks[Piece.Queen][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Masks[square, target - RookDirections[orthogonalDirection].direction] : 0);
+                    Line[square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - RookDirections[orthogonalDirection].direction] : 0);
+                    XRay[Piece.Rook][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - RookDirections[orthogonalDirection].direction] : 0);
+                    XRay[Piece.Queen][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - RookDirections[orthogonalDirection].direction] : 0);
 
                     target += RookDirections[orthogonalDirection].direction;
                     distance++;
@@ -260,12 +268,12 @@ public class MagicBitboard
 
     public static ulong GetAttacks(int pieceType, int squareIndex, ulong occupiedSquares)
     {
-        if (pieceType == Piece.Rook) return MoveData.MagicBitboards[Piece.Rook][squareIndex].GetAttacks(occupiedSquares);
-        if (pieceType == Piece.Bishop) return MoveData.MagicBitboards[Piece.Bishop][squareIndex].GetAttacks(occupiedSquares);
+        if (pieceType == Piece.Rook) return MagicBitboards[Piece.Rook][squareIndex].GetAttacks(occupiedSquares);
+        if (pieceType == Piece.Bishop) return MagicBitboards[Piece.Bishop][squareIndex].GetAttacks(occupiedSquares);
 
         if (pieceType == Piece.Queen) return 
-                MoveData.MagicBitboards[Piece.Rook][squareIndex].GetAttacks(occupiedSquares) | 
-                MoveData.MagicBitboards[Piece.Bishop][squareIndex].GetAttacks(occupiedSquares);
+                MagicBitboards[Piece.Rook][squareIndex].GetAttacks(occupiedSquares) | 
+                MagicBitboards[Piece.Bishop][squareIndex].GetAttacks(occupiedSquares);
 
         return 0;
     }

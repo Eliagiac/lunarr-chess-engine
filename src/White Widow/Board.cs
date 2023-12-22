@@ -2,6 +2,7 @@ using static Utilities.Bitboard;
 using static Utilities.Zobrist;
 using static Piece;
 using static Move;
+using System.Diagnostics;
 
 public class Board
 {
@@ -35,6 +36,7 @@ public class Board
 
     public static int[] KingPosition = new int[2];
 
+    public static ulong[] CheckingPieces = new ulong[2];
     public static bool[] IsKingInCheck = new bool[2];
 
 
@@ -281,6 +283,7 @@ public class Board
     }
 
 
+    // TODO: Update all of these dynamically as pieces are added/removed.
     public static void UpdateBoardInformation(ulong startSquare = 0, ulong targetSquare = 0, bool enPassant = false, ulong enPassantTarget = 0, bool castling = false, ulong castledRookSquare = 0, ulong castledRookTarget = 0)
     {
         KingPosition[0] = FirstSquareIndex(Kings[0]);
@@ -297,8 +300,11 @@ public class Board
         //IsKingInCheck[0] = (Kings[0] & AttackedSquares[1]) != 0;
         //IsKingInCheck[1] = (Kings[1] & AttackedSquares[0]) != 0;
 
-        IsKingInCheck[0] = AttackersTo(KingPosition[0], 0, 1, AllOccupiedSquares) != 0;
-        IsKingInCheck[1] = AttackersTo(KingPosition[1], 1, 0, AllOccupiedSquares) != 0;
+        CheckingPieces[0] = AttackersTo(KingPosition[0], 0, 1, AllOccupiedSquares);
+        CheckingPieces[1] = AttackersTo(KingPosition[1], 1, 0, AllOccupiedSquares);
+
+        IsKingInCheck[0] = CheckingPieces[0] != 0;
+        IsKingInCheck[1] = CheckingPieces[1] != 0;
 
 
         //void UpdateAttacks()
@@ -710,40 +716,55 @@ public class Board
             {
                 case MoveType.Normal:
 
-                    moves = MoveData.Moves[pieceType][squareIndex, 0];
+                    moves = PrecomputedMoveData.Moves[pieceType][squareIndex, 0];
 
                     // Check if the king is allowed to castle.
                     if (pieceType == King)
                     {
-                        ulong relevantOccupiedSquares = AllOccupiedSquares & (0x6eUL << (CurrentTurn * 56));
-                        ulong relevantCastlingRights = CastlingRights & (CurrentTurn == 0 ? Mask.WhiteInitialCastlingRights : Mask.BlackInitialCastlingRights);
-                        moves |= relevantCastlingRights & ~(relevantOccupiedSquares << 1 | relevantOccupiedSquares | relevantOccupiedSquares >> 1);
+                        // Find any pieces in bewtween the king and the rooks.
+                        const ulong squaresBetweenKingAndRooks = 0x6e;
+                        ulong blockers = AllOccupiedSquares & (squaresBetweenKingAndRooks << (CurrentTurn * 56));
+
+                        // Find the castling moves based on the current castling rights.
+                        const ulong initalCastlingRights = 0x44;
+                        ulong castlingMoves = CastlingRights & (initalCastlingRights << (CurrentTurn * 56));
+
+                        // Exclude any moves that are blocked by other pieces.
+                        // This is done by subtracting from the castling moves
+                        // the map of the blocking pieces shifted left and right.
+                        moves |= castlingMoves & ~(blockers << 1 | blockers | blockers >> 1);
                     }
 
                     break;
 
                 case MoveType.Sliding:
+                    // Sliding pieces have precomputed bitboards with every possible combination of blockers.
                     moves = MagicBitboard.GetAttacks(pieceType, squareIndex, AllOccupiedSquares);
                     break;
 
                 case MoveType.Pawn:
-
+                    ulong allBlockers = AllOccupiedSquares;
                     ulong opponentBlockers = OccupiedSquares[OpponentTurn];
+
                     // Pawns can only move forward if there is not a blocking piece.
-                    moves |= MoveData.Moves[pieceType][squareIndex, CurrentTurn] & ~AllOccupiedSquares;
-                    // If the pawn was able to move forward, it may be eligible for a double push.
-                    if (moves != 0) moves |= MoveData.Moves[pieceType][squareIndex, CurrentTurn + 2] & ~opponentBlockers;
-                    // Pawns can only capture if there is an enemy piece.
-                    moves |= MoveData.Moves[pieceType][squareIndex, CurrentTurn + 4] & (capturesOnly ? ulong.MaxValue : (opponentBlockers | EnPassantSquare));
+                    moves |= PrecomputedMoveData.Moves[Pawn][squareIndex, CurrentTurn] & ~allBlockers;
+
+                    // If the pawn was able to move forward, it may be able to push again if on the second rank.
+                    if (moves != 0) moves |= PrecomputedMoveData.Moves[Pawn][squareIndex, CurrentTurn + 2] & ~allBlockers;
+
+                    // Capture diagonally only if there is a piece or if en passant can be performed.
+                    moves |= PrecomputedMoveData.Moves[pieceType][squareIndex, CurrentTurn + 4] & (allBlockers | EnPassantSquare);
 
                     break;
             }
 
+            // Only include occupied squares if capturesOnly is on.
             if (capturesOnly) moves &= AllOccupiedSquares;
 
             // Remove friendly blockers (all captures were included, but only enemy pieces can actually be captured).
             if (!friendlyCaptures) moves &= ~OccupiedSquares[CurrentTurn];
 
+            // Add each move in the bitboard to the movesList.
             while (moves != 0)
             {
                 int targetSquareIndex = FirstSquareIndex(moves);
@@ -753,21 +774,21 @@ public class Board
 
                 if (pieceType == Pawn && (targetSquare & Mask.PromotionRanks) != 0)
                 {
-                    Move move = new(pieceType, square, targetSquare, PieceType(targetSquareIndex), Queen);
+                    Move queenPromotion = new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Queen);
 
                     // If one promotion is legal, all of them are.
-                    if (IsLegal(move))
+                    if (IsLegal(queenPromotion))
                     {
-                        movesList.Add(move);
-                        movesList.Add(new(pieceType, square, targetSquare, PieceType(targetSquareIndex), Knight));
-                        movesList.Add(new(pieceType, square, targetSquare, PieceType(targetSquareIndex), Bishop));
-                        movesList.Add(new(pieceType, square, targetSquare, PieceType(targetSquareIndex), Rook));
+                        movesList.Add(queenPromotion);
+                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Knight));
+                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Bishop));
+                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Rook));
                     }
                 }
 
                 else
                 {
-                    Move move = new(pieceType, square, targetSquare, PieceType(targetSquareIndex));
+                    Move move = new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex));
                     if (IsLegal(move)) movesList.Add(move);
                 }
             }
@@ -776,16 +797,19 @@ public class Board
         return movesList;
     }
 
+    public static Stopwatch tempPinStopwatch = new();
+
     public static bool IsLegal(Move move)
     {
-        int startSquareIndex = FirstSquareIndex(move.StartSquare);
-        int targetSquareIndex = FirstSquareIndex(move.TargetSquare);
+        int startSquareIndex = move.StartSquareIndex;
+        int targetSquareIndex = move.TargetSquareIndex;
 
-        int pieceType = PieceType(startSquareIndex);
+        int pieceType = move.PieceType;
 
         bool inCheck = IsKingInCheck[CurrentTurn];
         bool isKing = pieceType == King;
 
+        // King moves legality is handled separately.
         if (isKing)
         {
             // The king cannot move to an attacked square.
@@ -811,75 +835,81 @@ public class Board
                 if (AttackersTo(startSquareIndex + 1, CurrentTurn, OpponentTurn, AllOccupiedSquares) != 0) return false;
             }
 
+            // The king must not remain in the line of sight of the checking piece, even if going backwards.
+            // TODO: This can likely be simplified by just removing moves the square behind the king the direction of the attack. 
             if (inCheck)
             {
-                int attackerIndex = -1;
-                int secondAttackerIndex = -1;
+                ulong checkingPieces = CheckingPieces[CurrentTurn];
 
-                ulong attacks = 0;
-                if ((attacks = AttackersTo(KingPosition[CurrentTurn], CurrentTurn, OpponentTurn, AllOccupiedSquares)) != 0)
+                int firstCheckingPieceIndex = FirstSquareIndex(checkingPieces);
+                int secondCheckingPieceIndex = LastSquareIndex(checkingPieces);
+
+                // Is the king being attacked by a rook or by a bishop?
+                // Note that in case a queen is attacking, it will be assigned rook or bishop
+                // depending on the direction of the attack (horizontal/vertical or diagonal).
+                int firstCheckingPieceType = 
+                    GetRank(firstCheckingPieceIndex) == GetRank(startSquareIndex) || 
+                    GetFile(firstCheckingPieceIndex) == GetFile(startSquareIndex) ? Rook : Bishop;
+
+                // If there is an attack from a sliding piece, remove any moves in the same line as the attack.
+                // Note that this is not handled by removing attacked squares because squares currently behind the
+                // king are not considered attacked (the king is blocking the attack), but still need to be avoided.
+                if (IsSlidingPiece(1UL << firstCheckingPieceIndex) && firstCheckingPieceType != None)
                 {
-                    attackerIndex = FirstSquareIndex(attacks);
-                    secondAttackerIndex = LastSquareIndex(attacks);
-
-                    if (secondAttackerIndex == attackerIndex) secondAttackerIndex = -1;
+                    if (PrecomputedMoveData.XRay[firstCheckingPieceType][firstCheckingPieceIndex, targetSquareIndex] != 0) return false;
                 }
 
-                if (attackerIndex != -1)
+                // In case of a double check, the king must also avoid the line of sight of the second piece.
+                if (secondCheckingPieceIndex != firstCheckingPieceIndex)
                 {
-                    int attackerType = GetRank(attackerIndex) == GetRank(startSquareIndex) || GetFile(attackerIndex) == GetFile(startSquareIndex) ? Rook : Bishop;
-                    if (IsSlidingPiece(1UL << attackerIndex) && attackerType != None)
-                    {
-                        if (MoveData.SpecificMasks[attackerType][attackerIndex, targetSquareIndex] != 0) return false;
-                    }
+                    int secondCheckingPieceType = 
+                        GetRank(secondCheckingPieceIndex) == GetRank(startSquareIndex) || 
+                        GetFile(secondCheckingPieceIndex) == GetFile(startSquareIndex) ? Rook : Bishop;
 
-                    if (secondAttackerIndex != -1)
+                    if (IsSlidingPiece(1UL << secondCheckingPieceIndex) && secondCheckingPieceType != None)
                     {
-                        int secondAttackerType = GetRank(secondAttackerIndex) == GetRank(startSquareIndex) || GetFile(secondAttackerIndex) == GetFile(startSquareIndex) ? Rook : Bishop;
-                        if (IsSlidingPiece(1UL << secondAttackerIndex) && secondAttackerType != None)
-                        {
-                            if (MoveData.SpecificMasks[secondAttackerType][secondAttackerIndex, targetSquareIndex] != 0) return false;
-                        }
+                        if (PrecomputedMoveData.XRay[secondCheckingPieceType][secondCheckingPieceIndex, targetSquareIndex] != 0) return false;
                     }
                 }
             }
         }
 
+        // Other pieces.
         else
         {
+            // Checks must be stopped immediately, by either capturing the
+            // checking piece or blocking its line of sight to the king.
             if (inCheck)
             {
-                int attackerIndex = -1;
-                int secondAttackerIndex = -1;
+                ulong checkingPieces = CheckingPieces[CurrentTurn];
 
-                ulong attacks = AttackersTo(KingPosition[CurrentTurn], CurrentTurn, OpponentTurn, AllOccupiedSquares);
-                if (attacks != 0)
+                int firstCheckingPieceIndex = FirstSquareIndex(checkingPieces);
+                int secondCheckingPieceIndex = LastSquareIndex(checkingPieces);
+
+                // In case of a double attack on the king, the only option
+                // is to move the king to safety: other pieces cannot move.
+                if (firstCheckingPieceIndex != secondCheckingPieceIndex) return false;
+
+                int checkingPieceType = PieceType(firstCheckingPieceIndex);
+                if (IsSlidingPiece(1UL << firstCheckingPieceIndex))
                 {
-                    attackerIndex = FirstSquareIndex(attacks);
-                    secondAttackerIndex = LastSquareIndex(attacks);
-
-                    if (secondAttackerIndex == attackerIndex) secondAttackerIndex = -1;
-                }
-
-                // In case of a double attack on the king, the only option is to move the king to safety.
-                if (secondAttackerIndex != -1) return false;
-
-                int attackerType = PieceType(attackerIndex, slidingPiecesOnly: true);
-                if (attackerType != None)
-                {
-                    // A check must be stoppped by blocking the attack.
-                    if ((move.TargetSquare & MoveData.Masks[attackerIndex, KingPosition[CurrentTurn]]) == 0) return false;
+                    // A check must be stoppped by blocking the attacker's line of sight.
+                    if ((move.TargetSquare & PrecomputedMoveData.Line[firstCheckingPieceIndex, KingPosition[CurrentTurn]]) == 0) return false;
                 }
 
                 // In case of a non-sliding attack, the attacker must be captured.
-                else
+                else if (targetSquareIndex != firstCheckingPieceIndex)
                 {
-                    // The move is illegal if we are not capturing the attacker (which may also be captured using en passant).
-                    if (targetSquareIndex != attackerIndex &&
-                        !(pieceType == Pawn && move.TargetSquare == EnPassantSquare && (1UL << attackerIndex) == EnPassantTarget)) return false;
+                    // The attacker can also be captured with en passant.
+                    bool attackerIsEnPassantTarget = (1UL << firstCheckingPieceIndex) == EnPassantTarget;
+                    bool moveIsEnPassant = pieceType == Pawn && move.TargetSquare == EnPassantSquare;
+                    
+                    if (!(attackerIsEnPassantTarget && moveIsEnPassant)) return false;
                 }
             }
 
+            tempPinStopwatch.Start();
+            // If the piece is pinned to the king, it can only move in the line between the pinning piece and the king.
             ulong slidingAttackers = SlidingAttackersTo(startSquareIndex, CurrentTurn, OpponentTurn,
                 AllOccupiedSquares & ~(pieceType == Pawn && move.TargetSquare == EnPassantSquare ? EnPassantTarget : 0) /* In case the move is en passant, remove the en passant target from the occupied squares map to calculate pins correctly. */);
 
@@ -889,21 +919,30 @@ public class Board
                 int attackerType = GetRank(attackerIndex) == GetRank(startSquareIndex) || GetFile(attackerIndex) == GetFile(startSquareIndex) ? Rook : Bishop;
 
 
-                ulong attackRayToKing = MoveData.SpecificMasks[attackerType][attackerIndex, KingPosition[CurrentTurn]];
+                ulong attackRayToKing = PrecomputedMoveData.XRay[attackerType][attackerIndex, KingPosition[CurrentTurn]];
 
                 if (attackRayToKing != 0 &&
                     (move.StartSquare & attackRayToKing) != 0 /* The moving piece is in the ray of attack. */ &&
                     (move.TargetSquare & attackRayToKing) == 0 /* The target is not on the ray. If the piece is pinned this move is illegal. */)
                 {
-                    if (PieceCount(AllOccupiedSquares & attackRayToKing) == 3) return false;
+                    if (PieceCount(AllOccupiedSquares & attackRayToKing) == 3)
+                    {
+                        tempPinStopwatch.Stop();
+                        return false;
+                    }
 
                     if (GetRank(attackerIndex) == GetRank(startSquareIndex) &&
                         pieceType == Pawn && move.TargetSquare == EnPassantSquare &&
-                        PieceCount(AllOccupiedSquares & attackRayToKing) == 4) return false;
+                        PieceCount(AllOccupiedSquares & attackRayToKing) == 4)
+                    {
+                        tempPinStopwatch.Stop();
+                        return false;
+                    }
                 }
 
                 slidingAttackers &= slidingAttackers - 1;
             }
+            tempPinStopwatch.Stop();
         }
 
         return true;
@@ -947,22 +986,22 @@ public class Board
     public static ulong AttackersTo(int squareIndex, int colorIndex, int opponentColorIndex, ulong occupiedSquares)
     {
         return
-            (MoveData.Moves[Pawn][squareIndex, colorIndex + 4]                & Pawns[opponentColorIndex]) |
-            (MoveData.Moves[Knight][squareIndex, 0]                           & Knights[opponentColorIndex]) |
-            (MoveData.Moves[King][squareIndex, 0]                             & Kings[opponentColorIndex]) |
+            (PrecomputedMoveData.Moves[Pawn][squareIndex, colorIndex + 4]     & Pawns[opponentColorIndex]) |
+            (PrecomputedMoveData.Moves[Knight][squareIndex, 0]                & Knights[opponentColorIndex]) |
+            (PrecomputedMoveData.Moves[King][squareIndex, 0]                  & Kings[opponentColorIndex]) |
             (MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares)     & (Rooks[opponentColorIndex] | Queens[opponentColorIndex])) |
             (MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares)   & (Bishops[opponentColorIndex] | Queens[opponentColorIndex]));
     }
 
     public static ulong PawnAttackersTo(int squareIndex, int colorIndex, int opponentColorIndex)
     {
-        return MoveData.Moves[Pawn][squareIndex, colorIndex + 4] & Pawns[opponentColorIndex];
+        return PrecomputedMoveData.Moves[Pawn][squareIndex, colorIndex + 4] & Pawns[opponentColorIndex];
     }
 
     public static ulong SlidingAttackersTo(int squareIndex, int colorIndex, int opponentColorIndex, ulong occupiedSquares)
     {
         return
-            (MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) & (Rooks[opponentColorIndex] | Queens[opponentColorIndex])) |
+            (MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares)   & (Rooks[opponentColorIndex] | Queens[opponentColorIndex])) |
             (MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) & (Bishops[opponentColorIndex] | Queens[opponentColorIndex]));
     }
 
@@ -970,7 +1009,7 @@ public class Board
     public static ulong AttacksFrom(int squareIndex, int pieceType, ulong occupiedSquares)
     {
         return
-            pieceType == Knight ? MoveData.Moves[Knight][squareIndex, 0] :
+            pieceType == Knight ? PrecomputedMoveData.Moves[Knight][squareIndex, 0] :
             pieceType == Bishop ? MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) :
             pieceType == Rook ? MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) :
             pieceType == Queen ? MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) | MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) : 0;
@@ -992,13 +1031,7 @@ public class Board
         return squareIndex >= 0 && squareIndex < 64;
     }
 
-    public static int PieceType(int squareIndex, bool slidingPiecesOnly = false)
-    {
-        int pieceType = Squares[squareIndex].PieceType();
-        return
-            !slidingPiecesOnly ? pieceType :
-            (pieceType.IsSlidingPiece() ? pieceType : None);
-    }
+    public static int PieceType(int squareIndex) => Squares[squareIndex].PieceType();
 
     public static int PieceColor(int squareIndex)
     {
@@ -1052,9 +1085,6 @@ public class Board
 
 public struct Mask
 {
-    public const ulong InitialCastlingRights = 0x4400000000000044;
-    public const ulong WhiteInitialCastlingRights = 0x44;
-    public const ulong BlackInitialCastlingRights = 0x4400000000000000;
     public const ulong LeftCastlingPath = 0x800000000000008;
     public const ulong RightCastlingPath = 0x2000000000000020;
     public const ulong WhiteQueensideCastling = 0x4UL;

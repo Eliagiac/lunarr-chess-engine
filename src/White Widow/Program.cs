@@ -5,9 +5,9 @@ using static Engine;
 
 Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
 
-MoveData.ComputeMoveData();
-MoveData.GenerateDirectionalMasks();
-MoveData.ComputeMagicBitboards();
+PrecomputedMoveData.ComputeMoveData();
+PrecomputedMoveData.GenerateDirectionalMasks();
+PrecomputedMoveData.ComputeMagicBitboards();
 
 TT.Resize(64);
 
@@ -137,6 +137,10 @@ while (true)
 
                     break;
 
+                case "perft":
+                    PerftResults(int.Parse(commands[2]), true);
+                    break;
+
                 default:
                     // The optimum time will be set to roughly half the max time with a value of 2.
                     const float optimumTimeFactor = 1.8f;
@@ -239,6 +243,7 @@ while (true)
             return;
 
         case "print":
+            Console.WriteLine(Board.tempPinStopwatch.ElapsedMilliseconds);
             break;
     }
 }

@@ -196,7 +196,7 @@ public class Engine
     
     /// <summary>The total number of legal moves after each move in the current position and down the game tree until the desired depth is reached.</summary>
     /// <returns>A string with each root move on a new line and the legal move count after it. For example, "a2a4: 20".</returns>
-    public static string PerftResults(int depth, bool showSpeed = false)
+    public static string PerftResults(int depth, bool debug = false)
     {
         Stopwatch perftStopwatch = new();
         perftStopwatch.Start();
@@ -212,11 +212,19 @@ public class Engine
             int numPositions = Perft(depth - 1);
             totNumPositions += numPositions;
             results.Add($"{move}: {numPositions}");
+            Console.WriteLine($"{move}: {numPositions}");
 
             Board.UnmakeMove(move);
         }
 
-        if (showSpeed) Console.WriteLine(totNumPositions / (perftStopwatch.ElapsedMilliseconds / 1000f));
+        if (debug)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"Speed: {totNumPositions / (perftStopwatch.ElapsedMilliseconds / 1000f)} nps");
+            Console.WriteLine($"Time: {perftStopwatch.ElapsedMilliseconds} ms");
+            Console.WriteLine($"Nodes: {totNumPositions}");
+        }
+
         return string.Join('\n', results);
 
 
