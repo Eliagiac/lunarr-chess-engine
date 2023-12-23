@@ -166,7 +166,7 @@ public class Evaluation
         evaluation += PiecePairBonus(0, isPositionOpen) - PiecePairBonus(1, isPositionOpen);
 
 
-        return Interpolate(evaluation, gamePhase) * (Board.CurrentTurn == 0 ? 1 : -1);
+        return Interpolate(evaluation, gamePhase) * (Board.Friendly == 0 ? 1 : -1);
 
 
         int CurrentGamePhase()

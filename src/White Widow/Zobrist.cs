@@ -109,7 +109,7 @@ namespace Utilities
 				if (pieceType != Piece.None) key ^= PieceKeys[pieceType, pieceColorIndex, squareIndex];
 			}
 
-			if (Board.CurrentTurn == 1) key ^= BlackToMoveKey;
+			if (Board.Friendly == 1) key ^= BlackToMoveKey;
 
             key ^= CastlingRightsKeys[Board.FourBitCastlingRights()];
 

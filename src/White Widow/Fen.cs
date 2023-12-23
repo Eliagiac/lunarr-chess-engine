@@ -52,8 +52,8 @@ namespace Utilities
                 }
             }
 
-            Board.CurrentTurn = sections[1] == "w" ? 0 : 1;
-            Board.OpponentTurn = Board.CurrentTurn ^ 1;
+            Board.Friendly = sections[1] == "w" ? 0 : 1;
+            Board.Opponent = Board.Friendly ^ 1;
 
             string castlingRights = (sections.Length > 2) ? sections[2] : "KQkq";
             Board.CastlingRights &= 0;
@@ -67,17 +67,17 @@ namespace Utilities
                 string enPassantFileName = sections[3][0].ToString();
                 if ("abcdefgh".Contains(enPassantFileName))
                 {
-                    Board.EnPassantSquare = (Mask.PawnsRank << "abcdefgh".IndexOf(enPassantFileName)) & (Board.CurrentTurn == 1 ? Mask.WhitePawnsRank : Mask.BlackPawnsRank);
-                    Board.EnPassantTarget = (Mask.DoublePawnsRank << "abcdefgh".IndexOf(enPassantFileName)) & (Board.CurrentTurn == 1 ? Mask.WhiteDoublePawnsRank : Mask.BlackDoublePawnsRank);
+                    Board.EnPassantSquare = (Mask.PawnsRank << "abcdefgh".IndexOf(enPassantFileName)) & (Board.Friendly == 1 ? Mask.WhitePawnsRank : Mask.BlackPawnsRank);
+                    Board.EnPassantTarget = (Mask.DoublePawnsRank << "abcdefgh".IndexOf(enPassantFileName)) & (Board.Friendly == 1 ? Mask.WhiteDoublePawnsRank : Mask.BlackDoublePawnsRank);
                 }
             }
 
             Board.UpdateSquares();
 
             Board.UpdateAllOccupiedSquares();
-            Board.UpdateBoardInformation();
+            Board.UpdateKingPositions();
+            Board.UpdateCheckData();
             //Board.GenerateAttackedSquares();
-            Board.UpdateBoardInformation();
             Board.ZobristKey = Zobrist.CalculateZobristKey();
 
             Board.PsqtScore[0] = PieceSquareTables.EvaluateAllPsqt(0);
@@ -124,7 +124,7 @@ namespace Utilities
             }
 
             fen += " ";
-            fen += Board.CurrentTurn == 0 ? "w" : "b";
+            fen += Board.Friendly == 0 ? "w" : "b";
 
             fen += " ";
             string castlingRights = "";

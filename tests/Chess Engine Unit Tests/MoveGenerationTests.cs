@@ -36,9 +36,9 @@ namespace Chess_Engine_Unit_Tests
 
         static MoveGenerationTests()
         {
-            MoveData.ComputeMoveData();
-            MoveData.GenerateDirectionalMasks();
-            MoveData.ComputeMagicBitboards();
+            PrecomputedMoveData.ComputeMoveData();
+            PrecomputedMoveData.GenerateDirectionalMasks();
+            PrecomputedMoveData.ComputeMagicBitboards();
 
             TT.Resize(8);
         }
@@ -137,8 +137,8 @@ namespace Chess_Engine_Unit_Tests
             TestPerftResults(Position23, 6);
 
         [TestMethod]
-        public void PerftResults_Position24_Depth3() =>
-            TestPerftResults(Position23, 3);
+        public void PerftResults_Position24_Depth4() =>
+            TestPerftResults(Position24, 4);
 
 
         private void TestPerftResults(string fen, int depth)
@@ -279,9 +279,9 @@ namespace Chess_Engine_Unit_Tests
 
         static DrawByInsufficientMaterialTests()
         {
-            MoveData.ComputeMoveData();
-            MoveData.GenerateDirectionalMasks();
-            MoveData.ComputeMagicBitboards();
+            PrecomputedMoveData.ComputeMoveData();
+            PrecomputedMoveData.GenerateDirectionalMasks();
+            PrecomputedMoveData.ComputeMagicBitboards();
 
             TT.Resize(8);
         }

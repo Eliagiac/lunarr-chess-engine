@@ -154,19 +154,19 @@ while (true)
                         switch (commands[i])
                         {
                             case "wtime":
-                                if (Board.CurrentTurn == 0) totTime = int.Parse(commands[i + 1]);
+                                if (Board.Friendly == 0) totTime = int.Parse(commands[i + 1]);
                                 break;
 
                             case "btime":
-                                if (Board.CurrentTurn == 1) totTime = int.Parse(commands[i + 1]);
+                                if (Board.Friendly == 1) totTime = int.Parse(commands[i + 1]);
                                 break;
 
                             case "winc":
-                                if (Board.CurrentTurn == 0) increment = int.Parse(commands[i + 1]);
+                                if (Board.Friendly == 0) increment = int.Parse(commands[i + 1]);
                                 break;
 
                             case "binc":
-                                if (Board.CurrentTurn == 1) increment = int.Parse(commands[i + 1]);
+                                if (Board.Friendly == 1) increment = int.Parse(commands[i + 1]);
                                 break;
 
                             case "movestogo":
@@ -243,7 +243,25 @@ while (true)
             return;
 
         case "print":
-            Console.WriteLine(Board.tempPinStopwatch.ElapsedMilliseconds);
+            //Console.WriteLine($"Generate: {Board.tempGenerateStopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Is legal: {Board.tempLegalStopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Create moves (except is legal): {Board.tempCreateMoveStopwatch.ElapsedMilliseconds - Board.tempLegalStopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Pins: {Board.tempPinStopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Find pins: {Board.tempFindPinsStopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Make move: {Board.tempMakeMoveStopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Make move 1: {Board.tempMakeMove1Stopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Make move 2: {Board.tempMakeMove2Stopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Make move 3: {Board.tempMakeMove3Stopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Make move 4: {Board.tempMakeMove4Stopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Make move 5: {Board.tempMakeMove5Stopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Make move 6: {Board.tempMakeMove6Stopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Unmake move: {Board.tempUnmakeMoveStopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Add piece: {Board.tempAddPieceStopwatch.ElapsedMilliseconds}");
+            //Console.WriteLine($"Remove piece: {Board.tempRemovePieceStopwatch.ElapsedMilliseconds}");
+
+            Console.WriteLine($"All: {Board.AllOccupiedSquares}");
+            Console.WriteLine($"White: {Board.OccupiedSquares[0]}");
+            Console.WriteLine($"Black: {Board.OccupiedSquares[1]}");
             break;
     }
 }

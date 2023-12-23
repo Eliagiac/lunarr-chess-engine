@@ -15,6 +15,11 @@ public class PrecomputedMoveData
     /// </summary>
     public static ulong[,] Line;
 
+    /// <summary>
+    /// Bitboards containing all squares between two squares in a straight line, which is then countinued to the edges of the board.
+    /// </summary>
+    public static ulong[,] LineToEdges;
+
     public static Dictionary<int, MagicBitboard[]> MagicBitboards;
 
     private static ulong[] RookTable;
@@ -121,6 +126,7 @@ public class PrecomputedMoveData
     public static void GenerateDirectionalMasks()
     {
         Line = new ulong[64, 64];
+        LineToEdges = new ulong[64, 64];
         XRay = new()
         {
             [Piece.Bishop] = new ulong[64, 64],
@@ -137,9 +143,11 @@ public class PrecomputedMoveData
 
                 while (Board.CheckBoundaries(target) && Board.GetFile(target) == Board.GetFile(square) + BishopDirections[diagonalDirection].offset * distance)
                 {
-                    Line[square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - BishopDirections[diagonalDirection].direction] : 0);
-                    XRay[Piece.Bishop][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - BishopDirections[diagonalDirection].direction] : 0);
-                    XRay[Piece.Queen][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - BishopDirections[diagonalDirection].direction] : 0);
+                    ulong line = (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - BishopDirections[diagonalDirection].direction] : 0);
+
+                    Line[square, target] |= line;
+                    XRay[Piece.Bishop][square, target] |= line;
+                    XRay[Piece.Queen][square, target] |= line;
 
                     target += BishopDirections[diagonalDirection].direction;
                     distance++;
@@ -153,12 +161,62 @@ public class PrecomputedMoveData
 
                 while (Board.CheckBoundaries(target) && Board.GetFile(target) == Board.GetFile(square) + RookDirections[orthogonalDirection].offset * distance)
                 {
-                    Line[square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - RookDirections[orthogonalDirection].direction] : 0);
-                    XRay[Piece.Rook][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - RookDirections[orthogonalDirection].direction] : 0);
-                    XRay[Piece.Queen][square, target] |= (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - RookDirections[orthogonalDirection].direction] : 0);
+                    ulong line = (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - RookDirections[orthogonalDirection].direction] : 0);
+
+                    Line[square, target] |= line;
+                    XRay[Piece.Rook][square, target] |= line;
+                    XRay[Piece.Queen][square, target] |= line;
 
                     target += RookDirections[orthogonalDirection].direction;
                     distance++;
+                }
+            }
+        }
+
+        // Generate edge-to-edge lines for each square combination
+        for (int square = 0; square < 64; square++)
+        {
+            for (int diagonalDirection = 0; diagonalDirection < 4; diagonalDirection++)
+            {
+                ulong lineToEdges = 0;
+                for (int distance = -8; distance < 8; distance++)
+                {
+                    int target = square + (BishopDirections[diagonalDirection].direction * distance);
+                    if (Board.CheckBoundaries(target) && Board.GetFile(target) == Board.GetFile(square) + BishopDirections[diagonalDirection].offset * distance)
+                    {
+                        lineToEdges |= 1UL << target;
+                    }
+                }
+
+                for (int distance = -8; distance < 8; distance++)
+                {
+                    int target = square + (BishopDirections[diagonalDirection].direction * distance);
+                    if (Board.CheckBoundaries(target) && Board.GetFile(target) == Board.GetFile(square) + BishopDirections[diagonalDirection].offset * distance)
+                    {
+                        LineToEdges[square, target] = lineToEdges;
+                    }
+                }
+            }
+
+            for (int orthogonalDirection = 0; orthogonalDirection < 4; orthogonalDirection++)
+            {
+                ulong lineToEdges = 0;
+                for (int distance = -8; distance < 8; distance++)
+                {
+                    int target = square + (RookDirections[orthogonalDirection].direction * distance);
+                    if (Board.CheckBoundaries(target) && Board.GetFile(target) == Board.GetFile(square) + RookDirections[orthogonalDirection].offset * distance)
+                    {
+                        lineToEdges |= 1UL << target;
+                    }
+                }
+
+                for (int distance = -8; distance < 8; distance++)
+                {
+                    int target = square + (RookDirections[orthogonalDirection].direction * distance);
+                    if (Board.CheckBoundaries(target) && Board.GetFile(target) == Board.GetFile(square) + RookDirections[orthogonalDirection].offset * distance)
+                    {
+                        LineToEdges[square, target] = lineToEdges;
+                    }
                 }
             }
         }

@@ -482,7 +482,7 @@ public class Engine
 
         #region Store Static Evaluation Data
         // Early pruning is disabled when in check.
-        bool inCheck = Board.IsKingInCheck[Board.CurrentTurn];
+        bool inCheck = Board.IsInCheck(Board.Friendly);
 
         // Evaluation of the current position.
         ref int staticEvaluation = ref node.StaticEvaluation;
@@ -532,7 +532,7 @@ public class Engine
         if (moves.Count == 0)
         {
             // Checkmate.
-            if (Board.IsKingInCheck[Board.CurrentTurn]) return MatedIn(ply);
+            if (Board.IsInCheck(Board.Friendly)) return MatedIn(ply);
 
             // Stalemate.
             else return Draw;
@@ -584,7 +584,7 @@ public class Engine
             bool isCapture = IsCapture(move);
             bool isCaptureOrPromotion = IsCaptureOrPromotion(move);
 
-            bool givesCheck = Board.IsKingInCheck[Board.CurrentTurn];
+            bool givesCheck = Board.IsInCheck(Board.Friendly);
 
 
             // Futility Pruning:
@@ -784,7 +784,7 @@ public class Engine
                 {
                     if (ttEval >= beta)
                     {
-                        s_historyHeuristics[Board.CurrentTurn][FirstSquareIndex(ttMove.StartSquare), FirstSquareIndex(ttMove.TargetSquare)] += depth * depth;
+                        s_historyHeuristics[Board.Friendly][FirstSquareIndex(ttMove.StartSquare), FirstSquareIndex(ttMove.TargetSquare)] += depth * depth;
 
                         StoreKillerMove(ttMove, ply);
                     }
@@ -1057,7 +1057,7 @@ public class Engine
 
         #region Store Static Evaluation Data
         // Early pruning is disabled when in check.
-        bool inCheck = Board.IsKingInCheck[Board.CurrentTurn];
+        bool inCheck = Board.IsInCheck(Board.Friendly);
 
         // Evaluation of the current position.
         int staticEvaluation;
@@ -1219,7 +1219,7 @@ public class Engine
     private static void UpdateQuietMoveStats(Move move, int depth, int ply)
     {
         // Moves with the same start and target square will be boosted in move ordering.
-        s_historyHeuristics[Board.CurrentTurn][FirstSquareIndex(move.StartSquare), FirstSquareIndex(move.TargetSquare)] += depth * depth;
+        s_historyHeuristics[Board.Friendly][FirstSquareIndex(move.StartSquare), FirstSquareIndex(move.TargetSquare)] += depth * depth;
 
         // If the same move is available in a different position, it will be prioritized.
         StoreKillerMove(move, ply);
@@ -1276,11 +1276,11 @@ public class Engine
                     int startSquareIndex = FirstSquareIndex(move.StartSquare);
                     int targetSquareIndex = FirstSquareIndex(move.TargetSquare);
 
-                    moveScore += s_historyHeuristics[Board.CurrentTurn][startSquareIndex, targetSquareIndex];
+                    moveScore += s_historyHeuristics[Board.Friendly][startSquareIndex, targetSquareIndex];
 
-                    //moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == None ? move.PieceType : move.PromotionPiece, targetSquareIndex, Board.CurrentTurn == 0, gamePhase);
+                    //moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == None ? move.PieceType : move.PromotionPiece, targetSquareIndex, Board.Friendly == 0, gamePhase);
                     //moveScore += GetPieceValue(move.PromotionPiece);
-                    //if (Board.PawnAttackersTo(targetSquareIndex, Board.CurrentTurn, Board.OpponentTurn) != 0) moveScore -= 350;
+                    //if (Board.PawnAttackersTo(targetSquareIndex, Board.Friendly, Board.OpponentTurn) != 0) moveScore -= 350;
                 }
             }
 

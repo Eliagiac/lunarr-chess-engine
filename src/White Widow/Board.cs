@@ -3,6 +3,7 @@ using static Utilities.Zobrist;
 using static Piece;
 using static Move;
 using System.Diagnostics;
+using System.Data.SqlTypes;
 
 public class Board
 {
@@ -23,8 +24,8 @@ public class Board
 
     // 0 = white to move.
     // 1 = black to move.
-    public static int CurrentTurn { get; set; }
-    public static int OpponentTurn { get; set; }
+    public static int Friendly { get; set; }
+    public static int Opponent { get; set; }
 
 
     // Board information storage for quick lookup.
@@ -37,7 +38,14 @@ public class Board
     public static int[] KingPosition = new int[2];
 
     public static ulong[] CheckingPieces = new ulong[2];
-    public static bool[] IsKingInCheck = new bool[2];
+
+    /// <summary>
+    /// Updated when <see cref="GenerateAllLegalMoves"/> is called.
+    /// </summary>
+    private static bool[] IsKingInCheck = new bool[2];
+    private static bool IsCheckDataOutdated = true;
+
+    public static ulong[] Pins = new ulong[2];
 
 
     // All the squares currently attacked by each piece.
@@ -283,42 +291,7 @@ public class Board
     }
 
 
-    // TODO: Update all of these dynamically as pieces are added/removed.
-    public static void UpdateBoardInformation(ulong startSquare = 0, ulong targetSquare = 0, bool enPassant = false, ulong enPassantTarget = 0, bool castling = false, ulong castledRookSquare = 0, ulong castledRookTarget = 0)
-    {
-        KingPosition[0] = FirstSquareIndex(Kings[0]);
-        KingPosition[1] = FirstSquareIndex(Kings[1]);
-
-        //if (startSquare != 0) UpdateAttackedSquares(startSquare, targetSquare, enPassant, enPassantTarget, castling, castledRookSquare, castledRookTarget);
-
-        //UpdateAttacks();
-
-        //UpdatePawnAttacks();
-
-        // The king is in check if the opponent's attacked
-        // squares map intersects with the king position map.
-        //IsKingInCheck[0] = (Kings[0] & AttackedSquares[1]) != 0;
-        //IsKingInCheck[1] = (Kings[1] & AttackedSquares[0]) != 0;
-
-        CheckingPieces[0] = AttackersTo(KingPosition[0], 0, 1, AllOccupiedSquares);
-        CheckingPieces[1] = AttackersTo(KingPosition[1], 1, 0, AllOccupiedSquares);
-
-        IsKingInCheck[0] = CheckingPieces[0] != 0;
-        IsKingInCheck[1] = CheckingPieces[1] != 0;
-
-
-        //void UpdateAttacks()
-        //{
-        //    for (int i = 0; i < 64; i++)
-        //    {
-        //        if (AttackersTo(i, 1, 0, AllOccupiedSquares) != 0) AttackedSquares[0] |= 1UL << i;
-        //        if (AttackersTo(i, 0, 1, AllOccupiedSquares) != 0) AttackedSquares[1] |= 1UL << i;
-        //    }
-        //}
-
-        PawnAttackedSquares[0] = ((Pawns[0] & ~Files[0]) << 7) | ((Pawns[0] & ~Files[7]) << 9);
-        PawnAttackedSquares[1] = ((Pawns[1] & ~Files[0]) >> 9) | ((Pawns[1] & ~Files[7]) >> 7);
-    }
+    public static Stopwatch tempFindPinsStopwatch = new();
 
     public static void UpdateAllOccupiedSquares()
     {
@@ -336,18 +309,28 @@ public class Board
     }
 
 
+    public static Stopwatch tempMakeMoveStopwatch = new();
+    public static Stopwatch tempMakeMove1Stopwatch = new();
+    public static Stopwatch tempMakeMove2Stopwatch = new();
+    public static Stopwatch tempMakeMove3Stopwatch = new();
+    public static Stopwatch tempMakeMove4Stopwatch = new();
+    public static Stopwatch tempMakeMove5Stopwatch = new();
+    public static Stopwatch tempMakeMove6Stopwatch = new();
+    public static Stopwatch tempMakeMove7Stopwatch = new();
+    public static Stopwatch tempUnmakeMoveStopwatch = new();
+
     public static void MakeMove(Move move)
     {
         int pieceTypeOrPromotion = move.PromotionPiece == None ? move.PieceType : move.PromotionPiece;
 
         // Empty the move's start square.
-        RemovePiece(move.StartSquare, move.PieceType, CurrentTurn);
+        RemovePiece(move.StartSquare, move.PieceType, Friendly);
 
         // Remove any captured piece.
-        if (move.CapturedPieceType != None) RemovePiece(move.TargetSquare, move.CapturedPieceType, OpponentTurn);
+        if (move.CapturedPieceType != None) RemovePiece(move.TargetSquare, move.CapturedPieceType, Opponent);
 
         // Place moved piece on the target square (unless promoting).
-        AddPiece(move.TargetSquare, pieceTypeOrPromotion, CurrentTurn);
+        AddPiece(move.TargetSquare, pieceTypeOrPromotion, Friendly);
 
 
         // Remove old en passant square.
@@ -374,13 +357,13 @@ public class Board
         uint oldCastlingRights = FourBitCastlingRights();
 
         // Remove castling rights if a rook is captured.
-        if (move.CapturedPieceType == Rook) RemoveRookCastlingRights(move.TargetSquare, OpponentTurn == 0 ? Mask.WhiteRank : Mask.BlackRank);
+        if (move.CapturedPieceType == Rook) RemoveRookCastlingRights(move.TargetSquare, Opponent == 0 ? Mask.WhiteRank : Mask.BlackRank);
 
         // Remove castling rights if the king moves.
-        if (move.PieceType == King) CastlingRights &= ~(CurrentTurn == 0 ? Mask.WhiteRank : Mask.BlackRank);
+        if (move.PieceType == King) CastlingRights &= ~(Friendly == 0 ? Mask.WhiteRank : Mask.BlackRank);
 
         // Remove castling rights if the rook moves.
-        if (move.PieceType == Rook) RemoveRookCastlingRights(move.StartSquare, CurrentTurn == 0 ? Mask.WhiteRank : Mask.BlackRank);
+        if (move.PieceType == Rook) RemoveRookCastlingRights(move.StartSquare, Friendly == 0 ? Mask.WhiteRank : Mask.BlackRank);
 
 
         ulong castledRookSquare = 0;
@@ -393,11 +376,11 @@ public class Board
             {
                 // Add rook on the target square.
                 castledRookTarget = move.TargetSquare << 1;
-                AddPiece(castledRookTarget, Rook, CurrentTurn);
+                AddPiece(castledRookTarget, Rook, Friendly);
 
                 // Remove it from its start square.
                 castledRookSquare = move.StartSquare >> 4;
-                RemovePiece(castledRookSquare, Rook, CurrentTurn);
+                RemovePiece(castledRookSquare, Rook, Friendly);
             }
 
             // Kingside castling
@@ -405,11 +388,11 @@ public class Board
             {
                 // Add rook on the target square.
                 castledRookTarget = move.TargetSquare >> 1;
-                AddPiece(castledRookTarget, Rook, CurrentTurn);
+                AddPiece(castledRookTarget, Rook, Friendly);
 
                 // Remove it from its start square.
                 castledRookSquare = move.StartSquare << 3;
-                RemovePiece(castledRookSquare, Rook, CurrentTurn);
+                RemovePiece(castledRookSquare, Rook, Friendly);
             }
         }
 
@@ -422,13 +405,13 @@ public class Board
             ZobristKey ^= CastlingRightsKeys[newCastlingRights];
         }
 
-        UpdateBoardInformation(move.StartSquare, move.TargetSquare, enPassant, enPassantTargetBackup, castledRookSquare != 0, castledRookSquare, castledRookTarget);
-
-        CurrentTurn ^= 1;
-        OpponentTurn ^= 1;
+        Friendly ^= 1;
+        Opponent ^= 1;
         ZobristKey ^= BlackToMoveKey;
 
         TT.CalculateCurrentEntryIndex();
+
+        IsCheckDataOutdated = true;
 
         PositionHistory.Push(ZobristKey);
 
@@ -442,7 +425,7 @@ public class Board
                 enPassantTargetBackup = EnPassantTarget;
 
                 // Remove en passant target.
-                RemovePiece(EnPassantTarget, Pawn, OpponentTurn);
+                RemovePiece(EnPassantTarget, Pawn, Opponent);
 
                 EnPassantTarget &= 0;
                 EnPassantSquare &= 0;
@@ -486,8 +469,8 @@ public class Board
         int pieceTypeOrPromotion = move.PromotionPiece == None ? move.PieceType : move.PromotionPiece;
 
         // Restore current turn before anything else.
-        CurrentTurn ^= 1;
-        OpponentTurn ^= 1;
+        Friendly ^= 1;
+        Opponent ^= 1;
         ZobristKey ^= BlackToMoveKey;
 
         // Reset castling rights.
@@ -505,13 +488,13 @@ public class Board
 
 
         // Place moved piece back on the start square.
-        AddPiece(move.StartSquare, pieceTypeOrPromotedPawn, CurrentTurn);
+        AddPiece(move.StartSquare, pieceTypeOrPromotedPawn, Friendly);
 
         // Empty the move's target square.
-        RemovePiece(move.TargetSquare, pieceTypeOrPromotion, CurrentTurn);
+        RemovePiece(move.TargetSquare, pieceTypeOrPromotion, Friendly);
 
         // Restore any captured piece.
-        if (move.CapturedPieceType != None) AddPiece(move.TargetSquare, move.CapturedPieceType, OpponentTurn);
+        if (move.CapturedPieceType != None) AddPiece(move.TargetSquare, move.CapturedPieceType, Opponent);
 
 
         // Remove old en passant square.
@@ -538,11 +521,11 @@ public class Board
             {
                 // Remove rook from the target square.
                 castledRookTarget = move.TargetSquare << 1;
-                RemovePiece(castledRookTarget, Rook, CurrentTurn);
+                RemovePiece(castledRookTarget, Rook, Friendly);
 
                 // Add it to its start square.
                 castledRookSquare = move.StartSquare >> 4;
-                AddPiece(castledRookSquare, Rook, CurrentTurn);
+                AddPiece(castledRookSquare, Rook, Friendly);
             }
 
             // Kingside castling
@@ -550,17 +533,20 @@ public class Board
             {
                 // Remove rook from the target square.
                 castledRookTarget = move.TargetSquare >> 1;
-                RemovePiece(castledRookTarget, Rook, CurrentTurn);
+                RemovePiece(castledRookTarget, Rook, Friendly);
 
                 // Add it to its start square.
                 castledRookSquare = move.StartSquare << 3;
-                AddPiece(castledRookSquare, Rook, CurrentTurn);
+                AddPiece(castledRookSquare, Rook, Friendly);
             }
         }
 
-        UpdateBoardInformation(move.TargetSquare, move.StartSquare, enPassant, EnPassantTarget, castledRookSquare != 0, castledRookTarget, castledRookSquare);
-
         TT.CalculateCurrentEntryIndex();
+
+        // NOTE: If the check data was up to date before making the move, unmaking it would restore the correct data.
+        // A possible optimization is to check for this to avoid potentially having to recalculate it unnecessaraly,
+        // for example by caching and extra "backup" set of data.
+        IsCheckDataOutdated = true;
 
         PositionHistory.Pop();
 
@@ -569,11 +555,14 @@ public class Board
         {
             if (move.TargetSquare == EnPassantSquare)
             {
-                AddPiece(EnPassantTarget, Pawn, OpponentTurn);
+                AddPiece(EnPassantTarget, Pawn, Opponent);
                 enPassant = true;
             }
         }
     }
+
+    public static Stopwatch tempAddPieceStopwatch = new();
+    public static Stopwatch tempRemovePieceStopwatch = new();
 
     private static void AddPiece(ulong square, int pieceType, int colorIndex)
     {
@@ -592,6 +581,18 @@ public class Board
         {
             SlidingPieces[colorIndex] |= square;
             AllSlidingPieces |= square;
+        }
+
+        // Dynamically update the king's position.
+        if (pieceType == King) KingPosition[colorIndex] = squareIndex;
+
+        if (pieceType == Pawn)
+        {
+            if (colorIndex == 0)
+                PawnAttackedSquares[0] |= square << 7 | square << 9;
+
+            if (colorIndex == 1)
+                PawnAttackedSquares[1] |= square >> 7 | square >> 9;
         }
 
         // Update the Zobrist key.
@@ -621,6 +622,15 @@ public class Board
         {
             SlidingPieces[colorIndex] &= ~square;
             AllSlidingPieces &= ~square;
+        }
+
+        if (pieceType == Pawn)
+        {
+            if (colorIndex == 0)
+                PawnAttackedSquares[0] &= ~(square << 7 | square << 9);
+
+            if (colorIndex == 1)
+                PawnAttackedSquares[1] &= ~(square >> 7 | square >> 9);
         }
 
         // Update the Zobrist key.
@@ -660,10 +670,13 @@ public class Board
 
         ZobristKey ^= BlackToMoveKey;
 
-        CurrentTurn ^= 1;
-        OpponentTurn ^= 1;
+        Friendly ^= 1;
+        Opponent ^= 1;
 
         TT.CalculateCurrentEntryIndex();
+
+        // NOTE: might be unnecessary.
+        IsCheckDataOutdated = false;
     }
 
     public static void UnmakeNullMove(NullMove move)
@@ -679,15 +692,20 @@ public class Board
 
         ZobristKey ^= BlackToMoveKey;
 
-        CurrentTurn ^= 1;
-        OpponentTurn ^= 1;
+        Friendly ^= 1;
+        Opponent ^= 1;
 
         TT.CalculateCurrentEntryIndex();
+
+        // NOTE: might be unnecessary.
+        IsCheckDataOutdated = false;
     }
 
 
     public static List<Move> GenerateAllLegalMoves(bool capturesOnly = false)
     {
+        UpdateCheckData();
+
         List<Move> movesList = new();
         movesList.AddRange(GenerateLegalMoves(Pawn,   MoveType.Pawn,      capturesOnly, false));
         movesList.AddRange(GenerateLegalMoves(Knight, MoveType.Normal,    capturesOnly, false));
@@ -698,11 +716,14 @@ public class Board
         return movesList;
     }
 
+    public static Stopwatch tempGenerateStopwatch = new();
+    public static Stopwatch tempCreateMoveStopwatch = new();
+
     private static List<Move> GenerateLegalMoves(int pieceType, MoveType moveType, bool capturesOnly, bool friendlyCaptures)
     {
         List<Move> movesList = new();
 
-        ulong pieces = Pieces[pieceType][CurrentTurn];
+        ulong pieces = Pieces[pieceType][Friendly];
         while (pieces != 0)
         {
             // Isolate the first piece.
@@ -723,11 +744,11 @@ public class Board
                     {
                         // Find any pieces in bewtween the king and the rooks.
                         const ulong squaresBetweenKingAndRooks = 0x6e;
-                        ulong blockers = AllOccupiedSquares & (squaresBetweenKingAndRooks << (CurrentTurn * 56));
+                        ulong blockers = AllOccupiedSquares & (squaresBetweenKingAndRooks << (Friendly * 56));
 
                         // Find the castling moves based on the current castling rights.
                         const ulong initalCastlingRights = 0x44;
-                        ulong castlingMoves = CastlingRights & (initalCastlingRights << (CurrentTurn * 56));
+                        ulong castlingMoves = CastlingRights & (initalCastlingRights << (Friendly * 56));
 
                         // Exclude any moves that are blocked by other pieces.
                         // This is done by subtracting from the castling moves
@@ -744,25 +765,25 @@ public class Board
 
                 case MoveType.Pawn:
                     ulong allBlockers = AllOccupiedSquares;
-                    ulong opponentBlockers = OccupiedSquares[OpponentTurn];
 
                     // Pawns can only move forward if there is not a blocking piece.
-                    moves |= PrecomputedMoveData.Moves[Pawn][squareIndex, CurrentTurn] & ~allBlockers;
+                    moves |= PrecomputedMoveData.Moves[Pawn][squareIndex, Friendly] & ~allBlockers;
 
                     // If the pawn was able to move forward, it may be able to push again if on the second rank.
-                    if (moves != 0) moves |= PrecomputedMoveData.Moves[Pawn][squareIndex, CurrentTurn + 2] & ~allBlockers;
+                    if (moves != 0) moves |= PrecomputedMoveData.Moves[Pawn][squareIndex, Friendly + 2] & ~allBlockers;
 
                     // Capture diagonally only if there is a piece or if en passant can be performed.
-                    moves |= PrecomputedMoveData.Moves[pieceType][squareIndex, CurrentTurn + 4] & (allBlockers | EnPassantSquare);
+                    moves |= PrecomputedMoveData.Moves[pieceType][squareIndex, Friendly + 4] & (allBlockers | EnPassantSquare);
 
                     break;
             }
 
             // Only include occupied squares if capturesOnly is on.
+            // TODO: Also include en passant.
             if (capturesOnly) moves &= AllOccupiedSquares;
 
             // Remove friendly blockers (all captures were included, but only enemy pieces can actually be captured).
-            if (!friendlyCaptures) moves &= ~OccupiedSquares[CurrentTurn];
+            if (!friendlyCaptures) moves &= ~OccupiedSquares[Friendly];
 
             // Add each move in the bitboard to the movesList.
             while (moves != 0)
@@ -797,6 +818,7 @@ public class Board
         return movesList;
     }
 
+    public static Stopwatch tempLegalStopwatch = new();
     public static Stopwatch tempPinStopwatch = new();
 
     public static bool IsLegal(Move move)
@@ -804,42 +826,62 @@ public class Board
         int startSquareIndex = move.StartSquareIndex;
         int targetSquareIndex = move.TargetSquareIndex;
 
+        ulong startSquare = move.StartSquare;
+        ulong targetSquare = move.TargetSquare;
+
         int pieceType = move.PieceType;
 
-        bool inCheck = IsKingInCheck[CurrentTurn];
+        bool inCheck = IsKingInCheck[Friendly];
         bool isKing = pieceType == King;
+
+        int kingPosition = KingPosition[Friendly];
 
         // King moves legality is handled separately.
         if (isKing)
         {
             // The king cannot move to an attacked square.
-            if (AttackersTo(targetSquareIndex, CurrentTurn, OpponentTurn, AllOccupiedSquares) != 0) return false;
+            if (AttackersTo(targetSquareIndex, Friendly, Opponent, AllOccupiedSquares) != 0)
+            {
+                return false;
+            }
 
             // Queenside castling
             if (move.StartSquare >> 2 == move.TargetSquare)
             {
                 // Castling is not allowed while in check.
-                if (inCheck) return false;
+                if (inCheck)
+                {
+                    return false;
+                }
 
                 // The king cannot castle through an attack.
-                if (AttackersTo(startSquareIndex - 1, CurrentTurn, OpponentTurn, AllOccupiedSquares) != 0) return false;
+                if (AttackersTo(startSquareIndex - 1, Friendly, Opponent, AllOccupiedSquares) != 0)
+                {
+                    return false;
+                }
             }
 
             // Kingside castling
             if (move.StartSquare << 2 == move.TargetSquare)
             {
                 // Castling is not allowed while in check.
-                if (inCheck) return false;
+                if (inCheck)
+                {
+                    return false;
+                }
 
                 // The king cannot castle through an attack.
-                if (AttackersTo(startSquareIndex + 1, CurrentTurn, OpponentTurn, AllOccupiedSquares) != 0) return false;
+                if (AttackersTo(startSquareIndex + 1, Friendly, Opponent, AllOccupiedSquares) != 0)
+                {
+                    return false;
+                }
             }
 
             // The king must not remain in the line of sight of the checking piece, even if going backwards.
             // TODO: This can likely be simplified by just removing moves the square behind the king the direction of the attack. 
             if (inCheck)
             {
-                ulong checkingPieces = CheckingPieces[CurrentTurn];
+                ulong checkingPieces = CheckingPieces[Friendly];
 
                 int firstCheckingPieceIndex = FirstSquareIndex(checkingPieces);
                 int secondCheckingPieceIndex = LastSquareIndex(checkingPieces);
@@ -856,7 +898,10 @@ public class Board
                 // king are not considered attacked (the king is blocking the attack), but still need to be avoided.
                 if (IsSlidingPiece(1UL << firstCheckingPieceIndex) && firstCheckingPieceType != None)
                 {
-                    if (PrecomputedMoveData.XRay[firstCheckingPieceType][firstCheckingPieceIndex, targetSquareIndex] != 0) return false;
+                    if (PrecomputedMoveData.XRay[firstCheckingPieceType][firstCheckingPieceIndex, targetSquareIndex] != 0)
+                    {
+                        return false;
+                    }
                 }
 
                 // In case of a double check, the king must also avoid the line of sight of the second piece.
@@ -868,7 +913,10 @@ public class Board
 
                     if (IsSlidingPiece(1UL << secondCheckingPieceIndex) && secondCheckingPieceType != None)
                     {
-                        if (PrecomputedMoveData.XRay[secondCheckingPieceType][secondCheckingPieceIndex, targetSquareIndex] != 0) return false;
+                        if (PrecomputedMoveData.XRay[secondCheckingPieceType][secondCheckingPieceIndex, targetSquareIndex] != 0)
+                        {
+                            return false;
+                        }
                     }
                 }
             }
@@ -881,20 +929,25 @@ public class Board
             // checking piece or blocking its line of sight to the king.
             if (inCheck)
             {
-                ulong checkingPieces = CheckingPieces[CurrentTurn];
+                ulong checkingPieces = CheckingPieces[Friendly];
 
                 int firstCheckingPieceIndex = FirstSquareIndex(checkingPieces);
                 int secondCheckingPieceIndex = LastSquareIndex(checkingPieces);
 
                 // In case of a double attack on the king, the only option
                 // is to move the king to safety: other pieces cannot move.
-                if (firstCheckingPieceIndex != secondCheckingPieceIndex) return false;
+                if (firstCheckingPieceIndex != secondCheckingPieceIndex)
+                {
+                    return false;
+                }
 
-                int checkingPieceType = PieceType(firstCheckingPieceIndex);
                 if (IsSlidingPiece(1UL << firstCheckingPieceIndex))
                 {
                     // A check must be stoppped by blocking the attacker's line of sight.
-                    if ((move.TargetSquare & PrecomputedMoveData.Line[firstCheckingPieceIndex, KingPosition[CurrentTurn]]) == 0) return false;
+                    if ((move.TargetSquare & PrecomputedMoveData.Line[firstCheckingPieceIndex, kingPosition]) == 0)
+                    {
+                        return false;
+                    }
                 }
 
                 // In case of a non-sliding attack, the attacker must be captured.
@@ -904,45 +957,63 @@ public class Board
                     bool attackerIsEnPassantTarget = (1UL << firstCheckingPieceIndex) == EnPassantTarget;
                     bool moveIsEnPassant = pieceType == Pawn && move.TargetSquare == EnPassantSquare;
                     
-                    if (!(attackerIsEnPassantTarget && moveIsEnPassant)) return false;
+                    if (!(attackerIsEnPassantTarget && moveIsEnPassant))
+                    {
+                        return false;
+                    }
                 }
             }
 
-            tempPinStopwatch.Start();
-            // If the piece is pinned to the king, it can only move in the line between the pinning piece and the king.
-            ulong slidingAttackers = SlidingAttackersTo(startSquareIndex, CurrentTurn, OpponentTurn,
-                AllOccupiedSquares & ~(pieceType == Pawn && move.TargetSquare == EnPassantSquare ? EnPassantTarget : 0) /* In case the move is en passant, remove the en passant target from the occupied squares map to calculate pins correctly. */);
-
-            while (slidingAttackers != 0)
+            // If the piece is pinned to the king, it can only move in the line between the attacker and the king.
+            if ((startSquare & Pins[Friendly]) != 0)
             {
-                int attackerIndex = FirstSquareIndex(slidingAttackers);
-                int attackerType = GetRank(attackerIndex) == GetRank(startSquareIndex) || GetFile(attackerIndex) == GetFile(startSquareIndex) ? Rook : Bishop;
-
-
-                ulong attackRayToKing = PrecomputedMoveData.XRay[attackerType][attackerIndex, KingPosition[CurrentTurn]];
-
-                if (attackRayToKing != 0 &&
-                    (move.StartSquare & attackRayToKing) != 0 /* The moving piece is in the ray of attack. */ &&
-                    (move.TargetSquare & attackRayToKing) == 0 /* The target is not on the ray. If the piece is pinned this move is illegal. */)
+                // Since the piece cannot jump over the attacker or the king, the line from the attacker to the king
+                // is the same as the line from the piece to the king extended to reach the edges of the board.
+                if ((targetSquare & PrecomputedMoveData.LineToEdges[startSquareIndex, kingPosition]) == 0)
                 {
-                    if (PieceCount(AllOccupiedSquares & attackRayToKing) == 3)
+                    // Pawns need extra consideration, because a pawn may be pinned even though a second piece is blocking the attack as well.
+                    // If 4 pieces are involved in the pin, the only illegal move is en passant. See FindPinRays for more info.
+                    if (pieceType == Pawn &&
+                        PieceCount((Pins[Friendly] & PrecomputedMoveData.LineToEdges[startSquareIndex, kingPosition]) & AllOccupiedSquares) == 4)
                     {
-                        tempPinStopwatch.Stop();
-                        return false;
+                        if ((targetSquare & EnPassantSquare) != 0) return false;
                     }
 
-                    if (GetRank(attackerIndex) == GetRank(startSquareIndex) &&
-                        pieceType == Pawn && move.TargetSquare == EnPassantSquare &&
-                        PieceCount(AllOccupiedSquares & attackRayToKing) == 4)
-                    {
-                        tempPinStopwatch.Stop();
-                        return false;
-                    }
+                    else return false;
                 }
-
-                slidingAttackers &= slidingAttackers - 1;
             }
-            tempPinStopwatch.Stop();
+
+
+            //ulong slidingAttackers = SlidingAttackersTo(startSquareIndex, Friendly, Opponent,
+            //    AllOccupiedSquares & ~(pieceType == Pawn && move.TargetSquare == EnPassantSquare ? EnPassantTarget : 0) /* In case the move is en passant, remove the en passant target from the occupied squares map to calculate pins correctly. */);
+
+            //while (slidingAttackers != 0)
+            //{
+            //    int attackerIndex = FirstSquareIndex(slidingAttackers);
+            //    int attackerType = GetRank(attackerIndex) == GetRank(startSquareIndex) || GetFile(attackerIndex) == GetFile(startSquareIndex) ? Rook : Bishop;
+
+
+            //    ulong attackRayToKing = PrecomputedMoveData.XRay[attackerType][attackerIndex, kingPosition];
+
+            //    if (attackRayToKing != 0 &&
+            //        (move.StartSquare & attackRayToKing) != 0 /* The moving piece is in the ray of attack. */ &&
+            //        (move.TargetSquare & attackRayToKing) == 0 /* The target is not on the ray. If the piece is pinned this move is illegal. */)
+            //    {
+            //        if (PieceCount(AllOccupiedSquares & attackRayToKing) == 3)
+            //        {
+            //            return false;
+            //        }
+
+            //        if (GetRank(attackerIndex) == GetRank(startSquareIndex) &&
+            //            pieceType == Pawn && move.TargetSquare == EnPassantSquare &&
+            //            PieceCount(AllOccupiedSquares & attackRayToKing) == 4)
+            //        {
+            //            return false;
+            //        }
+            //    }
+
+            //    slidingAttackers &= slidingAttackers - 1;
+            //}
         }
 
         return true;
@@ -1015,6 +1086,77 @@ public class Board
             pieceType == Queen ? MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) | MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) : 0;
     }
 
+    /// <summary>
+    /// Update bitboards with checking pieces and pin rays, and update <see cref="IsKingInCheck"/>.
+    /// </summary>
+    public static void UpdateCheckData(bool excludePins = false)
+    {
+        if (IsCheckDataOutdated)
+        {
+            CheckingPieces[0] = AttackersTo(KingPosition[0], 0, 1, AllOccupiedSquares);
+            CheckingPieces[1] = AttackersTo(KingPosition[1], 1, 0, AllOccupiedSquares);
+
+            IsKingInCheck[0] = CheckingPieces[0] != 0;
+            IsKingInCheck[1] = CheckingPieces[1] != 0;
+
+            IsCheckDataOutdated = false;
+        }
+
+        if (!excludePins)
+        {
+            Pins[0] = FindPinRays(0, 1);
+            Pins[1] = FindPinRays(1, 0);
+        }
+
+        ulong FindPinRays(int friendlyColorIndex, int opponentColorIndex)
+        {
+            int kingSquareIndex = KingPosition[friendlyColorIndex];
+
+            // First find the enemy sliding pieces closest to the king in each direction, by finding pieces that would check the king if there were no friendly blockers.
+            ulong potentialAttackingPieces = SlidingAttackersTo(kingSquareIndex, friendlyColorIndex, opponentColorIndex, 1UL << kingSquareIndex);
+
+            ulong pinRays = 0;
+            while (potentialAttackingPieces != 0)
+            {
+                int attackingPieceSquareIndex = FirstSquareIndex(potentialAttackingPieces);
+                int attackingPieceType = PieceType(attackingPieceSquareIndex);
+
+                // The ray will be empty if the piece cannot target the king (eg. rook cannot target diagonally).
+                ulong rayToKing = PrecomputedMoveData.XRay[attackingPieceType][attackingPieceSquareIndex, kingSquareIndex];
+
+                // There should be three pieces on the ray: the attacker, the king and the pinned piece.
+                if (rayToKing != 0 && PieceCount(rayToKing & AllOccupiedSquares) == 3) pinRays |= rayToKing;
+
+                // A special case: a pawn that could permorm en passant, which would remove two pieces at once from the rank discovering an attack on the king.
+                else if (
+                    rayToKing != 0 && PieceCount(rayToKing & AllOccupiedSquares) == 4 &&
+                    (EnPassantTarget & rayToKing) != 0 &&
+                    GetRank(attackingPieceSquareIndex) == GetRank(kingSquareIndex)) 
+                    pinRays |= rayToKing;
+
+                potentialAttackingPieces &= potentialAttackingPieces - 1;
+            }
+
+            return pinRays;
+        }
+    }
+
+    /// <remarks>
+    /// Should only be called on board initialization
+    /// </remarks>
+    public static void UpdateKingPositions()
+    {
+        KingPosition[0] = FirstSquareIndex(Kings[0]);
+        KingPosition[1] = FirstSquareIndex(Kings[1]);
+    }
+
+    public static bool IsInCheck(int colorIndex)
+    {
+        if (IsCheckDataOutdated) UpdateCheckData(true);
+
+        return IsKingInCheck[colorIndex];
+    }
+
 
     public static int GetFile(int squareIndex)
     {
@@ -1038,34 +1180,7 @@ public class Board
         return Squares[squareIndex].PieceColor();
     }
 
-    public static int PieceColorIndex(int squareIndex)
-    {
-        return Squares[squareIndex].PieceColor() >> 3;
-    }
-
     public static bool IsSlidingPiece(ulong square) => (AllSlidingPieces & square) != 0;
-
-    public static bool RemovePins(ulong square, ulong mask, ref ulong moves)
-    {
-        if (PieceCount(AllOccupiedSquares & mask) == 3)
-        {
-            moves &= mask;
-
-            return true;
-        }
-
-        if ((Pawns[CurrentTurn] & square) != 0 && (moves & EnPassantSquare) != 0)
-        {
-            if (PieceCount(AllOccupiedSquares & mask) == 4)
-            {
-                moves &= ~EnPassantSquare;
-
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     public static List<int> GetIndexes(ulong value)
     {
