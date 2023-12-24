@@ -77,6 +77,7 @@ namespace Utilities
             Board.UpdateAllOccupiedSquares();
             Board.UpdateKingPositions();
             Board.UpdateCheckData();
+            Board.UpdatePawnAttackedSquares();
             //Board.GenerateAttackedSquares();
             Board.ZobristKey = Zobrist.CalculateZobristKey();
 

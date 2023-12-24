@@ -589,10 +589,10 @@ public class Board
         if (pieceType == Pawn)
         {
             if (colorIndex == 0)
-                PawnAttackedSquares[0] |= square << 7 | square << 9;
+                PawnAttackedSquares[0] |= (square & ~Files[0]) << 7 | (square & ~Files[7]) << 9;
 
             if (colorIndex == 1)
-                PawnAttackedSquares[1] |= square >> 7 | square >> 9;
+                PawnAttackedSquares[1] |= (square & ~Files[0]) >> 9 | (square & ~Files[7]) >> 7;
         }
 
         // Update the Zobrist key.
@@ -627,10 +627,10 @@ public class Board
         if (pieceType == Pawn)
         {
             if (colorIndex == 0)
-                PawnAttackedSquares[0] &= ~(square << 7 | square << 9);
+                PawnAttackedSquares[0] &= ~((square & ~Files[0]) << 7 | (square & ~Files[7]) << 9);
 
             if (colorIndex == 1)
-                PawnAttackedSquares[1] &= ~(square >> 7 | square >> 9);
+                PawnAttackedSquares[1] &= ~((square & ~Files[0]) >> 9 | (square & ~Files[7]) >> 7);
         }
 
         // Update the Zobrist key.
@@ -1155,6 +1155,12 @@ public class Board
         if (IsCheckDataOutdated) UpdateCheckData(true);
 
         return IsKingInCheck[colorIndex];
+    }
+
+    public static void UpdatePawnAttackedSquares()
+    {
+        PawnAttackedSquares[0] = ((Pawns[0] & ~Files[0]) << 7) | ((Pawns[0] & ~Files[7]) << 9);
+        PawnAttackedSquares[1] = ((Pawns[1] & ~Files[0]) >> 9) | ((Pawns[1] & ~Files[7]) >> 7);
     }
 
 
