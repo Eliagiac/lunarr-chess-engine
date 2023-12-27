@@ -624,13 +624,21 @@ public class Board
             AllSlidingPieces &= ~square;
         }
 
+        // Dynamically update the pawn attacked squares map.
+        // Note: if a pawn is removed, its attacked squares should
+        // only be removed if they weren't also attacked by other pawns.
         if (pieceType == Pawn)
         {
+            // The pawn must already have been removed from the Pawns bitboard.
             if (colorIndex == 0)
-                PawnAttackedSquares[0] &= ~((square & ~Files[0]) << 7 | (square & ~Files[7]) << 9);
+                PawnAttackedSquares[0] &= ~(
+                    ((square & ~Files[0]) << 7 | (square & ~Files[7]) << 9) &
+                    ~((Pawns[0] & ~Files[0]) << 7 | (Pawns[0] & ~Files[7]) << 9));
 
             if (colorIndex == 1)
-                PawnAttackedSquares[1] &= ~((square & ~Files[0]) >> 9 | (square & ~Files[7]) >> 7);
+                PawnAttackedSquares[1] &= ~(
+                    ((square & ~Files[0]) >> 9 | (square & ~Files[7]) >> 7) &
+                    ~((Pawns[1] & ~Files[0]) >> 9 | (Pawns[1] & ~Files[7]) >> 7));
         }
 
         // Update the Zobrist key.
@@ -674,9 +682,6 @@ public class Board
         Opponent ^= 1;
 
         TT.CalculateCurrentEntryIndex();
-
-        // NOTE: might be unnecessary.
-        IsCheckDataOutdated = false;
     }
 
     public static void UnmakeNullMove(NullMove move)
@@ -696,9 +701,6 @@ public class Board
         Opponent ^= 1;
 
         TT.CalculateCurrentEntryIndex();
-
-        // NOTE: might be unnecessary.
-        IsCheckDataOutdated = false;
     }
 
 
