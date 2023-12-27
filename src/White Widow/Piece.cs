@@ -2,7 +2,7 @@ using static Piece;
 
 public struct Piece
 {
-    public const int None  = 0;
+    public const int None   = 0;
     public const int Pawn   = 1;
     public const int Knight = 2;
     public const int Bishop = 3;
@@ -26,13 +26,13 @@ public static class IntExtensions
         int pieceType = piece.PieceType();
 
         string pieceLetter =
-            pieceType == None ? "-" :
-            pieceType == Pawn ? "p" :
+            pieceType == None   ? "-" :
+            pieceType == Pawn   ? "p" :
             pieceType == Knight ? "n" :
             pieceType == Bishop ? "b" :
-            pieceType == Rook ? "r" :
-            pieceType == Queen ? "q" :
-            pieceType == King ? "k" :
+            pieceType == Rook   ? "r" :
+            pieceType == Queen  ? "q" :
+            pieceType == King   ? "k" :
             throw new NotImplementedException();
 
         if (piece.PieceColor() == White) pieceLetter = pieceLetter.ToUpper();

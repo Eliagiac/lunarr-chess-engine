@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Utilities;
 using static Engine;
 using static Utilities.Fen;
 
@@ -141,6 +142,11 @@ namespace Chess_Engine_Unit_Tests
             TestPerftResults(Position24, 4);
 
 
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_Position1_UpTo30Moves_100Times() =>
+            MakeAndUnmakeRandomMoves(Position1, 1, 10);
+
+
         private void TestPerftResults(string fen, int depth)
         {
             string moves = "";
@@ -250,6 +256,37 @@ namespace Chess_Engine_Unit_Tests
 
                 // The DoResultsMatch function will check the new perft results and recursively call InvestigateMove until the root of the problem is found.
                 DoResultsMatch(results, correctResults);
+            }
+        }
+
+        private void MakeAndUnmakeRandomMoves(string fen, int maxMoveCount, int repeat)
+        {
+            Random rng = new();
+
+            for (int moveCount = 1; moveCount <= maxMoveCount; moveCount++)
+            {
+                for (int n = 0; n < repeat; n++)
+                {
+                    ConvertFromFen(fen);
+                    Board initialBoard = new();
+
+                    Stack<Move> movesStack = new();
+                    for (int i = 0; i < moveCount; i++)
+                    {
+                        List<Move> currentLegalMoves = Board.GenerateAllLegalMoves();
+                        Move move = currentLegalMoves[rng.Next(currentLegalMoves.Count)];
+                        movesStack.Push(move);
+
+                        Board.MakeMove(move);
+                    }
+
+                    while (movesStack.Count > 0)
+                    {
+                        Move move = movesStack.Pop();
+
+                        Board.UnmakeMove(move);
+                    }
+                }
             }
         }
     }

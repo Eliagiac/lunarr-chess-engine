@@ -511,8 +511,6 @@ public class Board
         bool enPassant = false;
         if (move.PieceType == Pawn) UnmakePawnMove();
 
-        ulong castledRookSquare = 0;
-        ulong castledRookTarget = 0;
         // If the king is castling, the rook should follow it.
         if (move.PieceType == King)
         {
@@ -520,11 +518,11 @@ public class Board
             if (move.StartSquare >> 2 == move.TargetSquare)
             {
                 // Remove rook from the target square.
-                castledRookTarget = move.TargetSquare << 1;
+                ulong castledRookTarget = move.TargetSquare << 1;
                 RemovePiece(castledRookTarget, Rook, Friendly);
 
                 // Add it to its start square.
-                castledRookSquare = move.StartSquare >> 4;
+                ulong castledRookSquare = move.StartSquare >> 4;
                 AddPiece(castledRookSquare, Rook, Friendly);
             }
 
@@ -532,11 +530,11 @@ public class Board
             else if (move.StartSquare << 2 == move.TargetSquare)
             {
                 // Remove rook from the target square.
-                castledRookTarget = move.TargetSquare >> 1;
+                ulong castledRookTarget = move.TargetSquare >> 1;
                 RemovePiece(castledRookTarget, Rook, Friendly);
 
                 // Add it to its start square.
-                castledRookSquare = move.StartSquare << 3;
+                ulong castledRookSquare = move.StartSquare << 3;
                 AddPiece(castledRookSquare, Rook, Friendly);
             }
         }
@@ -780,11 +778,11 @@ public class Board
                     break;
             }
 
-            // Only include occupied squares if capturesOnly is on.
-            // TODO: Also include en passant.
-            if (capturesOnly) moves &= AllOccupiedSquares;
+            // Only include occupied squares if capturesOnly is on. Also include en passant captures.
+            if (capturesOnly) moves &= AllOccupiedSquares | (pieceType == Pawn ? EnPassantSquare : 0);
 
             // Remove friendly blockers (all captures were included, but only enemy pieces can actually be captured).
+            // Note: en passant is not included as it's not possible to perform on pawns of the same color.
             if (!friendlyCaptures) moves &= ~OccupiedSquares[Friendly];
 
             // Add each move in the bitboard to the movesList.
@@ -795,7 +793,18 @@ public class Board
 
                 ulong targetSquare = 1UL << targetSquareIndex;
 
-                if (pieceType == Pawn && (targetSquare & Mask.PromotionRanks) != 0)
+                int capturedPieceType = PieceType(targetSquareIndex);
+                bool isPromotion = false;
+
+                if (pieceType == Pawn)
+                {
+                    // In case of en passant set the captured piece type to pawn.
+                    if ((targetSquare & EnPassantSquare) != 0) capturedPieceType = Pawn;
+
+                    if ((targetSquare & Mask.PromotionRanks) != 0) isPromotion = true;
+                }
+
+                if (isPromotion)
                 {
                     Move queenPromotion = new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Queen);
 
@@ -803,15 +812,15 @@ public class Board
                     if (IsLegal(queenPromotion))
                     {
                         movesList.Add(queenPromotion);
-                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Knight));
-                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Bishop));
-                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Rook));
+                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, capturedPieceType, Knight));
+                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, capturedPieceType, Bishop));
+                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, capturedPieceType, Rook));
                     }
                 }
 
                 else
                 {
-                    Move move = new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex));
+                    Move move = new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, capturedPieceType);
                     if (IsLegal(move)) movesList.Add(move);
                 }
             }
@@ -1122,6 +1131,11 @@ public class Board
             {
                 int attackingPieceSquareIndex = FirstSquareIndex(potentialAttackingPieces);
                 int attackingPieceType = PieceType(attackingPieceSquareIndex);
+
+                if (attackingPieceType == 0)
+                {
+                    ulong test = SlidingAttackersTo(kingSquareIndex, friendlyColorIndex, opponentColorIndex, 1UL << kingSquareIndex);
+                }
 
                 // The ray will be empty if the piece cannot target the king (eg. rook cannot target diagonally).
                 ulong rayToKing = PrecomputedMoveData.XRay[attackingPieceType][attackingPieceSquareIndex, kingSquareIndex];
