@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using static Utilities.Bitboard;
+using static Utilities.Fen;
 using static System.Math;
 using static Piece;
 using static Evaluation;
-using System.Numerics;
+using static Engine;
 
 /// <summary>The <see cref="Engine"/> class contains the main features of the engine.</summary>
 public class Engine
@@ -73,23 +74,13 @@ public class Engine
         ).ToArray()).ToArray();
 
 
-    /// <summary>Killer moves are quiet moves that caused a beta cutoff, indexed by <c>[KillerMoveIndex, Ply]</c>.<br />
-    /// If the same move is found in another position at the same ply, it will be prioritized.</summary>
-    /// <remarks>2 killer moves are stored at each ply. Storing more would increase the complexity of adding a new move.</remarks>
-    private static Move[,] s_killerMoves = new Move[2, MaxPly];
-
-    /// <summary>Bonus based on the success of a move in other positions.</summary>
-    /// <remarks>Moves are identified using butterfly boards (https://www.chessprogramming.org/Butterfly_Boards) 
-    /// with [ColorIndex][StartSquareIndex, TargetSquareIndex].</remarks>
-    private static int[][,] s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
-
     /// <summary><see cref="Stopwatch"/> that keeps track of the total time taken by the current search.</summary>
     /// <remarks>Note that it is not reset on different iterations of iterative deepening.</remarks>
     private static readonly Stopwatch s_searchStopwatch = new();
 
-    private static Line? s_currentMainLine;
-
     private static CancellationTokenSource? s_abortSearchTimer;
+
+    private static ThreadInfo[] s_threads;
 
 
     private static int s_moveOverhead = 10;
@@ -101,16 +92,39 @@ public class Engine
     private static bool s_useTimeLimit;
     private static bool s_useTimeManagement;
 
-
-    private static int s_maxDepthReached;
-    private static int s_rootDepth;
-
     private static int s_multiPvCount = 1;
+    private static int s_threadCount = 1;
 
     private static List<Move> s_excludedRootMoves = new();
 
 
-    private static int s_totalSearchNodes;
+    /// <summary>Killer moves are quiet moves that caused a beta cutoff, indexed by <c>[KillerMoveIndex, Ply]</c>.<br />
+    /// If the same move is found in another position at the same ply, it will be prioritized.</summary>
+    /// <remarks>2 killer moves are stored at each ply. Storing more would increase the complexity of adding a new move.</remarks>
+    [ThreadStatic] 
+    private static Move[,] t_killerMoves = new Move[2, MaxPly];
+
+    /// <summary>Bonus based on the success of a move in other positions.</summary>
+    /// <remarks>Moves are identified using butterfly boards (https://www.chessprogramming.org/Butterfly_Boards) 
+    /// with [ColorIndex][StartSquareIndex, TargetSquareIndex].</remarks>
+    [ThreadStatic]
+    private static int[][,] t_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
+
+
+    [ThreadStatic]
+    private static int t_maxDepthReached;
+    [ThreadStatic]
+    private static int t_rootDepth;
+
+    [ThreadStatic]
+    private static int t_totalSearchNodes;
+
+    [ThreadStatic]
+    private static Board t_board = new();
+
+    /// <summary>The main search thread is the first thread that starts searching.</summary>
+    [ThreadStatic]
+    private static bool t_isMainSearchThread = false;
 
 
     /// <summary>Type of limitation applied to the search.</summary>
@@ -192,8 +206,15 @@ public class Engine
 
     /// <summary>Set the amount of root moves that will each receive a separate evaluation.</summary>
     public static void SetMultiPVCount(int multiPVCount) => s_multiPvCount = multiPVCount;
-
     
+    /// <summary>Set the amount of threads that will be searching at the same time.</summary>
+    public static void SetThreadCount(int threadCount) => s_threadCount = threadCount;
+
+    /// <summary>Set the starting position for all threads.</summary>
+    /// <remarks>This function should only be called from the main thread.</remarks>
+    public static Board SetPosition(string fen) => ConvertFromFen(t_board, fen);
+
+
     /// <summary>The total number of legal moves after each move in the current position and down the game tree until the desired depth is reached.</summary>
     /// <returns>A string with each root move on a new line and the legal move count after it. For example, "a2a4: 20".</returns>
     public static string PerftResults(int depth, bool debug = false)
@@ -203,18 +224,18 @@ public class Engine
 
         List<string> results = new();
 
-        var moves = Board.GenerateAllLegalMoves();
+        var moves = t_board.GenerateAllLegalMoves();
         int totNumPositions = 0;
         foreach (var move in moves)
         {
-            Board.MakeMove(move);
+            t_board.MakeMove(move);
 
             int numPositions = Perft(depth - 1);
             totNumPositions += numPositions;
             results.Add($"{move}: {numPositions}");
             Console.WriteLine($"{move}: {numPositions}");
 
-            Board.UnmakeMove(move);
+            t_board.UnmakeMove(move);
         }
 
         if (debug)
@@ -232,13 +253,13 @@ public class Engine
         {
             if (depth == 0) return 1;
 
-            var moves = Board.GenerateAllLegalMoves();
+            var moves = t_board.GenerateAllLegalMoves();
             int numPositions = 0;
             foreach (var move in moves)
             {
-                Board.MakeMove(move);
+                t_board.MakeMove(move);
                 numPositions += Perft(depth - 1);
-                Board.UnmakeMove(move);
+                t_board.UnmakeMove(move);
             }
             return numPositions;
         }
@@ -246,15 +267,29 @@ public class Engine
 
 
     /// <summary>Start a new search using the last applied limits and store the best move in <see cref="MainLine"/>.</summary>
+    /// <remarks>This function must only be called from the main thread.</remarks>
     public static void FindBestMove()
     {
         WasSearchAborted = false;
+        MainLine = new();
+        if (ResetTTOnEachSearch) TT.Clear();
+        s_searchStopwatch.Restart();
 
-        Task.Factory.StartNew(
-            StartSearch, TaskCreationOptions.LongRunning);
+        // Since this function is called on the main thread, t_board stores the initial board.
+        Board initialBoard = t_board;
+
+        s_threads = new ThreadInfo[s_threadCount];
+
+        // Start searching on every thread
+        for (int i = 0; i < s_threadCount; i++)
+        {
+            // Clone the initial board by creating a new board and applying its fen string to it.
+            Task.Factory.StartNew(() => StartSearching(ConvertFromFen(new(), GetCurrentFen(initialBoard))));
+        }
 
         s_abortSearchTimer = new();
-        if (s_useTimeLimit) Task.Delay(s_timeLimit, s_abortSearchTimer.Token).ContinueWith((t) => AbortSearch());
+        if (s_useTimeLimit) 
+            Task.Delay(s_timeLimit, s_abortSearchTimer.Token).ContinueWith((t) => AbortSearch());
     }
 
     public static void AbortSearch() =>
@@ -268,18 +303,17 @@ public class Engine
         UCI.Bestmove(MainLine?.Move?.ToString() ?? "");
     }
 
-    private static void StartSearch()
+    /// <summary>Start searching on the current thread.</summary>
+    /// <remarks>Other threads may be activated depending on the on <see cref="s_threadCount"/>.</remarks>
+    /// <param name="board">The starting position given to all threads.</param>
+    /// <param name="isMainSearchThread">UI search updates will only be sent if isMainThread is true.</param>
+    private static void StartSearching(Board board)
     {
-        s_totalSearchNodes = 0;
+        ThreadInfo threadInfo = new();
 
-        MainLine = new();
-        s_currentMainLine = new();
+        t_board = board;
 
-        if (ResetTTOnEachSearch) TT.Clear();
-
-        // Opening book not available in UCI mode.
-
-        s_searchStopwatch.Restart();
+        t_totalSearchNodes = 0;
 
         int evaluation = Null;
 
@@ -287,14 +321,14 @@ public class Engine
         int depth = 1;
         do
         {
-            s_rootDepth = depth;
+            t_rootDepth = depth;
 
             // Do a full depth search for the first s_multiPvCount root moves.
             // After a move is searched it will be added to s_excludedRootMoves.
             s_excludedRootMoves = new();
             for (int pvIndex = 0; pvIndex < s_multiPvCount; pvIndex++)
             {
-                s_maxDepthReached = 0;
+                t_maxDepthReached = 0;
 
                 // After the first search (depth 1), the next searches will shrinken the windows to be close to the returned score.
                 // These are the initial window sizes.
@@ -322,7 +356,7 @@ public class Engine
                     Node root = new();
                     ref int score = ref root.Score;
 
-                    score = Search(root, depth - failedHighCounter, alpha, beta, out s_currentMainLine);
+                    score = Search(root, depth - failedHighCounter, alpha, beta, out threadInfo.MainLine);
                     bool isUpperbound = score <= alpha;
 
                     // If the score is outside the bounds, the search failed and a new search with wider bounds will be performed.
@@ -348,31 +382,31 @@ public class Engine
                     if (!searchFailed || WasSearchAborted) break;
 
                     // Update the UI when the search fails.
-                    else if (searchFailed && s_searchStopwatch.ElapsedMilliseconds > 3000)
+                    else if (t_isMainSearchThread && searchFailed && s_searchStopwatch.ElapsedMilliseconds > 3000)
                         UCI.PV(
                             depth: depth,
-                            seldepth: s_maxDepthReached + 1,
+                            seldepth: t_maxDepthReached + 1,
                             multipv: pvIndex + 1,
                             evaluation: evaluation,
                             evaluationType: isUpperbound ? "upperbound" : "lowerbound",
-                            nodes: s_totalSearchNodes,
-                            nps: (int)Round(s_totalSearchNodes / (s_searchStopwatch.ElapsedMilliseconds / 1000f)),
+                            nodes: t_totalSearchNodes,
+                            nps: (int)Round(t_totalSearchNodes / (s_searchStopwatch.ElapsedMilliseconds / 1000f)),
                             time: s_searchStopwatch.ElapsedMilliseconds,
                             pv: MainLine.ToString());
                 }
 
-                if (!WasSearchAborted)
+                if (t_isMainSearchThread && !WasSearchAborted)
                 {
-                    MainLine = new(s_currentMainLine);
+                    MainLine = new(threadInfo.MainLine);
 
                     UCI.PV(
                         depth: depth,
-                        seldepth: s_maxDepthReached + 1,
+                        seldepth: t_maxDepthReached + 1,
                         multipv: pvIndex + 1,
                         evaluation: evaluation,
                         evaluationType: "",
-                        nodes: s_totalSearchNodes,
-                        nps: (int)Round(s_totalSearchNodes / (double)s_searchStopwatch.ElapsedMilliseconds * 1000),
+                        nodes: t_totalSearchNodes,
+                        nps: (int)Round(t_totalSearchNodes / (double)s_searchStopwatch.ElapsedMilliseconds * 1000),
                         time: s_searchStopwatch.ElapsedMilliseconds,
                         pv: MainLine.ToString());
 
@@ -382,7 +416,7 @@ public class Engine
                 else break;
 
                 // If all legal moves have been searched, exit the multi pv loop immediately.
-                if (s_excludedRootMoves.Count >= Board.GenerateAllLegalMoves().Count) break;
+                if (s_excludedRootMoves.Count >= t_board.GenerateAllLegalMoves().Count) break;
             }
 
             depth++;
@@ -437,7 +471,7 @@ public class Engine
 
 
         // Return the static evaluation immediately if the max ply was reached.
-        if (ply >= MaxPly) return Evaluate(out int _);
+        if (ply >= MaxPly) return Evaluate(t_board, out int _);
 
 
         // Once the depth reaches 0, keep searching until no more captures
@@ -446,7 +480,7 @@ public class Engine
             return QuiescenceSearch(node, alpha, beta, out pvLine);
 
         // Keep track of the highest depth reached this search.
-        if (ply > s_maxDepthReached) s_maxDepthReached = ply;
+        if (ply > t_maxDepthReached) t_maxDepthReached = ply;
 
 
         // Mate Distance Pruning:
@@ -459,7 +493,7 @@ public class Engine
         bool ttHit;
 
         // Lookup transposition table entry. Should be accessed only if ttHit is true.
-        TTEntry ttEntry = TT.GetStoredEntry(out ttHit);
+        TTEntry ttEntry = TT.GetStoredEntry(t_board, out ttHit);
 
         // Lookup transposition evaluation.
         int ttEval = TT.GetStoredEvaluation(ply, alpha, beta);
@@ -482,7 +516,7 @@ public class Engine
 
         #region Store Static Evaluation Data
         // Early pruning is disabled when in check.
-        bool inCheck = Board.IsInCheck(Board.Friendly);
+        bool inCheck = t_board.IsInCheck(Board.Friendly);
 
         // Evaluation of the current position.
         ref int staticEvaluation = ref node.StaticEvaluation;
@@ -525,14 +559,14 @@ public class Engine
 
 
         // Generate a list of all the moves currently available.
-        var moves = Board.GenerateAllLegalMoves();
+        var moves = t_board.GenerateAllLegalMoves();
 
         // If no legal moves were found, it's either
         // checkmate for the current player or stalemate.
         if (moves.Count == 0)
         {
             // Checkmate.
-            if (Board.IsInCheck(Board.Friendly)) return MatedIn(ply);
+            if (t_board.IsInCheck(Board.Friendly)) return MatedIn(ply);
 
             // Stalemate.
             else return Draw;
@@ -568,7 +602,7 @@ public class Engine
             if (rootNode && s_excludedRootMoves.Any(m => m.Equals(move))) continue;
 
             // Update the UI on the search progress.
-            if (rootNode && s_searchStopwatch.ElapsedMilliseconds > 3000)
+            if (t_isMainSearchThread && rootNode && s_searchStopwatch.ElapsedMilliseconds > 3000)
                 UCI.Currmove(
                     depth: depth,
                     currmove: move.ToString(),
@@ -577,14 +611,14 @@ public class Engine
 
             // Make the move on the board.
             // The move must be unmade before moving on to the next one.
-            Board.MakeMove(move);
+            t_board.MakeMove(move);
 
 
             // Store information on the move for pruning purposes.
             bool isCapture = IsCapture(move);
             bool isCaptureOrPromotion = IsCaptureOrPromotion(move);
 
-            bool givesCheck = Board.IsInCheck(Board.Friendly);
+            bool givesCheck = t_board.IsInCheck(Board.Friendly);
 
 
             // Futility Pruning:
@@ -601,7 +635,7 @@ public class Engine
 
 
             // Update node count after pruning.
-            s_totalSearchNodes++;
+            t_totalSearchNodes++;
 
             // If the branch wasn't pruned, create a new child node.
             Node newNode = node.AddNewChild();
@@ -634,7 +668,7 @@ public class Engine
 
             // Unmake the move on the board.
             // This must be done before moving onto the next move.
-            Board.UnmakeMove(move);
+            t_board.UnmakeMove(move);
 
 
             // If the search was aborted, don't return incorrect values.
@@ -659,7 +693,7 @@ public class Engine
                     // The score was limited to beta, thus the actual score may be higher.
                     evaluationType = EvaluationType.LowerBound;
 
-                    TT.StoreEvaluation(depth, ply, beta, evaluationType, pvLine, staticEvaluation);
+                    TT.StoreEvaluation(t_board, depth, ply, beta, evaluationType, pvLine, staticEvaluation);
 
                     // If a quiet move caused a beta-cutoff, update it's stats.
                     if (!isCapture) UpdateQuietMoveStats(move, depth, ply);
@@ -679,7 +713,7 @@ public class Engine
                 !isCaptureOrPromotion && !givesCheck)
                 {
                     // It's essential to unmake moves when pruning inside the moves loop.
-                    Board.UnmakeMove(move);
+                    t_board.UnmakeMove(move);
                     return true;
                 }
 
@@ -695,7 +729,7 @@ public class Engine
                 if (useLateMovePruning &&
                     !isCaptureOrPromotion && !givesCheck)
                 {
-                    Board.UnmakeMove(move);
+                    t_board.UnmakeMove(move);
                     return true;
                 }
 
@@ -716,8 +750,8 @@ public class Engine
                     if (useLateMovePruning ||
                         (move.CapturedPieceType == None &&
                         move.PromotionPiece == None &&
-                        !move.Equals(s_killerMoves[0, ply]) &&
-                        !move.Equals(s_killerMoves[1, ply])))
+                        !move.Equals(t_killerMoves[0, ply]) &&
+                        !move.Equals(t_killerMoves[1, ply])))
                     {
                         usedLmr = true;
 
@@ -744,13 +778,13 @@ public class Engine
                 //    depthReduction--;
             }
         }
-        
+
 
         // Store killer move in case the best move found is quiet, even if it didn't cause a beta-cutoff.
         if (pvLine.Move?.CapturedPieceType == None) UpdateQuietMoveStats(pvLine.Move, depth, ply);
 
         // Once all legal moves have been searched, save the best score found in the transposition table and return it.
-        TT.StoreEvaluation(depth, ply, alpha, evaluationType, pvLine, staticEvaluation);
+        TT.StoreEvaluation(t_board, depth, ply, alpha, evaluationType, pvLine, staticEvaluation);
 
         return alpha;
 
@@ -784,7 +818,7 @@ public class Engine
                 {
                     if (ttEval >= beta)
                     {
-                        s_historyHeuristics[Board.Friendly][FirstSquareIndex(ttMove.StartSquare), FirstSquareIndex(ttMove.TargetSquare)] += depth * depth;
+                        t_historyHeuristics[t_board.Friendly][FirstSquareIndex(ttMove.StartSquare), FirstSquareIndex(ttMove.TargetSquare)] += depth * depth;
 
                         StoreKillerMove(ttMove, ply);
                     }
@@ -809,7 +843,7 @@ public class Engine
                 if (ttEntry.StaticEvaluation != Null)
                     staticEvaluation = ttEntry.StaticEvaluation;
 
-                else staticEvaluation = Evaluate(out int _);
+                else staticEvaluation = Evaluate(t_board, out int _);
 
                 if (ttEval != Null) evaluation = ttEval;
                 else evaluation = staticEvaluation;
@@ -819,7 +853,7 @@ public class Engine
             // calculate the static evaluation.
             else
             {
-                staticEvaluation = evaluation = Evaluate(out int _);
+                staticEvaluation = evaluation = Evaluate(t_board, out int _);
 
                 // TODO: Save static evaluation in the transposition table.
                 //TT.StoreEvaluation(Null, Null, LookupFailed, Null, null, staticEvaluation);
@@ -897,7 +931,7 @@ public class Engine
                 evaluation >= beta && evaluation >= staticEvaluation)
             {
                 NullMove move = new();
-                Board.MakeNullMove(move);
+                t_board.MakeNullMove(move);
 
 
                 Node newNode = node.AddNewChild();
@@ -911,7 +945,7 @@ public class Engine
                 score = -Search(newNode, depth - depthReduction, -beta, -beta + 1, out Line _, useNullMovePruning: false);
 
 
-                Board.UnmakeNullMove(move);
+                t_board.UnmakeNullMove(move);
 
                 if (WasSearchAborted) return false;
                 if (score >= beta)
@@ -939,14 +973,14 @@ public class Engine
             if (!rootNode && depth > ProbCutDepthReduction && !IsMateScore(beta))
             {
                 // Note: should only generate moves with SEE score > probCutBeta - staticEvaluation.
-                var moves = Board.GenerateAllLegalMoves(capturesOnly: true);
+                var moves = t_board.GenerateAllLegalMoves(capturesOnly: true);
                 OrderMoves(moves, -1);
 
                 for (int i = 0; i < moves.Count; i++)
                 {
                     Move move = moves[i];
 
-                    Board.MakeMove(move);
+                    t_board.MakeMove(move);
 
                     Node newNode = node.AddNewChild();
 
@@ -959,7 +993,7 @@ public class Engine
                         probCutScore = -Search(newNode, depth - ProbCutDepthReduction, -probCutBeta, -probCutBeta + 1, out probCutLine);
                     }
 
-                    Board.UnmakeMove(move);
+                    t_board.UnmakeMove(move);
 
                     if (probCutScore >= probCutBeta)
                     {
@@ -967,7 +1001,7 @@ public class Engine
                         pvLine.Next = probCutLine;
 
                         // Save ProbCut data into transposition table.
-                        TT.StoreEvaluation(depth - (ProbCutDepthReduction - 1 /* Here the effective depth is 1 higher than the reduced prob cut depth. */),
+                        TT.StoreEvaluation(t_board, depth - (ProbCutDepthReduction - 1 /* Here the effective depth is 1 higher than the reduced prob cut depth. */),
                             ply, probCutScore, EvaluationType.LowerBound, pvLine, staticEvaluation);
 
                         return true;
@@ -989,7 +1023,7 @@ public class Engine
                 ref int score = ref node.Score;
                 score = Search(node, depth - InternalIterativeDeepeningDepthReduction, alpha, beta, out Line _);
 
-                ttEntry = TT.GetStoredEntry(out ttHit);
+                ttEntry = TT.GetStoredEntry(t_board, out ttHit);
                 ttEval = TT.GetStoredEvaluation(ply, alpha, beta);
 
                 ttLine = ttHit ? ttEntry.Line : null;
@@ -999,7 +1033,7 @@ public class Engine
         }
 
 
-        bool CanExtend() => !rootNode && ply < s_rootDepth * 2;
+        bool CanExtend() => !rootNode && ply < t_rootDepth * 2;
     }
 
     /// <summary>
@@ -1023,7 +1057,7 @@ public class Engine
 
 
         // Return the static evaluation immediately if the max ply was reached.
-        if (WasMaxPlyReached()) return Evaluate(out int _);
+        if (WasMaxPlyReached()) return Evaluate(t_board, out int _);
 
 
         //if (ply > SelectiveDepth) SelectiveDepth = ply;
@@ -1034,7 +1068,7 @@ public class Engine
         bool ttHit;
 
         // Store transposition table entry. To be accessed only if ttHit is true.
-        TTEntry ttEntry = TT.GetStoredEntry(out ttHit);
+        TTEntry ttEntry = TT.GetStoredEntry(t_board, out ttHit);
 
         // Lookup transposition evaluation. If the lookup fails, ttEval == LookupFailed.
         int ttEval = TT.GetStoredEvaluation(ply, alpha, beta);
@@ -1057,7 +1091,7 @@ public class Engine
 
         #region Store Static Evaluation Data
         // Early pruning is disabled when in check.
-        bool inCheck = Board.IsInCheck(Board.Friendly);
+        bool inCheck = t_board.IsInCheck(Board.Friendly);
 
         // Evaluation of the current position.
         int staticEvaluation;
@@ -1091,7 +1125,7 @@ public class Engine
         if (alpha < evaluation) alpha = evaluation;
 
 
-        var moves = Board.GenerateAllLegalMoves(capturesOnly: true);
+        var moves = t_board.GenerateAllLegalMoves(capturesOnly: true);
 
         // Note: checking for checkmate or stalemate here is not
         // possible because not all legal moves were generated.
@@ -1105,10 +1139,10 @@ public class Engine
         {
             Move move = moves[i];
 
-            Board.MakeMove(move);
+            t_board.MakeMove(move);
 
 
-            s_totalSearchNodes++;
+            t_totalSearchNodes++;
 
             Node newNode = node.AddNewChild();
             ref int score = ref newNode.Score;
@@ -1116,7 +1150,7 @@ public class Engine
             score = -QuiescenceSearch(newNode, -beta, -alpha, out Line nextLine);
 
 
-            Board.UnmakeMove(move);
+            t_board.UnmakeMove(move);
 
 
             // A new best move was found!
@@ -1133,7 +1167,7 @@ public class Engine
                 {
                     evaluationType = EvaluationType.LowerBound;
 
-                    TT.StoreEvaluation(0, ply, beta, evaluationType, pvLine, staticEvaluation);
+                    TT.StoreEvaluation(t_board, 0, ply, beta, evaluationType, pvLine, staticEvaluation);
 
                     return beta;
                 }
@@ -1141,7 +1175,7 @@ public class Engine
         }
 
 
-        TT.StoreEvaluation(0, ply, alpha, evaluationType, pvLine, staticEvaluation);
+        TT.StoreEvaluation(t_board, 0, ply, alpha, evaluationType, pvLine, staticEvaluation);
         return alpha;
 
 
@@ -1170,7 +1204,7 @@ public class Engine
                 // Note: the implementation is different in Stockfish, where evaluation is set to -Infinity here,
                 // and after the moves loop if no moves where found and the player is in check checkmate is returned.
                 // I suspect their move generation still generates all legal moves when in check even inside qsearch.
-                evaluation = Evaluate(out int _);
+                evaluation = Evaluate(t_board, out int _);
             }
 
             // If this position was already evaluated, use the stored value.
@@ -1179,7 +1213,7 @@ public class Engine
                 if (ttEntry.StaticEvaluation != Null)
                     staticEvaluation = ttEntry.StaticEvaluation;
 
-                else staticEvaluation = Evaluate(out int _);
+                else staticEvaluation = Evaluate(t_board, out int _);
 
                 if (ttEval != Null) evaluation = ttEval;
                 else evaluation = staticEvaluation;
@@ -1189,7 +1223,7 @@ public class Engine
             // calculate the static evaluation.
             else
             {
-                staticEvaluation = evaluation = Evaluate(out int _);
+                staticEvaluation = evaluation = Evaluate(t_board, out int _);
 
                 // TODO: Save static evaluation in the transposition table.
                 //TT.StoreEvaluation(Null, Null, LookupFailed, Null, null, staticEvaluation);
@@ -1210,16 +1244,16 @@ public class Engine
 
     private static void StoreKillerMove(Move move, int ply)
     {
-        if (s_killerMoves[0, ply] != null && !s_killerMoves[0, ply].Equals(move))
-            s_killerMoves[1, ply] = new(s_killerMoves[0, ply]);
+        if (t_killerMoves[0, ply] != null && !t_killerMoves[0, ply].Equals(move))
+            t_killerMoves[1, ply] = new(t_killerMoves[0, ply]);
 
-        s_killerMoves[0, ply] = move;
+        t_killerMoves[0, ply] = move;
     }
 
     private static void UpdateQuietMoveStats(Move move, int depth, int ply)
     {
         // Moves with the same start and target square will be boosted in move ordering.
-        s_historyHeuristics[Board.Friendly][FirstSquareIndex(move.StartSquare), FirstSquareIndex(move.TargetSquare)] += depth * depth;
+        t_historyHeuristics[t_board.Friendly][FirstSquareIndex(move.StartSquare), FirstSquareIndex(move.TargetSquare)] += depth * depth;
 
         // If the same move is available in a different position, it will be prioritized.
         StoreKillerMove(move, ply);
@@ -1267,8 +1301,8 @@ public class Engine
             else
             {
                 // Sort killer moves just below captures.
-                if (move.Equals(s_killerMoves[0, ply])) moveScore += 10000;
-                else if (move.Equals(s_killerMoves[1, ply])) moveScore += 9000;
+                if (move.Equals(t_killerMoves[0, ply])) moveScore += 10000;
+                else if (move.Equals(t_killerMoves[1, ply])) moveScore += 9000;
 
                 // Sort non-killer quiet moves by history heuristics.
                 else
@@ -1276,7 +1310,7 @@ public class Engine
                     int startSquareIndex = FirstSquareIndex(move.StartSquare);
                     int targetSquareIndex = FirstSquareIndex(move.TargetSquare);
 
-                    moveScore += s_historyHeuristics[Board.Friendly][startSquareIndex, targetSquareIndex];
+                    moveScore += t_historyHeuristics[t_board.Friendly][startSquareIndex, targetSquareIndex];
 
                     //moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == None ? move.PieceType : move.PromotionPiece, targetSquareIndex, Board.Friendly == 0, gamePhase);
                     //moveScore += GetPieceValue(move.PromotionPiece);
@@ -1304,8 +1338,8 @@ public class Engine
 
     private static void ResetQuietMoveStats()
     {
-        s_killerMoves = new Move[2, MaxPly];
-        s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
+        t_killerMoves = new Move[2, MaxPly];
+        t_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
     }
     
 
@@ -1334,14 +1368,14 @@ public class Engine
 
     /// <summary>If a position is reached three times, it's a draw.</summary>
     /// <remarks>The current implementation returns true even if the position was only reached twice.</remarks>
-    public static bool IsDrawByRepetition() => Board.PositionHistory.Count(other => other == Board.ZobristKey) >= 2;
+    public static bool IsDrawByRepetition() => t_board.PositionHistory.Count(other => other == t_board.ZobristKey) >= 2;
 
 
     /// <summary>If there is not enough material on the board for either player to checkate the opponent, it's a draw.</summary>
     public static bool IsDrawByInsufficientMaterial()
     {
-        int whitePieceCount = PieceCount(Board.OccupiedSquares[0]);
-        int blackPieceCount = PieceCount(Board.OccupiedSquares[1]);
+        int whitePieceCount = PieceCount(t_board.OccupiedSquares[0]);
+        int blackPieceCount = PieceCount(t_board.OccupiedSquares[1]);
 
         // It's not a draw if a player has more than 2 pieces.
         if (whitePieceCount > 2 || blackPieceCount > 2) return false;
@@ -1350,16 +1384,16 @@ public class Engine
         if (whitePieceCount == 1 && blackPieceCount == 1) return true;
 
 
-        int whiteKnightCount = PieceCount(Board.Knights[0]);
-        int blackKnightCount = PieceCount(Board.Knights[1]);
+        int whiteKnightCount = PieceCount(t_board.Knights[0]);
+        int blackKnightCount = PieceCount(t_board.Knights[1]);
 
         // King and knight vs king.
         if (whiteKnightCount == 1 && blackPieceCount == 1) return true;
         if (blackKnightCount == 1 && whitePieceCount == 1) return true;
 
 
-        int whiteBishopCount = PieceCount(Board.Bishops[0]);
-        int blackBishopCount = PieceCount(Board.Bishops[1]);
+        int whiteBishopCount = PieceCount(t_board.Bishops[0]);
+        int blackBishopCount = PieceCount(t_board.Bishops[1]);
 
         // King and bishop vs king.
         if (whiteBishopCount == 1 && blackPieceCount == 1) return true;
@@ -1369,8 +1403,8 @@ public class Engine
         if (whitePieceCount == 2 && whiteBishopCount == 1 &&
             blackPieceCount == 2 && blackBishopCount == 1)
         {
-            if ((Board.Bishops[0] & Mask.LightSquares) != 0 && (Board.Bishops[1] & Mask.LightSquares) != 0) return true;
-            if ((Board.Bishops[0] & Mask.DarkSquares) != 0 && (Board.Bishops[1] & Mask.DarkSquares) != 0) return true;
+            if ((t_board.Bishops[0] & Mask.LightSquares) != 0 && (t_board.Bishops[1] & Mask.LightSquares) != 0) return true;
+            if ((t_board.Bishops[0] & Mask.DarkSquares) != 0 && (t_board.Bishops[1] & Mask.DarkSquares) != 0) return true;
         }
 
         return false;
@@ -1451,6 +1485,33 @@ public class Engine
         if (improving) return 3 + depth * depth;
         else return (3 + depth * depth) / 2;
     }
+
+
+    /// <summary>Stores information on the search progress and results of a thread, to be accessed from outside the thread.</summary>
+    /// <remarks>Information that's only used inside the thread should not be stored here.</remarks>
+    private class ThreadInfo
+    {
+        public Line MainLine = new();
+
+        /// <summary>
+        /// When a new <see cref="ThreadInfo"/> object is created, it's stored in the first available slot 
+        /// of <see cref="s_threads"/> and ThreadStatic information on this thread is updated.
+        /// </summary>
+        public ThreadInfo()
+        {
+            for (int i = 0; i < s_threads.Length; i++)
+            {
+                // Store this ThreadInfo object in the first empty slot.
+                if (s_threads[i] == null)
+                {
+                    t_isMainSearchThread = i == 0;
+
+                    s_threads[i] = this;
+                    break;
+                }
+            }
+        }
+    }
 }
 
 public class Line
@@ -1471,17 +1532,17 @@ public class Line
         Next = other.Next != null ? new(other.Next) : null;
     }
 
-    public void MakeMoves(bool removeEntries = false)
+    public void MakeMoves(Board board, bool removeEntries = false)
     {
-        Board.MakeMove(Move);
+        board.MakeMove(Move);
         if (removeEntries) TT.ClearCurrentEntry();
-        if (Next != null) Next.MakeMoves(removeEntries);
+        if (Next != null) Next.MakeMoves(board, removeEntries);
     }
 
-    public void UnmakeMoves()
+    public void UnmakeMoves(Board board)
     {
-        if (Next != null) Next.UnmakeMoves();
-        Board.UnmakeMove(Move);
+        if (Next != null) Next.UnmakeMoves(board);
+        board.UnmakeMove(Move);
     }
 
     public bool Equals(Line other)
