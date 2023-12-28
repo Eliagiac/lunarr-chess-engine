@@ -37,13 +37,15 @@ public class Board
 
     public int[] KingPosition = new int[2];
 
+    public ulong[] CheckingPieces = new ulong[2];
+
     /// <summary>
     /// Updated when <see cref="GenerateAllLegalMoves"/> is called.
     /// </summary>
     private bool[] IsKingInCheck = new bool[2];
     private bool IsCheckDataOutdated = true;
 
-    public static ulong[] Pins = new ulong[2];
+    public ulong[] Pins = new ulong[2];
 
 
     // All the squares currently attacked by each piece.
@@ -288,7 +290,7 @@ public class Board
         SecondShieldingPawns[63] = 0xc00000000000;
     }
 
-    public static void UpdateAllOccupiedSquares()
+    public void UpdateAllOccupiedSquares()
     {
         UpdateOccupiedSquares(0);
         UpdateOccupiedSquares(1);
@@ -1076,7 +1078,7 @@ public class Board
     /// <summary>
     /// Update bitboards with checking pieces and pin rays, and update <see cref="IsKingInCheck"/>.
     /// </summary>
-    public static void UpdateCheckData(bool excludePins = false)
+    public void UpdateCheckData(bool excludePins = false)
     {
         if (IsCheckDataOutdated)
         {
@@ -1136,20 +1138,20 @@ public class Board
     /// <remarks>
     /// Should only be called on board initialization
     /// </remarks>
-    public static void UpdateKingPositions()
+    public void UpdateKingPositions()
     {
         KingPosition[0] = FirstSquareIndex(Kings[0]);
         KingPosition[1] = FirstSquareIndex(Kings[1]);
     }
 
-    public static bool IsInCheck(int colorIndex)
+    public bool IsInCheck(int colorIndex)
     {
         if (IsCheckDataOutdated) UpdateCheckData(true);
 
         return IsKingInCheck[colorIndex];
     }
 
-    public static void UpdatePawnAttackedSquares()
+    public void UpdatePawnAttackedSquares()
     {
         PawnAttackedSquares[0] = ((Pawns[0] & ~Files[0]) << 7) | ((Pawns[0] & ~Files[7]) << 9);
         PawnAttackedSquares[1] = ((Pawns[1] & ~Files[0]) >> 9) | ((Pawns[1] & ~Files[7]) >> 7);
@@ -1171,14 +1173,14 @@ public class Board
         return squareIndex >= 0 && squareIndex < 64;
     }
 
-    public static int PieceType(int squareIndex) => Squares[squareIndex].PieceType();
+    public int PieceType(int squareIndex) => Squares[squareIndex].PieceType();
 
-    public static int PieceColor(int squareIndex)
+    public int PieceColor(int squareIndex)
     {
         return Squares[squareIndex].PieceColor();
     }
 
-    public static bool IsSlidingPiece(ulong square) => (AllSlidingPieces & square) != 0;
+    public bool IsSlidingPiece(ulong square) => (AllSlidingPieces & square) != 0;
 
     public static List<int> GetIndexes(ulong value)
     {

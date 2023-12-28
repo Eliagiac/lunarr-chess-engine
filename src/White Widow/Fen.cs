@@ -79,7 +79,7 @@ namespace Utilities
             board.UpdateKingPositions();
             board.UpdateCheckData();
             board.UpdatePawnAttackedSquares();
-            board.ZobristKey = Zobrist.CalculateZobristKey();
+            board.ZobristKey = Zobrist.CalculateZobristKey(board);
 
             board.PsqtScore[0] = PieceSquareTables.EvaluateAllPsqt(board, 0);
             board.PsqtScore[1] = PieceSquareTables.EvaluateAllPsqt(board, 1);

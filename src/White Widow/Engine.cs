@@ -516,7 +516,7 @@ public class Engine
 
         #region Store Static Evaluation Data
         // Early pruning is disabled when in check.
-        bool inCheck = t_board.IsInCheck(Board.Friendly);
+        bool inCheck = t_board.IsInCheck(t_board.Friendly);
 
         // Evaluation of the current position.
         ref int staticEvaluation = ref node.StaticEvaluation;
@@ -566,7 +566,7 @@ public class Engine
         if (moves.Count == 0)
         {
             // Checkmate.
-            if (t_board.IsInCheck(Board.Friendly)) return MatedIn(ply);
+            if (t_board.IsInCheck(t_board.Friendly)) return MatedIn(ply);
 
             // Stalemate.
             else return Draw;
@@ -618,7 +618,7 @@ public class Engine
             bool isCapture = IsCapture(move);
             bool isCaptureOrPromotion = IsCaptureOrPromotion(move);
 
-            bool givesCheck = t_board.IsInCheck(Board.Friendly);
+            bool givesCheck = t_board.IsInCheck(t_board.Friendly);
 
 
             // Futility Pruning:
@@ -1091,7 +1091,7 @@ public class Engine
 
         #region Store Static Evaluation Data
         // Early pruning is disabled when in check.
-        bool inCheck = t_board.IsInCheck(Board.Friendly);
+        bool inCheck = t_board.IsInCheck(t_board.Friendly);
 
         // Evaluation of the current position.
         int staticEvaluation;

@@ -268,9 +268,9 @@ while (true)
             //Console.WriteLine($"Add piece: {Board.tempAddPieceStopwatch.ElapsedMilliseconds}");
             //Console.WriteLine($"Remove piece: {Board.tempRemovePieceStopwatch.ElapsedMilliseconds}");
 
-            Console.WriteLine($"All: {Board.AllOccupiedSquares}");
-            Console.WriteLine($"White: {Board.OccupiedSquares[0]}");
-            Console.WriteLine($"Black: {Board.OccupiedSquares[1]}");
+            //Console.WriteLine($"All: {Board.AllOccupiedSquares}");
+            //Console.WriteLine($"White: {Board.OccupiedSquares[0]}");
+            //Console.WriteLine($"Black: {Board.OccupiedSquares[1]}");
             break;
     }
 }
