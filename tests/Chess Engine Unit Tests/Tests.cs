@@ -10,30 +10,30 @@ namespace Chess_Engine_Unit_Tests
     {
         public static List<string> AllPositions = new()
         {
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -",
             "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -",
-            "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -",
-            "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
-            "r2q1rk1/pP1p2pp/Q4n2/bbp1p3/Np6/1B3NBn/pPPP1PPP/R3K2R b KQ - 0 1",
-            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
-            "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
-            "r3k2r/p2p1pb1/bn1qpnp1/2pPN3/1p2P3/2N2Q1p/PPPBBPPP/2RK3R w kq c6 0 3",
-            "1k6/1b6/8/8/7R/8/8/4K2R b K - 0 1",
-             "3k4/3p4/8/K1P4r/8/8/8/8 b - - 0 1",
-             "8/8/4k3/8/2p5/8/B2P2K1/8 w - - 0 1",
-             "8/8/1k6/2b5/2pP4/8/5K2/8 b - d3 0 1",
-             "5k2/8/8/8/8/8/8/4K2R w K - 0 1",
-             "3k4/8/8/8/8/8/8/R3K3 w Q - 0 1",
-             "r3k2r/1b4bq/8/8/8/8/7B/R3K2R w KQkq - 0 1",
-             "r3k2r/8/3Q4/8/8/5q2/8/R3K2R b KQkq - 0 1",
-             "2K2r2/4P3/8/8/8/8/8/3k4 w - - 0 1",
-             "8/8/1P2K3/8/2n5/1q6/8/5k2 b - - 0 1",
-             "4k3/1P6/8/8/8/8/K7/8 w - - 0 1",
-             "8/P1k5/K7/8/8/8/8/8 w - - 0 1",
-             "K1k5/8/P7/8/8/8/8/8 w - - 0 1",
-             "8/k1P5/8/1K6/8/8/8/8 w - - 0 1",
-             "8/8/2k5/5q2/5n2/8/5K2/8 b - - 0 1",
-             "rnbqkbnr/pppppppp/8/8/3P4/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1"
+            "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w",
+            "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq -",
+            "r2q1rk1/pP1p2pp/Q4n2/bbp1p3/Np6/1B3NBn/pPPP1PPP/R3K2R b KQ -",
+            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ -",
+            "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - -",
+            "r3k2r/p2p1pb1/bn1qpnp1/2pPN3/1p2P3/2N2Q1p/PPPBBPPP/2RK3R w kq c6",
+            "1k6/1b6/8/8/7R/8/8/4K2R b K -",
+             "3k4/3p4/8/K1P4r/8/8/8/8 b - -",
+             "8/8/4k3/8/2p5/8/B2P2K1/8 w - -",
+             "8/8/1k6/2b5/2pP4/8/5K2/8 b - d3",
+             "5k2/8/8/8/8/8/8/4K2R w K -",
+             "3k4/8/8/8/8/8/8/R3K3 w Q -",
+             "r3k2r/1b4bq/8/8/8/8/7B/R3K2R w KQkq -",
+             "r3k2r/8/3Q4/8/8/5q2/8/R3K2R b KQkq -",
+             "2K2r2/4P3/8/8/8/8/8/3k4 w - -",
+             "8/8/1P2K3/8/2n5/1q6/8/5k2 b - -",
+             "4k3/1P6/8/8/8/8/K7/8 w - -",
+             "8/P1k5/K7/8/8/8/8/8 w - -",
+             "K1k5/8/P7/8/8/8/8/8 w - -",
+             "8/k1P5/8/1K6/8/8/8/8 w - -",
+             "8/8/2k5/5q2/5n2/8/5K2/8 b - -",
+             "rnbqkbnr/pppppppp/8/8/3P4/8/PPPP1PPP/RNBQKBNR w KQkq -"
         };
     }
 
@@ -423,44 +423,48 @@ namespace Chess_Engine_Unit_Tests
         }
 
         [TestMethod]
-        public void MakeAndUnmakeRandomMoves_UpTo1Move_1000Times() =>
-            MakeAndUnmakeRandomMoves(1, 1000);
+        public void MakeAndUnmakeRandomMoves_UpTo1Move_20000Times() =>
+            MakeAndUnmakeRandomMoves(1, 20000);
 
         [TestMethod]
-        public void MakeAndUnmakeRandomMoves_UpTo2Moves_200Times() =>
-            MakeAndUnmakeRandomMoves(2, 200);
+        public void MakeAndUnmakeRandomMoves_UpTo2Moves_12000Times() =>
+            MakeAndUnmakeRandomMoves(2, 12000);
 
         [TestMethod]
-        public void MakeAndUnmakeRandomMoves_UpTo5Moves_100Times() =>
-            MakeAndUnmakeRandomMoves(5, 100);
+        public void MakeAndUnmakeRandomMoves_UpTo5Moves_5000Times() =>
+            MakeAndUnmakeRandomMoves(5, 5000);
 
         [TestMethod]
-        public void MakeAndUnmakeRandomMoves_UpTo10Moves_100Times() =>
-            MakeAndUnmakeRandomMoves(10, 100);
+        public void MakeAndUnmakeRandomMoves_UpTo10Moves_3000Times() =>
+            MakeAndUnmakeRandomMoves(10, 3000);
 
         [TestMethod]
-        public void MakeAndUnmakeRandomMoves_UpTo20Moves_100Times() =>
-            MakeAndUnmakeRandomMoves(20, 100);
+        public void MakeAndUnmakeRandomMoves_UpTo20Moves_1500Times() =>
+            MakeAndUnmakeRandomMoves(20, 1500);
 
         [TestMethod]
-        public void MakeAndUnmakeRandomMoves_UpTo30Moves_100Times() =>
-            MakeAndUnmakeRandomMoves(30, 100);
+        public void MakeAndUnmakeRandomMoves_UpTo30Moves_1200Times() =>
+            MakeAndUnmakeRandomMoves(30, 1200);
 
         [TestMethod]
-        public void MakeAndUnmakeRandomMoves_UpTo50Moves_100Times() =>
-            MakeAndUnmakeRandomMoves(50, 100);
+        public void MakeAndUnmakeRandomMoves_UpTo50Moves_800Times() =>
+            MakeAndUnmakeRandomMoves(50, 800);
 
         [TestMethod]
-        public void MakeAndUnmakeRandomMoves_UpTo100Moves_50Times() =>
-            MakeAndUnmakeRandomMoves(100, 50);
+        public void MakeAndUnmakeRandomMoves_UpTo100Moves_300Times() =>
+            MakeAndUnmakeRandomMoves(100, 300);
 
         [TestMethod]
-        public void MakeAndUnmakeRandomMoves_UpTo200Moves_20Times() =>
-            MakeAndUnmakeRandomMoves(200, 20);
+        public void MakeAndUnmakeRandomMoves_UpTo200Moves_200Times() =>
+            MakeAndUnmakeRandomMoves(200, 200);
 
         [TestMethod]
-        public void MakeAndUnmakeRandomMoves_UpTo1000Moves_5Times() =>
-            MakeAndUnmakeRandomMoves(1000, 5);
+        public void MakeAndUnmakeRandomMoves_UpTo1000Moves_30Times() =>
+            MakeAndUnmakeRandomMoves(1000, 30);
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo3000Moves_5Times() =>
+            MakeAndUnmakeRandomMoves(3000, 5);
 
 
         private void MakeAndUnmakeRandomMoves(int moveCount, int repeat)
@@ -475,15 +479,22 @@ namespace Chess_Engine_Unit_Tests
                 ConvertFromFen(board, randomPosition);
 
                 Board initialBoard = board.Clone();
+                Stack<Board> boardHistory = new();
+                boardHistory.Push(initialBoard);
 
                 Stack<Move> movesStack = new();
                 for (int i = 0; i < moveCount; i++)
                 {
                     List<Move> allLegalMoves = board.GenerateAllLegalMoves();
-                    Move move = allLegalMoves[rng.Next(allLegalMoves.Count)];
-                    movesStack.Push(move);
+                    if (allLegalMoves.Count == 0) break;
 
-                    board.MakeMove(move);
+                    int randomMoveIndex = rng.Next(allLegalMoves.Count);
+                    Move randomMove = allLegalMoves[randomMoveIndex];
+
+                    movesStack.Push(randomMove);
+
+                    board.MakeMove(randomMove);
+                    boardHistory.Push(board.Clone());
                 }
 
                 while (movesStack.Count > 0)
@@ -491,9 +502,29 @@ namespace Chess_Engine_Unit_Tests
                     Move move = movesStack.Pop();
 
                     board.UnmakeMove(move);
+
+                    // Remove the last move and check the board state before it was made.
+                    boardHistory.Pop();
+                    if (!board.Equals(boardHistory.Peek()))
+                    {
+                        List<string> differences = board.FindDifferences(boardHistory.Peek());
+                        Console.WriteLine(string.Join(", ", differences));
+
+                        if (differences.Contains("Fen String")) 
+                            Console.WriteLine($"\"{GetCurrentFen(boardHistory.Peek())}\" --> {move} --> \"{GetCurrentFen(board)}\"");
+
+                        else
+                            Console.WriteLine($"\"{GetCurrentFen(boardHistory.Peek())}\" --> {move}");
+                    }
                 }
 
-                Assert.IsTrue(board.Equals(initialBoard));
+                bool isEqual = board.Equals(initialBoard);
+                if (!isEqual)
+                {
+                    Console.WriteLine("Final: " + string.Join(", ", board.FindDifferences(initialBoard)));
+                }
+
+                Assert.IsTrue(isEqual);
             }
         }
     }

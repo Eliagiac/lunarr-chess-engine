@@ -315,8 +315,8 @@ public class Board
         // Empty the move's start square.
         RemovePiece(move.StartSquare, move.PieceType, Friendly);
 
-        // Remove any captured piece.
-        if (move.CapturedPieceType != None) RemovePiece(move.TargetSquare, move.CapturedPieceType, Opponent);
+        // Remove any captured piece. En passant is handled later, so if the target square is empty skip this step.
+        if (move.CapturedPieceType != None && (AllOccupiedSquares & move.TargetSquare) != 0) RemovePiece(move.TargetSquare, move.CapturedPieceType, Opponent);
 
         // Place moved piece on the target square (unless promoting).
         AddPiece(move.TargetSquare, pieceTypeOrPromotion, Friendly);
@@ -325,8 +325,6 @@ public class Board
         // Remove old en passant square.
         ZobristKey ^= EnPassantFileKeys[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
-        bool enPassant = false;
-        ulong enPassantTargetBackup = 0;
         // Special pawn moves.
         if (move.PieceType == Pawn) MakePawnMove();
 
@@ -410,9 +408,6 @@ public class Board
             // En passant.
             if (move.TargetSquare == EnPassantSquare)
             {
-                enPassant = true;
-                enPassantTargetBackup = EnPassantTarget;
-
                 // Remove en passant target.
                 RemovePiece(EnPassantTarget, Pawn, Opponent);
 
@@ -483,7 +478,13 @@ public class Board
         RemovePiece(move.TargetSquare, pieceTypeOrPromotion, Friendly);
 
         // Restore any captured piece.
-        if (move.CapturedPieceType != None) AddPiece(move.TargetSquare, move.CapturedPieceType, Opponent);
+        if (move.CapturedPieceType != None)
+        {
+            if (move.PieceType == Pawn && (move.TargetSquare & move.EnPassantSquareBackup) != 0)
+                AddPiece(move.EnPassantTargetBackup, Pawn, Opponent);
+
+            else AddPiece(move.TargetSquare, move.CapturedPieceType, Opponent);
+        }
 
 
         // Remove old en passant square.
@@ -496,9 +497,6 @@ public class Board
         // Add new en passant square.
         ZobristKey ^= EnPassantFileKeys[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
-
-        bool enPassant = false;
-        if (move.PieceType == Pawn) UnmakePawnMove();
 
         // If the king is castling, the rook should follow it.
         if (move.PieceType == King)
@@ -536,16 +534,6 @@ public class Board
         IsCheckDataOutdated = true;
 
         PositionHistory.Pop();
-
-
-        void UnmakePawnMove()
-        {
-            if (move.TargetSquare == EnPassantSquare)
-            {
-                AddPiece(EnPassantTarget, Pawn, Opponent);
-                enPassant = true;
-            }
-        }
     }
 
     private void AddPiece(ulong square, int pieceType, int colorIndex)
@@ -554,7 +542,7 @@ public class Board
 
         Squares[squareIndex] = (colorIndex << 3) | pieceType;
 
-        // Add the piece to the specified bitboard.
+        // Add the piece to its bitboard.
         Pieces[pieceType][colorIndex] |= square;
 
         // Update occupied squares.
@@ -595,7 +583,7 @@ public class Board
 
         Squares[squareIndex] = None;
 
-        // Add the piece to the specified bitboard.
+        // Remove the piece from its bitboard.
         Pieces[pieceType][colorIndex] &= ~square;
 
         // Update occupied squares.
@@ -1221,10 +1209,10 @@ public class Board
             Enumerable.SequenceEqual(SlidingPieces, other.SlidingPieces) &&
             AllSlidingPieces == other.AllSlidingPieces &&
             Enumerable.SequenceEqual(KingPosition, other.KingPosition) &&
-            CheckingPieces == other.CheckingPieces &&
-            Enumerable.SequenceEqual(IsKingInCheck, other.IsKingInCheck) &&
+            (CheckingPieces == other.CheckingPieces || IsCheckDataOutdated) &&
+            (Enumerable.SequenceEqual(IsKingInCheck, other.IsKingInCheck) || IsCheckDataOutdated) &&
             /* IsCheckDataOutdated == other.IsCheckDataOutdated && */
-            Enumerable.SequenceEqual(Pins, other.Pins) &&
+            (Enumerable.SequenceEqual(Pins, other.Pins) || IsCheckDataOutdated) &&
             Enumerable.SequenceEqual(PawnAttackedSquares, other.PawnAttackedSquares) &&
             EnPassantSquare == other.EnPassantSquare &&
             EnPassantTarget == other.EnPassantTarget &&
@@ -1266,6 +1254,42 @@ public class Board
             PsqtScore = PsqtScore.Select(e => e).ToArray(),
             MaterialScore = MaterialScore.Select(e => e).ToArray()
         };
+    }
+
+    public List<string> FindDifferences(Board other)
+    {
+        List<string> differences = new();
+
+        bool arePiecesEqual = true;
+        for (int pieceType = Pawn; pieceType <= King; pieceType++)
+        {
+            arePiecesEqual &= Pieces[pieceType][0] == other.Pieces[pieceType][0];
+            arePiecesEqual &= Pieces[pieceType][1] == other.Pieces[pieceType][1];
+        }
+
+        if (!Enumerable.SequenceEqual(Squares, other.Squares)) differences.Add("Squares");
+        if (!arePiecesEqual) differences.Add("Pieces");
+        if (!(Friendly == other.Friendly)) differences.Add("Friendly");
+        if (!(Opponent == other.Opponent)) differences.Add("Opponent");
+        if (!Enumerable.SequenceEqual(OccupiedSquares, other.OccupiedSquares)) differences.Add("Occupied Squares");
+        if (!(AllOccupiedSquares == other.AllOccupiedSquares)) differences.Add("All Occupied Squares");
+        if (!Enumerable.SequenceEqual(SlidingPieces, other.SlidingPieces)) differences.Add("Sliding Pieces");
+        if (!(AllSlidingPieces == other.AllSlidingPieces)) differences.Add("All Sliding Pieces");
+        if (!Enumerable.SequenceEqual(KingPosition, other.KingPosition)) differences.Add("King Position");
+        if (!(CheckingPieces == other.CheckingPieces)) differences.Add("Checking Pieces");
+        if (!Enumerable.SequenceEqual(IsKingInCheck, other.IsKingInCheck)) differences.Add("Is King In Check");
+        if (!Enumerable.SequenceEqual(Pins, other.Pins)) differences.Add("Pins");
+        if (!Enumerable.SequenceEqual(PawnAttackedSquares, other.PawnAttackedSquares)) differences.Add("Pawn Attacked Squares");
+        if (!(EnPassantSquare == other.EnPassantSquare)) differences.Add("En Passant Square");
+        if (!(EnPassantTarget == other.EnPassantTarget)) differences.Add("En Passant Target");
+        if (!(CastlingRights == other.CastlingRights)) differences.Add("Castling Rights");
+        if (!(ZobristKey == other.ZobristKey)) differences.Add("Zobrist Key");
+        if (!Enumerable.SequenceEqual(PositionHistory, other.PositionHistory)) differences.Add("Position History");
+        if (!Enumerable.SequenceEqual(PsqtScore, other.PsqtScore)) differences.Add("Psqt Score");
+        if (!Enumerable.SequenceEqual(MaterialScore, other.MaterialScore)) differences.Add("Material Score");
+        if (!(Fen.GetCurrentFen(this) == Fen.GetCurrentFen(other))) differences.Add("Fen String");
+
+        return differences;
     }
 }
 
