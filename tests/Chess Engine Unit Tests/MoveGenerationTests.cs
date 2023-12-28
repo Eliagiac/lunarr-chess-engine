@@ -2,36 +2,68 @@ using System.Diagnostics;
 using Utilities;
 using static Engine;
 using static Utilities.Fen;
+using static Chess_Engine_Unit_Tests.Positions;
 
 namespace Chess_Engine_Unit_Tests
 {
+    public class Positions
+    {
+        public static List<string> AllPositions = new()
+        {
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -",
+            "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -",
+            "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+            "r2q1rk1/pP1p2pp/Q4n2/bbp1p3/Np6/1B3NBn/pPPP1PPP/R3K2R b KQ - 0 1",
+            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
+            "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
+            "r3k2r/p2p1pb1/bn1qpnp1/2pPN3/1p2P3/2N2Q1p/PPPBBPPP/2RK3R w kq c6 0 3",
+            "1k6/1b6/8/8/7R/8/8/4K2R b K - 0 1",
+             "3k4/3p4/8/K1P4r/8/8/8/8 b - - 0 1",
+             "8/8/4k3/8/2p5/8/B2P2K1/8 w - - 0 1",
+             "8/8/1k6/2b5/2pP4/8/5K2/8 b - d3 0 1",
+             "5k2/8/8/8/8/8/8/4K2R w K - 0 1",
+             "3k4/8/8/8/8/8/8/R3K3 w Q - 0 1",
+             "r3k2r/1b4bq/8/8/8/8/7B/R3K2R w KQkq - 0 1",
+             "r3k2r/8/3Q4/8/8/5q2/8/R3K2R b KQkq - 0 1",
+             "2K2r2/4P3/8/8/8/8/8/3k4 w - - 0 1",
+             "8/8/1P2K3/8/2n5/1q6/8/5k2 b - - 0 1",
+             "4k3/1P6/8/8/8/8/K7/8 w - - 0 1",
+             "8/P1k5/K7/8/8/8/8/8 w - - 0 1",
+             "K1k5/8/P7/8/8/8/8/8 w - - 0 1",
+             "8/k1P5/8/1K6/8/8/8/8 w - - 0 1",
+             "8/8/2k5/5q2/5n2/8/5K2/8 b - - 0 1",
+             "rnbqkbnr/pppppppp/8/8/3P4/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1"
+        };
+    }
+
     [TestClass]
     public class MoveGenerationTests
     {
-        private const string Position1 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        private const string Position2 = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -";
-        private const string Position3 = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -";
-        private const string Position4 = "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1";
-        private const string Position5 = "r2q1rk1/pP1p2pp/Q4n2/bbp1p3/Np6/1B3NBn/pPPP1PPP/R3K2R b KQ - 0 1";
-        private const string Position6 = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
-        private const string Position7 = "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10";
-        private const string Position8 = "r3k2r/p2p1pb1/bn1qpnp1/2pPN3/1p2P3/2N2Q1p/PPPBBPPP/2RK3R w kq c6 0 3";
-        private const string Position9 = "1k6/1b6/8/8/7R/8/8/4K2R b K - 0 1";
-        private const string Position10 = "3k4/3p4/8/K1P4r/8/8/8/8 b - - 0 1";
-        private const string Position11 = "8/8/4k3/8/2p5/8/B2P2K1/8 w - - 0 1";
-        private const string Position12 = "8/8/1k6/2b5/2pP4/8/5K2/8 b - d3 0 1";
-        private const string Position13 = "5k2/8/8/8/8/8/8/4K2R w K - 0 1";
-        private const string Position14 = "3k4/8/8/8/8/8/8/R3K3 w Q - 0 1";
-        private const string Position15 = "r3k2r/1b4bq/8/8/8/8/7B/R3K2R w KQkq - 0 1";
-        private const string Position16 = "r3k2r/8/3Q4/8/8/5q2/8/R3K2R b KQkq - 0 1";
-        private const string Position17 = "2K2r2/4P3/8/8/8/8/8/3k4 w - - 0 1";
-        private const string Position18 = "8/8/1P2K3/8/2n5/1q6/8/5k2 b - - 0 1";
-        private const string Position19 = "4k3/1P6/8/8/8/8/K7/8 w - - 0 1";
-        private const string Position20 = "8/P1k5/K7/8/8/8/8/8 w - - 0 1";
-        private const string Position21 = "K1k5/8/P7/8/8/8/8/8 w - - 0 1";
-        private const string Position22 = "8/k1P5/8/1K6/8/8/8/8 w - - 0 1";
-        private const string Position23 = "8/8/2k5/5q2/5n2/8/5K2/8 b - - 0 1";
-        private const string Position24 = "rnbqkbnr/pppppppp/8/8/3P4/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1";
+        public const string Position1 = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        public const string Position2 = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -";
+        public const string Position3 = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -";
+        public const string Position4 = "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1";
+        public const string Position5 = "r2q1rk1/pP1p2pp/Q4n2/bbp1p3/Np6/1B3NBn/pPPP1PPP/R3K2R b KQ - 0 1";
+        public const string Position6 = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
+        public const string Position7 = "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10";
+        public const string Position8 = "r3k2r/p2p1pb1/bn1qpnp1/2pPN3/1p2P3/2N2Q1p/PPPBBPPP/2RK3R w kq c6 0 3";
+        public const string Position9 = "1k6/1b6/8/8/7R/8/8/4K2R b K - 0 1";
+        public const string Position10 = "3k4/3p4/8/K1P4r/8/8/8/8 b - - 0 1";
+        public const string Position11 = "8/8/4k3/8/2p5/8/B2P2K1/8 w - - 0 1";
+        public const string Position12 = "8/8/1k6/2b5/2pP4/8/5K2/8 b - d3 0 1";
+        public const string Position13 = "5k2/8/8/8/8/8/8/4K2R w K - 0 1";
+        public const string Position14 = "3k4/8/8/8/8/8/8/R3K3 w Q - 0 1";
+        public const string Position15 = "r3k2r/1b4bq/8/8/8/8/7B/R3K2R w KQkq - 0 1";
+        public const string Position16 = "r3k2r/8/3Q4/8/8/5q2/8/R3K2R b KQkq - 0 1";
+        public const string Position17 = "2K2r2/4P3/8/8/8/8/8/3k4 w - - 0 1";
+        public const string Position18 = "8/8/1P2K3/8/2n5/1q6/8/5k2 b - - 0 1";
+        public const string Position19 = "4k3/1P6/8/8/8/8/K7/8 w - - 0 1";
+        public const string Position20 = "8/P1k5/K7/8/8/8/8/8 w - - 0 1";
+        public const string Position21 = "K1k5/8/P7/8/8/8/8/8 w - - 0 1";
+        public const string Position22 = "8/k1P5/8/1K6/8/8/8/8 w - - 0 1";
+        public const string Position23 = "8/8/2k5/5q2/5n2/8/5K2/8 b - - 0 1";
+        public const string Position24 = "rnbqkbnr/pppppppp/8/8/3P4/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1";
 
         private const string StockfishPath = @"C:\Users\eliag\OneDrive\Documenti\GitHub\Stockfish-VisualStudio\bin\Debug\x64\Stockfish.exe";
 
@@ -142,15 +174,11 @@ namespace Chess_Engine_Unit_Tests
             TestPerftResults(Position24, 4);
 
 
-        [TestMethod]
-        public void MakeAndUnmakeRandomMoves_Position1_UpTo30Moves_100Times() =>
-            MakeAndUnmakeRandomMoves(Position1, 1, 10);
-
-
         private void TestPerftResults(string fen, int depth)
         {
+            Board board = SetPosition(fen);
+
             string moves = "";
-            ConvertFromFen(fen);
 
             string results = PerftResults(depth);
 
@@ -229,7 +257,7 @@ namespace Chess_Engine_Unit_Tests
                     bool found = results.Split(new[] { '\n' }).Select(l => l.Split(' ')[0][..^1]).Contains(move);
 
                     if (!found)
-                        Console.WriteLine($"\nLegal move {move} missing in position {GetCurrentFen()} (moves {moves}).");
+                        Console.WriteLine($"\nLegal move {move} missing in position {GetCurrentFen(board)} (moves {moves}).");
 
                     return found;
                 });
@@ -239,7 +267,7 @@ namespace Chess_Engine_Unit_Tests
             {
                 if (depth == 1)
                 {
-                    Console.WriteLine($"\nIllegal move {move} found in position {GetCurrentFen()} (moves {moves}).");
+                    Console.WriteLine($"\nIllegal move {move} found in position {GetCurrentFen(board)} (moves {moves}).");
                     return;
                 }
 
@@ -248,7 +276,7 @@ namespace Chess_Engine_Unit_Tests
                 int startIndex = (int)Enum.Parse(typeof(Square), move.Substring(0, 2));
                 int targetIndex = (int)Enum.Parse(typeof(Square), move.Substring(2, 2));
                 int promotionType = move.Length == 5 ? Array.IndexOf(new[] { "", "p", "n", "b", "r", "q", "k" }, move.Substring(4, 1)) : 0;
-                Board.MakeMove(new(Board.PieceType(startIndex), 1UL << startIndex, 1UL << targetIndex, Board.PieceType(targetIndex), promotionType));
+                board.MakeMove(new(board, board.PieceType(startIndex), 1UL << startIndex, 1UL << targetIndex, startIndex, targetIndex, board.PieceType(targetIndex), promotionType));
 
                 string results = PerftResults(--depth);
 
@@ -256,37 +284,6 @@ namespace Chess_Engine_Unit_Tests
 
                 // The DoResultsMatch function will check the new perft results and recursively call InvestigateMove until the root of the problem is found.
                 DoResultsMatch(results, correctResults);
-            }
-        }
-
-        private void MakeAndUnmakeRandomMoves(string fen, int maxMoveCount, int repeat)
-        {
-            Random rng = new();
-
-            for (int moveCount = 1; moveCount <= maxMoveCount; moveCount++)
-            {
-                for (int n = 0; n < repeat; n++)
-                {
-                    ConvertFromFen(fen);
-                    Board initialBoard = new();
-
-                    Stack<Move> movesStack = new();
-                    for (int i = 0; i < moveCount; i++)
-                    {
-                        List<Move> currentLegalMoves = Board.GenerateAllLegalMoves();
-                        Move move = currentLegalMoves[rng.Next(currentLegalMoves.Count)];
-                        movesStack.Push(move);
-
-                        Board.MakeMove(move);
-                    }
-
-                    while (movesStack.Count > 0)
-                    {
-                        Move move = movesStack.Pop();
-
-                        Board.UnmakeMove(move);
-                    }
-                }
             }
         }
     }
@@ -403,13 +400,101 @@ namespace Chess_Engine_Unit_Tests
 
         private void TestDrawByInsufficientMaterial(string fen, bool isTrue)
         {
-            ConvertFromFen(fen);
+            SetPosition(fen);
 
             if (isTrue) 
                 Assert.IsTrue(IsDrawByInsufficientMaterial());
 
             else
                 Assert.IsFalse(IsDrawByInsufficientMaterial());
+        }
+    }
+
+    [TestClass]
+    public class MakeAndUnmakeMoveTests
+    {
+        static MakeAndUnmakeMoveTests()
+        {
+            PrecomputedMoveData.ComputeMoveData();
+            PrecomputedMoveData.GenerateDirectionalMasks();
+            PrecomputedMoveData.ComputeMagicBitboards();
+
+            TT.Resize(8);
+        }
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo1Move_1000Times() =>
+            MakeAndUnmakeRandomMoves(1, 1000);
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo2Moves_200Times() =>
+            MakeAndUnmakeRandomMoves(2, 200);
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo5Moves_100Times() =>
+            MakeAndUnmakeRandomMoves(5, 100);
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo10Moves_100Times() =>
+            MakeAndUnmakeRandomMoves(10, 100);
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo20Moves_100Times() =>
+            MakeAndUnmakeRandomMoves(20, 100);
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo30Moves_100Times() =>
+            MakeAndUnmakeRandomMoves(30, 100);
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo50Moves_100Times() =>
+            MakeAndUnmakeRandomMoves(50, 100);
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo100Moves_50Times() =>
+            MakeAndUnmakeRandomMoves(100, 50);
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo200Moves_20Times() =>
+            MakeAndUnmakeRandomMoves(200, 20);
+
+        [TestMethod]
+        public void MakeAndUnmakeRandomMoves_UpTo1000Moves_5Times() =>
+            MakeAndUnmakeRandomMoves(1000, 5);
+
+
+        private void MakeAndUnmakeRandomMoves(int moveCount, int repeat)
+        {
+            Random rng = new();
+
+            for (int n = 0; n < repeat; n++)
+            {
+                string randomPosition = AllPositions[rng.Next(AllPositions.Count)];
+
+                Board board = new();
+                ConvertFromFen(board, randomPosition);
+
+                Board initialBoard = board.Clone();
+
+                Stack<Move> movesStack = new();
+                for (int i = 0; i < moveCount; i++)
+                {
+                    List<Move> allLegalMoves = board.GenerateAllLegalMoves();
+                    Move move = allLegalMoves[rng.Next(allLegalMoves.Count)];
+                    movesStack.Push(move);
+
+                    board.MakeMove(move);
+                }
+
+                while (movesStack.Count > 0)
+                {
+                    Move move = movesStack.Pop();
+
+                    board.UnmakeMove(move);
+                }
+
+                Assert.IsTrue(board.Equals(initialBoard));
+            }
         }
     }
 }

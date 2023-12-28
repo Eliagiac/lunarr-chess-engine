@@ -4,6 +4,8 @@ using static Piece;
 using static Move;
 using System.Diagnostics;
 using System.Data.SqlTypes;
+using System.Drawing;
+using Utilities;
 
 public class Board
 {
@@ -178,7 +180,7 @@ public class Board
     public uint[] MaterialScore;
 
 
-    public void Reset()
+    public void Init()
     {
         Squares = new int[64];
         Pieces = new()
@@ -1194,6 +1196,76 @@ public class Board
             value >>= 1;
         }
         return indexes;
+    }
+
+
+    public override bool Equals(object? obj)
+    {
+        Board? other = obj as Board;
+        if (other == null) return false;
+
+        bool arePiecesEqual = true;
+        for (int pieceType = Pawn; pieceType <= King; pieceType++)
+        {
+            arePiecesEqual &= Pieces[pieceType][0] == other.Pieces[pieceType][0];
+            arePiecesEqual &= Pieces[pieceType][1] == other.Pieces[pieceType][1];
+        }
+
+        return
+            Enumerable.SequenceEqual(Squares, other.Squares) &&
+            arePiecesEqual &&
+            Friendly == other.Friendly &&
+            Opponent == other.Opponent &&
+            Enumerable.SequenceEqual(OccupiedSquares, other.OccupiedSquares) &&
+            AllOccupiedSquares == other.AllOccupiedSquares &&
+            Enumerable.SequenceEqual(SlidingPieces, other.SlidingPieces) &&
+            AllSlidingPieces == other.AllSlidingPieces &&
+            Enumerable.SequenceEqual(KingPosition, other.KingPosition) &&
+            CheckingPieces == other.CheckingPieces &&
+            Enumerable.SequenceEqual(IsKingInCheck, other.IsKingInCheck) &&
+            /* IsCheckDataOutdated == other.IsCheckDataOutdated && */
+            Enumerable.SequenceEqual(Pins, other.Pins) &&
+            Enumerable.SequenceEqual(PawnAttackedSquares, other.PawnAttackedSquares) &&
+            EnPassantSquare == other.EnPassantSquare &&
+            EnPassantTarget == other.EnPassantTarget &&
+            /* EnPassantSquareBackup == other.EnPassantSquareBackup && */
+            /* EnPassantTargetBackup == other.EnPassantTargetBackup && */
+            CastlingRights == other.CastlingRights &&
+            ZobristKey == other.ZobristKey &&
+            Enumerable.SequenceEqual(PositionHistory, other.PositionHistory) &&
+            Enumerable.SequenceEqual(PsqtScore, other.PsqtScore) &&
+            Enumerable.SequenceEqual(MaterialScore, other.MaterialScore) &&
+            Fen.GetCurrentFen(this) == Fen.GetCurrentFen(other);
+    }
+
+    public Board Clone()
+    {
+        return new()
+        {
+            Squares = Squares.Select(e => e).ToArray(),
+            Pieces = Pieces.ToDictionary(entry => entry.Key, entry => entry.Value.Select(e => e).ToArray()),
+            Friendly = Friendly,
+            Opponent = Opponent,
+            OccupiedSquares = OccupiedSquares.Select(e => e).ToArray(),
+            AllOccupiedSquares = AllOccupiedSquares,
+            SlidingPieces = SlidingPieces.Select(e => e).ToArray(),
+            AllSlidingPieces = AllSlidingPieces,
+            KingPosition = KingPosition.Select(e => e).ToArray(),
+            CheckingPieces = CheckingPieces,
+            IsKingInCheck = IsKingInCheck.Select(e => e).ToArray(),
+            IsCheckDataOutdated = IsCheckDataOutdated,
+            Pins = Pins.Select(e => e).ToArray(),
+            PawnAttackedSquares = PawnAttackedSquares.Select(e => e).ToArray(),
+            EnPassantSquare = EnPassantSquare,
+            EnPassantTarget = EnPassantTarget,
+            EnPassantSquareBackup = EnPassantSquareBackup,
+            EnPassantTargetBackup = EnPassantTargetBackup,
+            CastlingRights = CastlingRights,
+            ZobristKey = ZobristKey,
+            PositionHistory = new(PositionHistory),
+            PsqtScore = PsqtScore.Select(e => e).ToArray(),
+            MaterialScore = MaterialScore.Select(e => e).ToArray()
+        };
     }
 }
 
