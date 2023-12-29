@@ -14,12 +14,7 @@ public class Move
 
     public int PromotionPiece;
 
-    public ulong CastlingRightsBackup;
-
-    public ulong EnPassantSquareBackup;
-    public ulong EnPassantTargetBackup;
-
-    public Move(int pieceType, ulong startSquare, ulong targetSquare, int startSquareIndex, int targetSquareIndex, int capturedPieceType = Piece.None, int promotionPiece = Piece.None, ulong? currentCastlingRights = null, ulong? currentEnPassantSquare = null, ulong? currentEnPassantTarget = null)
+    public Move(int pieceType, ulong startSquare, ulong targetSquare, int startSquareIndex, int targetSquareIndex, int capturedPieceType = Piece.None, int promotionPiece = Piece.None)
     {
         PieceType = pieceType;
         StartSquare = startSquare;
@@ -28,9 +23,6 @@ public class Move
         TargetSquareIndex = targetSquareIndex;
         CapturedPieceType = capturedPieceType;
         PromotionPiece = promotionPiece;
-        CastlingRightsBackup = currentCastlingRights ?? Board.CastlingRights;
-        EnPassantSquareBackup = currentEnPassantSquare ?? Board.EnPassantSquare;
-        EnPassantTargetBackup = currentEnPassantTarget ?? Board.EnPassantTarget;
     }
 
     // Used for move generation.
@@ -64,19 +56,12 @@ public class Move
         TargetSquare = other.TargetSquare;
         CapturedPieceType = other.CapturedPieceType;
         PromotionPiece = other.PromotionPiece;
-        CastlingRightsBackup = other.CastlingRightsBackup;
-        EnPassantSquareBackup = other.EnPassantSquareBackup;
-        EnPassantTargetBackup = other.EnPassantTargetBackup;
     }
 
 
     // Used to load the opening book
     public Move(ushort moveValue)
     {
-        CastlingRightsBackup = Board.CastlingRights;
-        EnPassantSquareBackup = Board.EnPassantSquare;
-        EnPassantTargetBackup = Board.EnPassantTarget;
-
         StartSquare = 1UL << (moveValue & 0b0000000000111111);
         TargetSquare = 1UL << ((moveValue & 0b0000111111000000) >> 6);
 

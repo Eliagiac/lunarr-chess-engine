@@ -3,7 +3,6 @@ using static Utilities.Zobrist;
 using static Piece;
 using static Move;
 using System.Diagnostics;
-using System.Data.SqlTypes;
 
 public class Board
 {
@@ -168,9 +167,10 @@ public class Board
     public static ulong[] SecondShieldingPawns;
 
 
-    // Contains the history of zobrist keys of the game.
-    // Used to detect draws by repetition.
-    public static Stack<ulong> PositionHistory;
+    // Contains the history of positions reached up to this point, including their zobrist key,
+    // castling rights and possible en passant target. Used to detect draws by repetition and
+    // unmake moves that changed the castling rights or en passant data.
+    public static Stack<PositionData> PositionHistory;
 
 
     public static uint[] PsqtScore;
@@ -319,6 +319,9 @@ public class Board
     public static Stopwatch tempMakeMove7Stopwatch = new();
     public static Stopwatch tempUnmakeMoveStopwatch = new();
 
+    public static PositionData CurrentPositionData() => 
+        new(ZobristKey, CastlingRights, EnPassantSquare, EnPassantTarget);
+
     public static void MakeMove(Move move)
     {
         int pieceTypeOrPromotion = move.PromotionPiece == None ? move.PieceType : move.PromotionPiece;
@@ -413,7 +416,7 @@ public class Board
 
         IsCheckDataOutdated = true;
 
-        PositionHistory.Push(ZobristKey);
+        PositionHistory.Push(CurrentPositionData());
 
 
         void MakePawnMove()
@@ -468,6 +471,9 @@ public class Board
         int pieceTypeOrPromotedPawn = move.PromotionPiece == None ? move.PieceType : Pawn;
         int pieceTypeOrPromotion = move.PromotionPiece == None ? move.PieceType : move.PromotionPiece;
 
+        PositionHistory.Pop();
+        PositionData previousPosition = PositionHistory.Peek();
+
         // Restore current turn before anything else.
         Friendly ^= 1;
         Opponent ^= 1;
@@ -476,7 +482,7 @@ public class Board
         // Reset castling rights.
         ulong oldCastlingRights = FourBitCastlingRights();
 
-        CastlingRights = move.CastlingRightsBackup;
+        CastlingRights = previousPosition.CastlingRights;
 
         ulong newCastlingRights = FourBitCastlingRights();
 
@@ -501,8 +507,8 @@ public class Board
         ZobristKey ^= EnPassantFileKeys[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
         // Reset en passant data.
-        EnPassantSquare = move.EnPassantSquareBackup;
-        EnPassantTarget = move.EnPassantTargetBackup;
+        EnPassantSquare = previousPosition.EnPassantSquare;
+        EnPassantTarget = previousPosition.EnPassantTarget;
 
         // Add new en passant square.
         ZobristKey ^= EnPassantFileKeys[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
@@ -547,8 +553,6 @@ public class Board
         // A possible optimization is to check for this to avoid potentially having to recalculate it unnecessaraly,
         // for example by caching and extra "backup" set of data.
         IsCheckDataOutdated = true;
-
-        PositionHistory.Pop();
 
 
         void UnmakePawnMove()

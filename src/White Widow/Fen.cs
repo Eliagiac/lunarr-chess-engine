@@ -86,6 +86,8 @@ namespace Utilities
 
             Board.MaterialScore[0] = Evaluation.ComputeMaterial(0);
             Board.MaterialScore[1] = Evaluation.ComputeMaterial(1);
+
+            Board.PositionHistory.Push(Board.CurrentPositionData());
         }
 
         public static string GetCurrentFen()
