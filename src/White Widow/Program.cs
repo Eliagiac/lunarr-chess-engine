@@ -87,7 +87,7 @@ while (true)
                                 int startIndex = (int)Enum.Parse(typeof(Square), commands[i].Substring(0, 2));
                                 int targetIndex = (int)Enum.Parse(typeof(Square), commands[i].Substring(2, 2));
                                 int promotionType = commands[i].Length == 5 ? Array.IndexOf(new[] { "", "p", "n", "b", "r", "q", "k" }, commands[i].Substring(4, 1)) : 0;
-                                Board.MakeMove(new(Board.PieceType(startIndex), 1UL << startIndex, 1UL << targetIndex, Board.PieceType(targetIndex), promotionType));
+                                Board.MakeMove(new(startIndex, targetIndex, promotionType), out int _, out int _);
                             }
                             catch (Exception ex)
                             {

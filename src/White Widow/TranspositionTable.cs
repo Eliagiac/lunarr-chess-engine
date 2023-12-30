@@ -52,7 +52,7 @@ public class TT
         set => Entries[CurrentEntryIndex] = value;
     }
 
-    public static Move GetStoredMove() => CurrentEntry.Line?.Move;
+    public static Move? GetStoredMove() => CurrentEntry.Line?.Move;
 
     public static Line GetStoredLine() => CurrentEntry.Line;
 

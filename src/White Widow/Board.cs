@@ -91,6 +91,8 @@ public class Board
     // method of retrieving a unique key used to look up the position in a transposition table.
     public static ulong ZobristKey;
 
+    public static int CapturedPieceType;
+
 
     public static ulong[] Files =
     {
@@ -320,35 +322,46 @@ public class Board
     public static Stopwatch tempUnmakeMoveStopwatch = new();
 
     public static PositionData CurrentPositionData() => 
-        new(ZobristKey, CastlingRights, EnPassantSquare, EnPassantTarget);
+        new(ZobristKey, CapturedPieceType, CastlingRights, EnPassantSquare, EnPassantTarget);
 
-    public static void MakeMove(Move move)
+    public static void MakeMove(Move move, out int pieceType, out int capturedPieceType)
     {
-        int pieceTypeOrPromotion = move.PromotionPiece == None ? move.PieceType : move.PromotionPiece;
+        int moveFlag = move.Flag;
+        bool isEnPassant = moveFlag == EnPassantCaptureFlag;
+
+        int startSquareIndex = move.StartSquareIndex;
+        ulong startSquare = move.StartSquare;
+
+        int targetSquareIndex = move.TargetSquareIndex;
+        ulong targetSquare = move.TargetSquare;
+
+        pieceType = PieceType(startSquareIndex);
+        int pieceTypeOrPromotion = move.PromotionPieceType == None ? pieceType : move.PromotionPieceType;
+
+        capturedPieceType = isEnPassant ? Pawn : PieceType(targetSquareIndex);
+        CapturedPieceType = capturedPieceType;
 
         // Empty the move's start square.
-        RemovePiece(move.StartSquare, move.PieceType, Friendly);
+        RemovePiece(startSquare, startSquareIndex, pieceType, Friendly);
 
         // Remove any captured piece.
-        if (move.CapturedPieceType != None) RemovePiece(move.TargetSquare, move.CapturedPieceType, Opponent);
+        if (capturedPieceType != None) RemovePiece(targetSquare, targetSquareIndex, capturedPieceType, Opponent);
 
         // Place moved piece on the target square (unless promoting).
-        AddPiece(move.TargetSquare, pieceTypeOrPromotion, Friendly);
+        AddPiece(targetSquare, targetSquareIndex, pieceTypeOrPromotion, Friendly);
 
 
         // Remove old en passant square.
         ZobristKey ^= EnPassantFileKeys[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
-        bool enPassant = false;
-        ulong enPassantTargetBackup = 0;
         // Special pawn moves.
-        if (move.PieceType == Pawn) MakePawnMove();
+        if (pieceType == Pawn) MakePawnMove();
 
         // Remove previous en passant target.
         else
         {
-            EnPassantTarget &= 0;
-            EnPassantSquare &= 0;
+            EnPassantTarget = 0;
+            EnPassantSquare = 0;
         }
 
         // Update en passant square.
@@ -360,42 +373,42 @@ public class Board
         uint oldCastlingRights = FourBitCastlingRights();
 
         // Remove castling rights if a rook is captured.
-        if (move.CapturedPieceType == Rook) RemoveRookCastlingRights(move.TargetSquare, Opponent == 0 ? Mask.WhiteRank : Mask.BlackRank);
+        if (capturedPieceType == Rook) RemoveRookCastlingRights(targetSquare, Opponent == 0 ? Mask.WhiteRank : Mask.BlackRank);
 
         // Remove castling rights if the king moves.
-        if (move.PieceType == King) CastlingRights &= ~(Friendly == 0 ? Mask.WhiteRank : Mask.BlackRank);
+        if (pieceType == King) CastlingRights &= ~(Friendly == 0 ? Mask.WhiteRank : Mask.BlackRank);
 
         // Remove castling rights if the rook moves.
-        if (move.PieceType == Rook) RemoveRookCastlingRights(move.StartSquare, Friendly == 0 ? Mask.WhiteRank : Mask.BlackRank);
+        if (pieceType == Rook) RemoveRookCastlingRights(startSquare, Friendly == 0 ? Mask.WhiteRank : Mask.BlackRank);
 
 
         ulong castledRookSquare = 0;
         ulong castledRookTarget = 0;
         // If the king is castling, the rook should follow it.
-        if (move.PieceType == King)
+        if (pieceType == King)
         {
             // Queenside castling
-            if (move.StartSquare >> 2 == move.TargetSquare)
+            if (startSquare >> 2 == targetSquare)
             {
                 // Add rook on the target square.
-                castledRookTarget = move.TargetSquare << 1;
-                AddPiece(castledRookTarget, Rook, Friendly);
+                castledRookTarget = targetSquare << 1;
+                AddPiece(castledRookTarget, FirstSquareIndex(castledRookTarget), Rook, Friendly);
 
                 // Remove it from its start square.
-                castledRookSquare = move.StartSquare >> 4;
-                RemovePiece(castledRookSquare, Rook, Friendly);
+                castledRookSquare = startSquare >> 4;
+                RemovePiece(castledRookSquare, FirstSquareIndex(castledRookSquare), Rook, Friendly);
             }
 
             // Kingside castling
-            else if (move.StartSquare << 2 == move.TargetSquare)
+            else if (startSquare << 2 == targetSquare)
             {
                 // Add rook on the target square.
-                castledRookTarget = move.TargetSquare >> 1;
-                AddPiece(castledRookTarget, Rook, Friendly);
+                castledRookTarget = targetSquare >> 1;
+                AddPiece(castledRookTarget, FirstSquareIndex(castledRookTarget), Rook, Friendly);
 
                 // Remove it from its start square.
-                castledRookSquare = move.StartSquare << 3;
-                RemovePiece(castledRookSquare, Rook, Friendly);
+                castledRookSquare = startSquare << 3;
+                RemovePiece(castledRookSquare, FirstSquareIndex(castledRookSquare), Rook, Friendly);
             }
         }
 
@@ -421,37 +434,36 @@ public class Board
 
         void MakePawnMove()
         {
+            bool isDoublePawnPush = moveFlag == PawnDoublePushFlag;
+
             // En passant.
-            if (move.TargetSquare == EnPassantSquare)
+            if (isEnPassant)
             {
-                enPassant = true;
-                enPassantTargetBackup = EnPassantTarget;
-
                 // Remove en passant target.
-                RemovePiece(EnPassantTarget, Pawn, Opponent);
+                RemovePiece(EnPassantTarget, FirstSquareIndex(EnPassantTarget), Pawn, Opponent);
 
-                EnPassantTarget &= 0;
-                EnPassantSquare &= 0;
+                EnPassantTarget = 0;
+                EnPassantSquare = 0;
             }
 
             // White double pawn push.
-            else if (move.StartSquare << 16 == move.TargetSquare)
+            else if (isDoublePawnPush && Friendly == 0)
             {
-                EnPassantTarget = move.TargetSquare;
-                EnPassantSquare = move.StartSquare << 8;
+                EnPassantTarget = targetSquare;
+                EnPassantSquare = startSquare << 8;
             }
 
             // Black double pawn push.
-            else if (move.StartSquare >> 16 == move.TargetSquare)
+            else if (isDoublePawnPush && Friendly == 1)
             {
-                EnPassantTarget = move.TargetSquare;
-                EnPassantSquare = move.StartSquare >> 8;
+                EnPassantTarget = targetSquare;
+                EnPassantSquare = startSquare >> 8;
             }
 
             else
             {
-                EnPassantTarget &= 0;
-                EnPassantSquare &= 0;
+                EnPassantTarget = 0;
+                EnPassantSquare = 0;
             }
         }
 
@@ -468,11 +480,23 @@ public class Board
 
     public static void UnmakeMove(Move move)
     {
-        int pieceTypeOrPromotedPawn = move.PromotionPiece == None ? move.PieceType : Pawn;
-        int pieceTypeOrPromotion = move.PromotionPiece == None ? move.PieceType : move.PromotionPiece;
-
-        PositionHistory.Pop();
+        PositionData currentPosition = PositionHistory.Pop();
         PositionData previousPosition = PositionHistory.Peek();
+
+        int moveFlag = move.Flag;
+        bool isEnPassant = moveFlag == EnPassantCaptureFlag;
+
+        int startSquareIndex = move.StartSquareIndex;
+        ulong startSquare = move.StartSquare;
+
+        int targetSquareIndex = move.TargetSquareIndex;
+        ulong targetSquare = move.TargetSquare;
+
+        int pieceType = PieceType(targetSquareIndex);
+        int pieceTypeOrPromotedPawn = move.PromotionPieceType == None ? pieceType : Pawn;
+        int pieceTypeOrPromotion = move.PromotionPieceType == None ? pieceType : move.PromotionPieceType;
+
+        int capturedPieceType = currentPosition.CapturedPieceType;
 
         // Restore current turn before anything else.
         Friendly ^= 1;
@@ -493,16 +517,6 @@ public class Board
         }
 
 
-        // Place moved piece back on the start square.
-        AddPiece(move.StartSquare, pieceTypeOrPromotedPawn, Friendly);
-
-        // Empty the move's target square.
-        RemovePiece(move.TargetSquare, pieceTypeOrPromotion, Friendly);
-
-        // Restore any captured piece.
-        if (move.CapturedPieceType != None) AddPiece(move.TargetSquare, move.CapturedPieceType, Opponent);
-
-
         // Remove old en passant square.
         ZobristKey ^= EnPassantFileKeys[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
@@ -514,38 +528,54 @@ public class Board
         ZobristKey ^= EnPassantFileKeys[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
 
-        bool enPassant = false;
-        if (move.PieceType == Pawn) UnmakePawnMove();
+        // Place moved piece back on the start square.
+        AddPiece(startSquare, startSquareIndex, pieceTypeOrPromotedPawn, Friendly);
 
-        ulong castledRookSquare = 0;
-        ulong castledRookTarget = 0;
+        // Empty the move's target square.
+        RemovePiece(targetSquare, targetSquareIndex, pieceTypeOrPromotion, Friendly);
+
+        // Restore any captured piece.
+        if (capturedPieceType != None)
+        {
+            if (isEnPassant) AddPiece(EnPassantTarget, FirstSquareIndex(EnPassantTarget), capturedPieceType, Opponent);
+
+            else AddPiece(targetSquare, targetSquareIndex, capturedPieceType, Opponent);
+        }
+
+
+        // Note: since this function only deals with en passant, promoted pawns do not go through it, so pieceType is used instead of pieceTypeOrPromotedPawn.
+        // Note: removed because en passant is handled above.
+        //if (pieceType == Pawn) UnmakePawnMove();
+
         // If the king is castling, the rook should follow it.
-        if (move.PieceType == King)
+        if (pieceType == King)
         {
             // Queenside castling
-            if (move.StartSquare >> 2 == move.TargetSquare)
+            if (startSquare >> 2 == targetSquare)
             {
                 // Remove rook from the target square.
-                castledRookTarget = move.TargetSquare << 1;
-                RemovePiece(castledRookTarget, Rook, Friendly);
+                ulong castledRookTarget = targetSquare << 1;
+                RemovePiece(castledRookTarget, FirstSquareIndex(castledRookTarget), Rook, Friendly);
 
                 // Add it to its start square.
-                castledRookSquare = move.StartSquare >> 4;
-                AddPiece(castledRookSquare, Rook, Friendly);
+                ulong castledRookSquare = startSquare >> 4;
+                AddPiece(castledRookSquare, FirstSquareIndex(castledRookSquare), Rook, Friendly);
             }
 
             // Kingside castling
-            else if (move.StartSquare << 2 == move.TargetSquare)
+            else if (startSquare << 2 == targetSquare)
             {
                 // Remove rook from the target square.
-                castledRookTarget = move.TargetSquare >> 1;
-                RemovePiece(castledRookTarget, Rook, Friendly);
+                ulong castledRookTarget = targetSquare >> 1;
+                RemovePiece(castledRookTarget, FirstSquareIndex(castledRookTarget), Rook, Friendly);
 
                 // Add it to its start square.
-                castledRookSquare = move.StartSquare << 3;
-                AddPiece(castledRookSquare, Rook, Friendly);
+                ulong castledRookSquare = startSquare << 3;
+                AddPiece(castledRookSquare, FirstSquareIndex(castledRookSquare), Rook, Friendly);
             }
         }
+
+        CapturedPieceType = previousPosition.CapturedPieceType;
 
         TT.CalculateCurrentEntryIndex();
 
@@ -553,25 +583,13 @@ public class Board
         // A possible optimization is to check for this to avoid potentially having to recalculate it unnecessaraly,
         // for example by caching and extra "backup" set of data.
         IsCheckDataOutdated = true;
-
-
-        void UnmakePawnMove()
-        {
-            if (move.TargetSquare == EnPassantSquare)
-            {
-                AddPiece(EnPassantTarget, Pawn, Opponent);
-                enPassant = true;
-            }
-        }
     }
 
     public static Stopwatch tempAddPieceStopwatch = new();
     public static Stopwatch tempRemovePieceStopwatch = new();
 
-    private static void AddPiece(ulong square, int pieceType, int colorIndex)
+    private static void AddPiece(ulong square, int squareIndex, int pieceType, int colorIndex)
     {
-        int squareIndex = FirstSquareIndex(square);
-
         Squares[squareIndex] = (colorIndex << 3) | pieceType;
 
         // Add the piece to the specified bitboard.
@@ -609,10 +627,8 @@ public class Board
         PsqtScore[colorIndex] += PieceSquareTables.ReadScore(pieceType, squareIndex, colorIndex == 0);
     }
 
-    private static void RemovePiece(ulong square, int pieceType, int colorIndex)
+    private static void RemovePiece(ulong square, int squareIndex, int pieceType, int colorIndex)
     {
-        int squareIndex = FirstSquareIndex(square);
-
         Squares[squareIndex] = None;
 
         // Add the piece to the specified bitboard.
@@ -799,23 +815,38 @@ public class Board
 
                 ulong targetSquare = 1UL << targetSquareIndex;
 
-                if (pieceType == Pawn && (targetSquare & Mask.PromotionRanks) != 0)
+                bool isPromotion = false;
+                int moveFlag = 0;
+
+                if (pieceType == Pawn)
                 {
-                    Move queenPromotion = new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Queen);
+                    if ((targetSquare & Mask.PromotionRanks) != 0)
+                        isPromotion = true;
+
+                    else if ((targetSquare & EnPassantSquare) != 0)
+                        moveFlag = EnPassantCaptureFlag;
+
+                    else if ((square & Mask.SecondRank) != 0 && (targetSquare & Mask.FourthRank) != 0)
+                        moveFlag = PawnDoublePushFlag;
+                }
+
+                if (isPromotion)
+                {
+                    Move queenPromotion = new(squareIndex, targetSquareIndex, PromotionToQueenFlag);
 
                     // If one promotion is legal, all of them are.
                     if (IsLegal(queenPromotion))
                     {
                         movesList.Add(queenPromotion);
-                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Knight));
-                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Bishop));
-                        movesList.Add(new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex), Rook));
+                        movesList.Add(new(squareIndex, targetSquareIndex, PromotionToKnightFlag));
+                        movesList.Add(new(squareIndex, targetSquareIndex, PromotionToBishopFlag));
+                        movesList.Add(new(squareIndex, targetSquareIndex, PromotionToRookFlag));
                     }
                 }
 
                 else
                 {
-                    Move move = new(pieceType, square, targetSquare, squareIndex, targetSquareIndex, PieceType(targetSquareIndex));
+                    Move move = new(squareIndex, targetSquareIndex, moveFlag);
                     if (IsLegal(move)) movesList.Add(move);
                 }
             }
@@ -830,12 +861,13 @@ public class Board
     public static bool IsLegal(Move move)
     {
         int startSquareIndex = move.StartSquareIndex;
+        ulong startSquare = 1UL << startSquareIndex;
+
         int targetSquareIndex = move.TargetSquareIndex;
+        ulong targetSquare = 1UL << targetSquareIndex;
 
-        ulong startSquare = move.StartSquare;
-        ulong targetSquare = move.TargetSquare;
+        int pieceType = PieceType(startSquareIndex);
 
-        int pieceType = move.PieceType;
 
         bool inCheck = IsKingInCheck[Friendly];
         bool isKing = pieceType == King;
@@ -852,7 +884,7 @@ public class Board
             }
 
             // Queenside castling
-            if (move.StartSquare >> 2 == move.TargetSquare)
+            if (startSquare >> 2 == targetSquare)
             {
                 // Castling is not allowed while in check.
                 if (inCheck)
@@ -868,7 +900,7 @@ public class Board
             }
 
             // Kingside castling
-            if (move.StartSquare << 2 == move.TargetSquare)
+            if (startSquare << 2 == targetSquare)
             {
                 // Castling is not allowed while in check.
                 if (inCheck)
@@ -950,7 +982,7 @@ public class Board
                 if (IsSlidingPiece(1UL << firstCheckingPieceIndex))
                 {
                     // A check must be stoppped by blocking the attacker's line of sight.
-                    if ((move.TargetSquare & PrecomputedMoveData.Line[firstCheckingPieceIndex, kingPosition]) == 0)
+                    if ((targetSquare & PrecomputedMoveData.Line[firstCheckingPieceIndex, kingPosition]) == 0)
                     {
                         return false;
                     }
@@ -961,7 +993,7 @@ public class Board
                 {
                     // The attacker can also be captured with en passant.
                     bool attackerIsEnPassantTarget = (1UL << firstCheckingPieceIndex) == EnPassantTarget;
-                    bool moveIsEnPassant = pieceType == Pawn && move.TargetSquare == EnPassantSquare;
+                    bool moveIsEnPassant = pieceType == Pawn && targetSquare == EnPassantSquare;
                     
                     if (!(attackerIsEnPassantTarget && moveIsEnPassant))
                     {
@@ -1185,7 +1217,10 @@ public class Board
         return squareIndex >= 0 && squareIndex < 64;
     }
 
-    public static int PieceType(int squareIndex) => Squares[squareIndex].PieceType();
+    public static int PieceType(int squareIndex)
+    {
+        return Squares[squareIndex].PieceType();
+    }
 
     public static int PieceColor(int squareIndex)
     {
@@ -1232,6 +1267,8 @@ public struct Mask
     public const ulong BlackRank = 0xff00000000000000;
     public const ulong WhiteCastledKingPosition = 0xe7;
     public const ulong BlackCastledKingPosition = 0xe700000000000000;
+    public const ulong SecondRank = 0xff00000000ff00;
+    public const ulong FourthRank = 0xffff000000;
 
     /// <summary>White's and black's seventh ranks.</summary>
     public const ulong SeventhRanks = 0xff00000000ff00;

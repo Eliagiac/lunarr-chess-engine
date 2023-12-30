@@ -3,7 +3,7 @@ using static Utilities.Bitboard;
 using static System.Math;
 using static Piece;
 using static Evaluation;
-using System.Numerics;
+using static Move;
 
 /// <summary>The <see cref="Engine"/> class contains the main features of the engine.</summary>
 public class Engine
@@ -76,7 +76,7 @@ public class Engine
     /// <summary>Killer moves are quiet moves that caused a beta cutoff, indexed by <c>[KillerMoveIndex, Ply]</c>.<br />
     /// If the same move is found in another position at the same ply, it will be prioritized.</summary>
     /// <remarks>2 killer moves are stored at each ply. Storing more would increase the complexity of adding a new move.</remarks>
-    private static Move[,] s_killerMoves = new Move[2, MaxPly];
+    private static Move?[,] s_killerMoves = new Move?[2, MaxPly];
 
     /// <summary>Bonus based on the success of a move in other positions.</summary>
     /// <remarks>Moves are identified using butterfly boards (https://www.chessprogramming.org/Butterfly_Boards) 
@@ -107,7 +107,7 @@ public class Engine
 
     private static int s_multiPvCount = 1;
 
-    private static List<Move> s_excludedRootMoves = new();
+    private static List<Move?> s_excludedRootMoves = new();
 
 
     private static int s_totalSearchNodes;
@@ -193,7 +193,7 @@ public class Engine
     /// <summary>Set the amount of root moves that will each receive a separate evaluation.</summary>
     public static void SetMultiPVCount(int multiPVCount) => s_multiPvCount = multiPVCount;
 
-    
+
     /// <summary>The total number of legal moves after each move in the current position and down the game tree until the desired depth is reached.</summary>
     /// <returns>A string with each root move on a new line and the legal move count after it. For example, "a2a4: 20".</returns>
     public static string PerftResults(int depth, bool debug = false)
@@ -207,7 +207,7 @@ public class Engine
         int totNumPositions = 0;
         foreach (var move in moves)
         {
-            Board.MakeMove(move);
+            Board.MakeMove(move, out int _, out int _);
 
             int numPositions = Perft(depth - 1);
             totNumPositions += numPositions;
@@ -236,7 +236,7 @@ public class Engine
             int numPositions = 0;
             foreach (var move in moves)
             {
-                Board.MakeMove(move);
+                Board.MakeMove(move, out int _, out int _);
                 numPositions += Perft(depth - 1);
                 Board.UnmakeMove(move);
             }
@@ -283,114 +283,121 @@ public class Engine
 
         int evaluation = Null;
 
-        // Start at depth 1 and increase it until the search is stopped.
-        int depth = 1;
-        do
+        try
         {
-            s_rootDepth = depth;
-
-            // Do a full depth search for the first s_multiPvCount root moves.
-            // After a move is searched it will be added to s_excludedRootMoves.
-            s_excludedRootMoves = new();
-            for (int pvIndex = 0; pvIndex < s_multiPvCount; pvIndex++)
+            // Start at depth 1 and increase it until the search is stopped.
+            int depth = 1;
+            do
             {
-                s_maxDepthReached = 0;
+                s_rootDepth = depth;
 
-                // After the first search (depth 1), the next searches will shrinken the windows to be close to the returned score.
-                // These are the initial window sizes.
-                int alphaWindow = 25;
-                int betaWindow = 25;
-
-                int alpha = -Infinity;
-                int beta = Infinity;
-
-                if (depth >= 2)
+                // Do a full depth search for the first s_multiPvCount root moves.
+                // After a move is searched it will be added to s_excludedRootMoves.
+                s_excludedRootMoves = new();
+                for (int pvIndex = 0; pvIndex < s_multiPvCount; pvIndex++)
                 {
-                    alpha = evaluation - alphaWindow;
-                    beta = evaluation + betaWindow;
-                }
+                    s_maxDepthReached = 0;
 
+                    // After the first search (depth 1), the next searches will shrinken the windows to be close to the returned score.
+                    // These are the initial window sizes.
+                    int alphaWindow = 25;
+                    int betaWindow = 25;
 
-                int failedHighCounter = 0;
-                while (true)
-                {
-                    // Reset on each iteration because of better performance.
-                    // This behaviour is not expected and further research is required.
-                    ResetQuietMoveStats();
+                    int alpha = -Infinity;
+                    int beta = Infinity;
 
-
-                    Node root = new();
-                    ref int score = ref root.Score;
-
-                    score = Search(root, depth - failedHighCounter, alpha, beta, out s_currentMainLine);
-                    bool isUpperbound = score <= alpha;
-
-                    // If the score is outside the bounds, the search failed and a new search with wider bounds will be performed.
-                    bool searchFailed = false;
-                    if (score <= alpha)
+                    if (depth >= 2)
                     {
-                        alphaWindow *= s_aspirationWindowsMultipliers[0];
-                        searchFailed = true;
+                        alpha = evaluation - alphaWindow;
+                        beta = evaluation + betaWindow;
                     }
 
-                    if (score >= beta)
+
+                    int failedHighCounter = 0;
+                    while (true)
                     {
-                        betaWindow *= s_aspirationWindowsMultipliers[1];
-                        searchFailed = true;
-                        failedHighCounter++;
+                        // Reset on each iteration because of better performance.
+                        // This behaviour is not expected and further research is required.
+                        ResetQuietMoveStats();
+
+
+                        Node root = new();
+                        ref int score = ref root.Score;
+
+                        score = Search(root, depth - failedHighCounter, alpha, beta, out s_currentMainLine);
+                        bool isUpperbound = score <= alpha;
+
+                        // If the score is outside the bounds, the search failed and a new search with wider bounds will be performed.
+                        bool searchFailed = false;
+                        if (score <= alpha)
+                        {
+                            alphaWindow *= s_aspirationWindowsMultipliers[0];
+                            searchFailed = true;
+                        }
+
+                        if (score >= beta)
+                        {
+                            betaWindow *= s_aspirationWindowsMultipliers[1];
+                            searchFailed = true;
+                            failedHighCounter++;
+                        }
+
+                        alpha = Max(score - alphaWindow, -Infinity);
+                        beta = Min(score + betaWindow, Infinity);
+
+                        evaluation = score;
+
+                        if (!searchFailed || WasSearchAborted) break;
+
+                        // Update the UI when the search fails.
+                        else if (searchFailed && s_searchStopwatch.ElapsedMilliseconds > 3000)
+                            UCI.PV(
+                                depth: depth,
+                                seldepth: s_maxDepthReached + 1,
+                                multipv: pvIndex + 1,
+                                evaluation: evaluation,
+                                evaluationType: isUpperbound ? "upperbound" : "lowerbound",
+                                nodes: s_totalSearchNodes,
+                                nps: (int)Round(s_totalSearchNodes / (s_searchStopwatch.ElapsedMilliseconds / 1000f)),
+                                time: s_searchStopwatch.ElapsedMilliseconds,
+                                pv: MainLine.ToString());
                     }
 
-                    alpha = Max(score - alphaWindow, -Infinity);
-                    beta = Min(score + betaWindow, Infinity);
+                    if (!WasSearchAborted)
+                    {
+                        MainLine = new(s_currentMainLine);
 
-                    evaluation = score;
-
-                    if (!searchFailed || WasSearchAborted) break;
-
-                    // Update the UI when the search fails.
-                    else if (searchFailed && s_searchStopwatch.ElapsedMilliseconds > 3000)
                         UCI.PV(
                             depth: depth,
                             seldepth: s_maxDepthReached + 1,
                             multipv: pvIndex + 1,
                             evaluation: evaluation,
-                            evaluationType: isUpperbound ? "upperbound" : "lowerbound",
+                            evaluationType: "",
                             nodes: s_totalSearchNodes,
-                            nps: (int)Round(s_totalSearchNodes / (s_searchStopwatch.ElapsedMilliseconds / 1000f)),
+                            nps: (int)Round(s_totalSearchNodes / (double)s_searchStopwatch.ElapsedMilliseconds * 1000),
                             time: s_searchStopwatch.ElapsedMilliseconds,
                             pv: MainLine.ToString());
+
+                        s_excludedRootMoves.Add(MainLine?.Move);
+                    }
+
+                    else break;
+
+                    // If all legal moves have been searched, exit the multi pv loop immediately.
+                    if (s_excludedRootMoves.Count >= Board.GenerateAllLegalMoves().Count) break;
                 }
 
-                if (!WasSearchAborted)
-                {
-                    MainLine = new(s_currentMainLine);
-
-                    UCI.PV(
-                        depth: depth,
-                        seldepth: s_maxDepthReached + 1,
-                        multipv: pvIndex + 1,
-                        evaluation: evaluation,
-                        evaluationType: "",
-                        nodes: s_totalSearchNodes,
-                        nps: (int)Round(s_totalSearchNodes / (double)s_searchStopwatch.ElapsedMilliseconds * 1000),
-                        time: s_searchStopwatch.ElapsedMilliseconds,
-                        pv: MainLine.ToString());
-
-                    s_excludedRootMoves.Add(MainLine?.Move);
-                }
-
-                else break;
-
-                // If all legal moves have been searched, exit the multi pv loop immediately.
-                if (s_excludedRootMoves.Count >= Board.GenerateAllLegalMoves().Count) break;
+                depth++;
             }
-
-            depth++;
+            while
+            (!WasSearchAborted && depth < MaxPly &&
+            (!s_useTimeManagement || s_searchStopwatch.ElapsedMilliseconds <= s_optimumTime) &&
+            (!s_useDepthLimit || depth <= s_depthLimit));
         }
-        while
-        (!WasSearchAborted && depth < MaxPly &&
-        (!s_useTimeManagement || s_searchStopwatch.ElapsedMilliseconds <= s_optimumTime) &&
-        (!s_useDepthLimit || depth <= s_depthLimit));
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+        }
 
         s_searchStopwatch.Stop();
         FinishSearch();
@@ -467,7 +474,7 @@ public class Engine
         // Store the best move found when this position was previously searched.
         Line? ttLine = ttHit ? ttEntry.Line : null;
         Move? ttMove = ttLine?.Move;
-        bool ttMoveIsCapture = IsCaptureOrPromotion(ttMove);
+        bool ttMoveIsCapture = ttMove?.IsCapture() ?? false;
         #endregion
 
 
@@ -558,6 +565,8 @@ public class Engine
         // The evaluation type shows how the score returned by the search compares to the actual score.
         EvaluationType evaluationType = EvaluationType.UpperBound;
 
+        bool bestMoveIsCapture = false;
+
         // Moves Loop:
         // Iterate through all legal moves and perform a depth - 1 search on each one.
         for (int i = 0; i < moves.Count; i++)
@@ -577,12 +586,13 @@ public class Engine
 
             // Make the move on the board.
             // The move must be unmade before moving on to the next one.
-            Board.MakeMove(move);
+            Board.MakeMove(move, out int pieceType, out int capturedPieceType);
 
 
             // Store information on the move for pruning purposes.
-            bool isCapture = IsCapture(move);
-            bool isCaptureOrPromotion = IsCaptureOrPromotion(move);
+            bool isCapture = capturedPieceType != None;
+            bool isPromotion = move.PromotionPieceType != None;
+            bool isCaptureOrPromotion = isCapture || isPromotion;
 
             bool givesCheck = Board.IsInCheck(Board.Friendly);
 
@@ -650,6 +660,8 @@ public class Engine
                 pvLine.Move = move;
                 pvLine.Next = nextLine;
 
+                bestMoveIsCapture = isCapture;
+
                 // Fail-High:
                 // If the score is higher than beta, it means the move is too good for the
                 // opponent and this node will be avoided. There's no need to look at any
@@ -714,8 +726,7 @@ public class Engine
                     // Don't reduce captures, promotions and killer moves,
                     // unless we are past the moveCountBasedPruningThreshold (very late moves).
                     if (useLateMovePruning ||
-                        (move.CapturedPieceType == None &&
-                        move.PromotionPiece == None &&
+                        (!isCaptureOrPromotion &&
                         !move.Equals(s_killerMoves[0, ply]) &&
                         !move.Equals(s_killerMoves[1, ply])))
                     {
@@ -735,7 +746,7 @@ public class Engine
 
                 // Passed pawn extension (when a pawn is pushed to the seventh rank).
                 // Note: unexpectedly, passed pawn extensions actually decrease the amount of nodes searched.
-                if (CanExtend() && move.PieceType == Pawn &&
+                if (CanExtend() && pieceType == Pawn &&
                     ((move.TargetSquare & Mask.SeventhRanks) != 0))
                     depthReduction--;
 
@@ -747,7 +758,7 @@ public class Engine
         
 
         // Store killer move in case the best move found is quiet, even if it didn't cause a beta-cutoff.
-        if (pvLine.Move?.CapturedPieceType == None) UpdateQuietMoveStats(pvLine.Move, depth, ply);
+        if (!bestMoveIsCapture && !(pvLine?.Move == null)) UpdateQuietMoveStats((Move)pvLine.Move, depth, ply);
 
         // Once all legal moves have been searched, save the best score found in the transposition table and return it.
         TT.StoreEvaluation(depth, ply, alpha, evaluationType, pvLine, staticEvaluation);
@@ -782,11 +793,13 @@ public class Engine
                 if (ttMove != null /* BUG: ttMove is sometimes null even though ttHit is true. Somewhere in the code entries are being saved without a best move. Not sure whether or not this should ever be done. */&&
                     !ttMoveIsCapture)
                 {
+                    Move notNullTtMove = NotNull(ttMove);
+
                     if (ttEval >= beta)
                     {
-                        s_historyHeuristics[Board.Friendly][FirstSquareIndex(ttMove.StartSquare), FirstSquareIndex(ttMove.TargetSquare)] += depth * depth;
+                        s_historyHeuristics[Board.Friendly][notNullTtMove.StartSquareIndex, notNullTtMove.TargetSquareIndex] += depth * depth;
 
-                        StoreKillerMove(ttMove, ply);
+                        StoreKillerMove(notNullTtMove, ply);
                     }
                 }
 
@@ -946,7 +959,7 @@ public class Engine
                 {
                     Move move = moves[i];
 
-                    Board.MakeMove(move);
+                    Board.MakeMove(move, out int _, out int _);
 
                     Node newNode = node.AddNewChild();
 
@@ -994,7 +1007,7 @@ public class Engine
 
                 ttLine = ttHit ? ttEntry.Line : null;
                 ttMove = ttLine?.Move;
-                ttMoveIsCapture = IsCaptureOrPromotion(ttMove);
+                ttMoveIsCapture= ttMove?.IsCapture() ?? false;
             }
         }
 
@@ -1041,8 +1054,8 @@ public class Engine
 
         // Store the best move found when this position was previously searched.
         Line ttLine = ttHit ? ttEntry.Line : null;
-        Move ttMove = ttLine?.Move;
-        bool ttMoveIsCapture = IsCaptureOrPromotion(ttMove);
+        Move? ttMove = ttLine?.Move;
+        bool ttMoveIsCapture = ttMove?.IsCapture() ?? false;
         #endregion
 
 
@@ -1105,7 +1118,7 @@ public class Engine
         {
             Move move = moves[i];
 
-            Board.MakeMove(move);
+            Board.MakeMove(move, out int _, out int _);
 
 
             s_totalSearchNodes++;
@@ -1211,7 +1224,7 @@ public class Engine
     private static void StoreKillerMove(Move move, int ply)
     {
         if (s_killerMoves[0, ply] != null && !s_killerMoves[0, ply].Equals(move))
-            s_killerMoves[1, ply] = new(s_killerMoves[0, ply]);
+            s_killerMoves[1, ply] = new(NotNull(s_killerMoves[0, ply]));
 
         s_killerMoves[0, ply] = move;
     }
@@ -1241,12 +1254,23 @@ public class Engine
         // ttMove stores the best move that was previously found.
         // This move should be given the top priority.
         // Note: may be null in case the position wasn't searched before.
-        Move ttMove = TT.GetStoredMove();
+        Move? ttMove = TT.GetStoredMove();
 
 
         List<int> scores = new();
         foreach (Move move in moves)
         {
+            int moveFlag = move.Flag;
+            bool isEnPassant = moveFlag == EnPassantCaptureFlag;
+
+            int startSquareIndex = move.StartSquareIndex;
+            int targetSquareIndex = move.TargetSquareIndex;
+
+            int pieceType = Board.PieceType(startSquareIndex);
+            int capturedPieceType = isEnPassant ? Pawn : Board.PieceType(targetSquareIndex);
+
+            bool isCapture = capturedPieceType != None;
+
             // Moves with a higher score are more likely to cause a beta-cutoff,
             // speeding up the search, so they will be searched first.
             int moveScore = 0;
@@ -1255,12 +1279,12 @@ public class Engine
             if (move.Equals(ttMove)) moveScore += 30000;
 
             // Captures are sorted with a high priority.
-            else if (move.CapturedPieceType != None)
+            else if (isCapture)
             {
                 // Captures are sorted using MVV-LVA (Most Valuable Victim - Least Valuable Attacker).
                 // A weak piece capturing a strong one will be given a
                 // higher priority than a strong piece capturing a weak one.
-                moveScore += MvvLva[move.PieceType][move.CapturedPieceType];
+                moveScore += MvvLva[pieceType][capturedPieceType];
             }
 
             // Quiet moves are sorted with a low priority, with the exception of killer moves.
@@ -1273,9 +1297,6 @@ public class Engine
                 // Sort non-killer quiet moves by history heuristics.
                 else
                 {
-                    int startSquareIndex = FirstSquareIndex(move.StartSquare);
-                    int targetSquareIndex = FirstSquareIndex(move.TargetSquare);
-
                     moveScore += s_historyHeuristics[Board.Friendly][startSquareIndex, targetSquareIndex];
 
                     //moveScoreGuess += PieceSquareTables.Read(move.PromotionPiece == None ? move.PieceType : move.PromotionPiece, targetSquareIndex, Board.Friendly == 0, gamePhase);
@@ -1304,7 +1325,7 @@ public class Engine
 
     private static void ResetQuietMoveStats()
     {
-        s_killerMoves = new Move[2, MaxPly];
+        s_killerMoves = new Move?[2, MaxPly];
         s_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
     }
     
@@ -1375,15 +1396,6 @@ public class Engine
 
         return false;
     }
-    
-    private static bool IsCapture(Move? move) =>
-        move != null &&
-        (move.CapturedPieceType != None);
-
-    private static bool IsCaptureOrPromotion(Move? move) =>
-        move != null &&
-        (move.CapturedPieceType != None ||
-        move.PromotionPiece != None);
 
 
     public static Dictionary<int, Dictionary<int, int>> MvvLva = new()
@@ -1455,10 +1467,10 @@ public class Engine
 
 public class Line
 {
-    public Move Move;
+    public Move? Move;
     public Line? Next;
 
-    public Line(Move move = null, Line next = null)
+    public Line(Move? move = null, Line next = null)
     {
         Move = move;
         Next = next;
@@ -1473,7 +1485,7 @@ public class Line
 
     public void MakeMoves(bool removeEntries = false)
     {
-        Board.MakeMove(Move);
+        if (Move != null) Board.MakeMove(NotNull(Move), out int _, out int _);
         if (removeEntries) TT.ClearCurrentEntry();
         if (Next != null) Next.MakeMoves(removeEntries);
     }
@@ -1481,7 +1493,7 @@ public class Line
     public void UnmakeMoves()
     {
         if (Next != null) Next.UnmakeMoves();
-        Board.UnmakeMove(Move);
+        if (Move != null) Board.UnmakeMove(NotNull(Move));
     }
 
     public bool Equals(Line other)
