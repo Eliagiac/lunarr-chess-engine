@@ -330,8 +330,8 @@ public class Board
         // Empty the move's start square.
         RemovePiece(startSquare, startSquareIndex, pieceType, Friendly);
 
-        // Remove any captured piece.
-        if (capturedPieceType != None) RemovePiece(targetSquare, targetSquareIndex, capturedPieceType, Opponent);
+        // Remove any captured piece. En passant is handled later, so if the target square is empty skip this step.
+        if (capturedPieceType != None && (AllOccupiedSquares & move.TargetSquare) != 0) RemovePiece(targetSquare, targetSquareIndex, capturedPieceType, Opponent);
 
         // Place moved piece on the target square (unless promoting).
         AddPiece(targetSquare, targetSquareIndex, pieceTypeOrPromotion, Friendly);
@@ -368,8 +368,6 @@ public class Board
         if (pieceType == Rook) RemoveRookCastlingRights(startSquare, Friendly == 0 ? Mask.WhiteRank : Mask.BlackRank);
 
 
-        ulong castledRookSquare = 0;
-        ulong castledRookTarget = 0;
         // If the king is castling, the rook should follow it.
         if (pieceType == King)
         {
@@ -377,11 +375,11 @@ public class Board
             if (startSquare >> 2 == targetSquare)
             {
                 // Add rook on the target square.
-                castledRookTarget = targetSquare << 1;
+                ulong castledRookTarget = targetSquare << 1;
                 AddPiece(castledRookTarget, FirstSquareIndex(castledRookTarget), Rook, Friendly);
 
                 // Remove it from its start square.
-                castledRookSquare = startSquare >> 4;
+                ulong castledRookSquare = startSquare >> 4;
                 RemovePiece(castledRookSquare, FirstSquareIndex(castledRookSquare), Rook, Friendly);
             }
 
@@ -389,11 +387,11 @@ public class Board
             else if (startSquare << 2 == targetSquare)
             {
                 // Add rook on the target square.
-                castledRookTarget = targetSquare >> 1;
+                ulong castledRookTarget = targetSquare >> 1;
                 AddPiece(castledRookTarget, FirstSquareIndex(castledRookTarget), Rook, Friendly);
 
                 // Remove it from its start square.
-                castledRookSquare = startSquare << 3;
+                ulong castledRookSquare = startSquare << 3;
                 RemovePiece(castledRookSquare, FirstSquareIndex(castledRookSquare), Rook, Friendly);
             }
         }

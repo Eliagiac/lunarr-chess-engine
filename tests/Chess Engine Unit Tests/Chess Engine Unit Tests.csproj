@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>Chess_Engine_Unit_Tests</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -18,7 +18,7 @@
 
   <ItemGroup>
     <Reference Include="White Widow">
-      <HintPath>..\..\src\White Widow\bin\Release\net7.0\White Widow.dll</HintPath>
+      <HintPath>..\..\src\White Widow\bin\Release\net8.0\White Widow.dll</HintPath>
     </Reference>
   </ItemGroup>
 

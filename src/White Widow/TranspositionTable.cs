@@ -1,6 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using static Utilities.Bitboard;
 using static Engine;
+using static Move;
 
 /// <summary>The <see cref="TT"/> (Transposition Table) class stores info on positions that have already been reached by the search function. 
 /// Information about these entries such as their evaluation can quickly be looked up to avoid calculating it again.</summary>
@@ -53,7 +54,7 @@ public class TT
         set => s_entries[t_currentEntryIndex] = value;
     }
 
-    public static Move? GetStoredMove() => CurrentEntry.Line?.Move;
+    public static Move GetStoredMove() => CurrentEntry.Line?.Move ?? NullMove();
 
     public static Line GetStoredLine() => CurrentEntry.Line;
 

@@ -70,23 +70,28 @@ public struct Move
         MoveValue = (ushort)(flag << 12 | startSquareIndex | targetSquareIndex << 6);
     }
 
-    public Move(Move other) => MoveValue = other.MoveValue;
+    //public Move(Move other) => MoveValue = other.MoveValue;
 
-    // Used to load the opening book
+    // Used to load the opening book.
     public Move(ushort moveValue) => MoveValue = moveValue;
 
 
     // Note: might be more readable to use (Move)move!
     // Note: could consider using an extension method instead.
-    public static Move NotNull(Move? move) => move.Value;
+    //public static Move NotNull(Move? move) => move.Value;
 
 
     public bool Equals(Move? other) => MoveValue == (other?.MoveValue ?? 0);
 
-    public override string ToString() =>
-        $"{(Square)StartSquareIndex}{(Square)TargetSquareIndex}{new[] { "", "p", "n", "b", "r", "q", "k" }[PromotionPieceType]}";
+    public override string ToString()
+    {
+        if (IsNullMove()) return "";
+        return $"{(Square)StartSquareIndex}{(Square)TargetSquareIndex}{new[] { "", "p", "n", "b", "r", "q", "k" }[PromotionPieceType]}";
+    }
 
     public bool IsNullMove() => MoveValue == 0;
+
+    public static Move NullMove() => new(0);
 
     public bool IsCapture(Board board)
     {

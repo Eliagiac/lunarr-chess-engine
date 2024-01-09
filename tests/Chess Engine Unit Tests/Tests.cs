@@ -493,7 +493,7 @@ namespace Chess_Engine_Unit_Tests
 
                     movesStack.Push(randomMove);
 
-                    board.MakeMove(randomMove);
+                    board.MakeMove(randomMove, out int _, out int _);
                     boardHistory.Push(board.Clone());
                 }
 
