@@ -21,7 +21,7 @@ public struct Move
     public const ushort StartSquareMask = 0b0000000000111111;
     public const ushort TargetSquareMask = 0b0000111111000000;
     public const ushort FlagMask = 0b1111000000000000;
-    
+
     public const ushort EnPassantCaptureFlag = 1;
     public const ushort CastlingFlag = 2;
     public const ushort PawnDoublePushFlag = 3;
@@ -40,9 +40,10 @@ public struct Move
     // Note: the intersection is unnecessary.
     public int Flag => (MoveValue & FlagMask) >> 12;
 
-    public int PromotionPieceType {
-        get 
-        { 
+    public int PromotionPieceType
+    {
+        get
+        {
             switch (Flag)
             {
                 case PromotionToQueenFlag:
@@ -58,7 +59,6 @@ public struct Move
             }
         }
     }
-
 
     public Move(int startSquareIndex, int targetSquareIndex)
     {
@@ -88,13 +88,13 @@ public struct Move
 
     public bool IsNullMove() => MoveValue == 0;
 
-    public bool IsCapture()
+    public bool IsCapture(Board board)
     {
         if (IsNullMove()) return false;
 
         bool isEnPassant = Flag == EnPassantCaptureFlag;
 
-        int capturedPieceType = isEnPassant ? Pawn : Board.PieceType(TargetSquareIndex);
+        int capturedPieceType = isEnPassant ? Pawn : board.PieceType(TargetSquareIndex);
 
         return capturedPieceType != None || isEnPassant;
     }

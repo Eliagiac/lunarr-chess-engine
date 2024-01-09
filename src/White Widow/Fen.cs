@@ -1,4 +1,5 @@
 using static Utilities.Bitboard;
+using static Engine;
 
 namespace Utilities
 {
@@ -16,10 +17,10 @@ namespace Utilities
             ['q'] = Piece.Queen
         };
 
-        public static void ConvertFromFen(string fen)
+        public static Board ConvertFromFen(Board board, string fen)
         {
-            Board.Init();
-            Board.PositionHistory = new();
+            board.Init();
+            board.PositionHistory = new();
 
             string[] sections = fen.Split(' ');
 
@@ -44,7 +45,7 @@ namespace Utilities
                         int pieceColor = char.IsUpper(symbol) ? Piece.White : Piece.Black;
                         int pieceType = pieceTypeFromSymbol[char.ToLower(symbol)];
 
-                        Board.Pieces[pieceType][pieceColor == Piece.White ? 0 : 1] |= 1UL << (rank * 8 + file);
+                        board.Pieces[pieceType][pieceColor == Piece.White ? 0 : 1] |= 1UL << (rank * 8 + file);
 
                         file++;
 
@@ -52,45 +53,46 @@ namespace Utilities
                 }
             }
 
-            Board.Friendly = sections[1] == "w" ? 0 : 1;
-            Board.Opponent = Board.Friendly ^ 1;
+            board.Friendly = sections[1] == "w" ? 0 : 1;
+            board.Opponent = board.Friendly ^ 1;
 
             string castlingRights = (sections.Length > 2) ? sections[2] : "KQkq";
-            Board.CastlingRights &= 0;
-            Board.CastlingRights |= Mask.WhiteKingsideCastling & (castlingRights.Contains("K") ? ulong.MaxValue : 0);
-            Board.CastlingRights |= Mask.WhiteQueensideCastling & (castlingRights.Contains("Q") ? ulong.MaxValue : 0);
-            Board.CastlingRights |= Mask.BlackKingsideCastling & (castlingRights.Contains("k") ? ulong.MaxValue : 0);
-            Board.CastlingRights |= Mask.BlackQueensideCastling & (castlingRights.Contains("q") ? ulong.MaxValue : 0);
+            board.CastlingRights &= 0;
+            board.CastlingRights |= Mask.WhiteKingsideCastling & (castlingRights.Contains("K") ? ulong.MaxValue : 0);
+            board.CastlingRights |= Mask.WhiteQueensideCastling & (castlingRights.Contains("Q") ? ulong.MaxValue : 0);
+            board.CastlingRights |= Mask.BlackKingsideCastling & (castlingRights.Contains("k") ? ulong.MaxValue : 0);
+            board.CastlingRights |= Mask.BlackQueensideCastling & (castlingRights.Contains("q") ? ulong.MaxValue : 0);
 
             if (sections.Length > 3)
             {
                 string enPassantFileName = sections[3][0].ToString();
                 if ("abcdefgh".Contains(enPassantFileName))
                 {
-                    Board.EnPassantSquare = (Mask.PawnsRank << "abcdefgh".IndexOf(enPassantFileName)) & (Board.Friendly == 1 ? Mask.WhitePawnsRank : Mask.BlackPawnsRank);
-                    Board.EnPassantTarget = (Mask.DoublePawnsRank << "abcdefgh".IndexOf(enPassantFileName)) & (Board.Friendly == 1 ? Mask.WhiteDoublePawnsRank : Mask.BlackDoublePawnsRank);
+                    board.EnPassantSquare = (Mask.PawnsRank << "abcdefgh".IndexOf(enPassantFileName)) & (board.Friendly == 1 ? Mask.WhitePawnsRank : Mask.BlackPawnsRank);
+                    board.EnPassantTarget = (Mask.DoublePawnsRank << "abcdefgh".IndexOf(enPassantFileName)) & (board.Friendly == 1 ? Mask.WhiteDoublePawnsRank : Mask.BlackDoublePawnsRank);
                 }
             }
 
-            Board.UpdateSquares();
+            board.UpdateSquares();
 
-            Board.UpdateAllOccupiedSquares();
-            Board.UpdateKingPositions();
-            Board.UpdateCheckData();
-            Board.UpdatePawnAttackedSquares();
-            //Board.GenerateAttackedSquares();
-            Board.ZobristKey = Zobrist.CalculateZobristKey();
+            board.UpdateAllOccupiedSquares();
+            board.UpdateKingPositions();
+            board.UpdateCheckData();
+            board.UpdatePawnAttackedSquares();
+            board.ZobristKey = Zobrist.CalculateZobristKey(board);
 
-            Board.PsqtScore[0] = PieceSquareTables.EvaluateAllPsqt(0);
-            Board.PsqtScore[1] = PieceSquareTables.EvaluateAllPsqt(1);
+            board.PsqtScore[0] = PieceSquareTables.EvaluateAllPsqt(board, 0);
+            board.PsqtScore[1] = PieceSquareTables.EvaluateAllPsqt(board, 1);
 
-            Board.MaterialScore[0] = Evaluation.ComputeMaterial(0);
-            Board.MaterialScore[1] = Evaluation.ComputeMaterial(1);
+            board.MaterialScore[0] = Evaluation.ComputeMaterial(board, 0);
+            board.MaterialScore[1] = Evaluation.ComputeMaterial(board, 1);
 
-            Board.PositionHistory.Push(Board.CurrentPositionData());
+            board.PositionHistory.Push(board.CurrentPositionData());
+
+            return board;
         }
 
-        public static string GetCurrentFen()
+        public static string GetCurrentFen(Board board)
         {
             string currentString = "";
             string fen = "";
@@ -98,7 +100,7 @@ namespace Utilities
 
             for (int i = 63; i >= 0; i--)
             {
-                string pieceLetter = Board.Squares[i].PieceLetter();
+                string pieceLetter = board.Squares[i].PieceLetter();
                 if (pieceLetter == "-") emptySquaresCount++;
                 else
                 {
@@ -127,21 +129,21 @@ namespace Utilities
             }
 
             fen += " ";
-            fen += Board.Friendly == 0 ? "w" : "b";
+            fen += board.Friendly == 0 ? "w" : "b";
 
             fen += " ";
             string castlingRights = "";
-            if ((Board.CastlingRights & Mask.WhiteKingsideCastling) != 0) castlingRights += "K";
-            if ((Board.CastlingRights & Mask.WhiteQueensideCastling) != 0) castlingRights += "Q";
-            if ((Board.CastlingRights & Mask.BlackKingsideCastling) != 0) castlingRights += "k";
-            if ((Board.CastlingRights & Mask.BlackQueensideCastling) != 0) castlingRights += "q";
+            if ((board.CastlingRights & Mask.WhiteKingsideCastling) != 0) castlingRights += "K";
+            if ((board.CastlingRights & Mask.WhiteQueensideCastling) != 0) castlingRights += "Q";
+            if ((board.CastlingRights & Mask.BlackKingsideCastling) != 0) castlingRights += "k";
+            if ((board.CastlingRights & Mask.BlackQueensideCastling) != 0) castlingRights += "q";
             if (castlingRights == "") castlingRights = "-";
             fen += castlingRights;
 
             fen += " ";
-            if (Board.EnPassantSquare != 0)
+            if (board.EnPassantSquare != 0)
             {
-                fen += Enum.GetName((Square)FirstSquareIndex(Board.EnPassantSquare));
+                fen += Enum.GetName((Square)FirstSquareIndex(board.EnPassantSquare));
             }
             else fen += "-";
 

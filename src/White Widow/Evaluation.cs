@@ -126,7 +126,7 @@ public class Evaluation
     private static ulong[] OutpostSquares = new ulong[2];
 
 
-    public static int Evaluate(out int gamePhase)
+    public static int Evaluate(Board board, out int gamePhase)
     {
         // Before the evaluation can start, some constants need to be computed.
         uint evaluation = 0;
@@ -145,38 +145,38 @@ public class Evaluation
 
         // The first step to evaluating the position is getting the material and piece square tables score.
         // These values are updated any time a move is made.
-        evaluation += Board.MaterialScore[0] - Board.MaterialScore[1];
-        evaluation += Board.PsqtScore[0] - Board.PsqtScore[1];
+        evaluation += board.MaterialScore[0] - board.MaterialScore[1];
+        evaluation += board.PsqtScore[0] - board.PsqtScore[1];
 
         // Add bonuses to each piece based on various positional considerations.
         evaluation +=
-            EvaluatePieces(Knight, 0, 1) - EvaluatePieces(Knight, 1, 0) +
-            EvaluatePieces(Bishop, 0, 1) - EvaluatePieces(Bishop, 1, 0) +
-            EvaluatePieces(Rook, 0, 1) - EvaluatePieces(Rook, 1, 0) +
-            EvaluatePieces(Queen, 0, 1) - EvaluatePieces(Queen, 1, 0);
+            EvaluatePieces(board, Knight, 0, 1) - EvaluatePieces(board, Knight, 1, 0) +
+            EvaluatePieces(board, Bishop, 0, 1) - EvaluatePieces(board, Bishop, 1, 0) +
+            EvaluatePieces(board, Rook, 0, 1) - EvaluatePieces(board, Rook, 1, 0) +
+            EvaluatePieces(board, Queen, 0, 1) - EvaluatePieces(board, Queen, 1, 0);
 
         // Give a score to the pawn structure of the position.
-        evaluation += EvaluatePawnStructure(0, 1) - EvaluatePawnStructure(1, 0);
+        evaluation += EvaluatePawnStructure(board, 0, 1) - EvaluatePawnStructure(board, 1, 0);
 
         // Add bonuses for a well defended king.
         evaluation += KingSafetyScore(0, 1) - KingSafetyScore(1, 0);
 
         // Give a bonus to bishop and knight pairs depending on whether the position is open or closed.
-        bool isPositionOpen = PieceCount(Board.AllOccupiedSquares) < 24;
+        bool isPositionOpen = PieceCount(board.AllOccupiedSquares) < 24;
         evaluation += PiecePairBonus(0, isPositionOpen) - PiecePairBonus(1, isPositionOpen);
 
 
-        return Interpolate(evaluation, gamePhase) * (Board.Friendly == 0 ? 1 : -1);
+        return Interpolate(evaluation, gamePhase) * (board.Friendly == 0 ? 1 : -1);
 
 
         int CurrentGamePhase()
         {
             // The opening material value is used to compute the game phase.
-            int whiteMaterial = OpeningValue(Board.MaterialScore[0]);
-            int blackMaterial = OpeningValue(Board.MaterialScore[1]);
+            int whiteMaterial = OpeningValue(board.MaterialScore[0]);
+            int blackMaterial = OpeningValue(board.MaterialScore[1]);
 
-            int whitePawnMaterial = PieceCount(Board.Pawns[0]) * StaticPieceValues[Pawn][0];
-            int blackPawnMaterial = PieceCount(Board.Pawns[1]) * StaticPieceValues[Pawn][0];
+            int whitePawnMaterial = PieceCount(board.Pawns[0]) * StaticPieceValues[Pawn][0];
+            int blackPawnMaterial = PieceCount(board.Pawns[1]) * StaticPieceValues[Pawn][0];
 
             return (whiteMaterial + blackMaterial) - (whitePawnMaterial + blackPawnMaterial);
         }
@@ -184,17 +184,17 @@ public class Evaluation
         ulong FindMobilityArea(int colorIndex)
         {
             ulong blockedSquares = colorIndex == 0 ?
-                Board.AllOccupiedSquares >> 8 :
-                Board.AllOccupiedSquares << 8;
+                board.AllOccupiedSquares >> 8 :
+                board.AllOccupiedSquares << 8;
 
             // Exclude pawns that are blocked or on the first two ranks.
-            ulong excludedPawns = Board.Pawns[colorIndex] & (blockedSquares | Board.LowRanks[colorIndex]);
+            ulong excludedPawns = board.Pawns[colorIndex] & (blockedSquares | Board.LowRanks[colorIndex]);
 
             // Exclude our king and queens.
-            ulong excludedPieces = Board.Kings[colorIndex] | Board.Queens[colorIndex];
+            ulong excludedPieces = board.Kings[colorIndex] | board.Queens[colorIndex];
 
             // Exclude squares controlled by enemy panwns.
-            ulong excludedControlledSquares = Board.PawnAttackedSquares[colorIndex ^ 1];
+            ulong excludedControlledSquares = board.PawnAttackedSquares[colorIndex ^ 1];
 
             // TODO: Exclude pieces that are blocking an attack to our king.
 
@@ -207,12 +207,12 @@ public class Evaluation
             ulong outpostRanks = colorIndex == 0 ? Mask.WhiteOutpostRanks : Mask.BlackOutpostRanks;
 
             // An outpost must be protected by a pawn.
-            ulong pawnProtectedSquares = Board.PawnAttackedSquares[colorIndex];
+            ulong pawnProtectedSquares = board.PawnAttackedSquares[colorIndex];
 
             // An outpost must not be attacked by an enemy pawn.
             // Note: in Stockfish, instead of checking for enemy pawn attacks, the whole enemy pawn attack span is considered
             // (all of the squares that could be attacked by an enemy pawn if it were to move up, until the edge of the board).
-            ulong enemyPawnAttackedSquares = Board.PawnAttackedSquares[opponentColorIndex];
+            ulong enemyPawnAttackedSquares = board.PawnAttackedSquares[opponentColorIndex];
 
             return outpostRanks & pawnProtectedSquares & ~enemyPawnAttackedSquares;
         }
@@ -222,19 +222,19 @@ public class Evaluation
         {
             uint score = 0;
 
-            ulong friendlyPawns = Board.Pawns[color];
-            ulong opponentPawns = Board.Pawns[opponentColor];
+            ulong friendlyPawns = board.Pawns[color];
+            ulong opponentPawns = board.Pawns[opponentColor];
 
             // A castled king gets a bonus if it has pawns in front of it.
-            if ((Board.Kings[color] & (color == 0 ? Mask.WhiteCastledKingPosition : Mask.BlackCastledKingPosition)) != 0)
+            if ((board.Kings[color] & (color == 0 ? Mask.WhiteCastledKingPosition : Mask.BlackCastledKingPosition)) != 0)
             {
                 score +=
-                    ShieldingPawnBonus[0] * (uint)PieceCount(friendlyPawns & Board.FirstShieldingPawns[Board.KingPosition[color]]) +
-                    ShieldingPawnBonus[1] * (uint)PieceCount(friendlyPawns & Board.SecondShieldingPawns[Board.KingPosition[color]]);
+                    ShieldingPawnBonus[0] * (uint)PieceCount(friendlyPawns & Board.FirstShieldingPawns[board.KingPosition[color]]) +
+                    ShieldingPawnBonus[1] * (uint)PieceCount(friendlyPawns & Board.SecondShieldingPawns[board.KingPosition[color]]);
             }
 
             // If the file the king is on (or adjacent files) is open, the king is more exposed to attacks.
-            foreach (var file in Board.KingFiles[Board.GetFile(Board.KingPosition[color])])
+            foreach (var file in Board.KingFiles[Board.GetFile(board.KingPosition[color])])
             {
                 if (PieceCount(friendlyPawns & file) == 0)
                 {
@@ -249,21 +249,21 @@ public class Evaluation
         uint PiecePairBonus(int color, bool isPositionOpen)
         {
             uint bonus = 0;
-            if (PieceCount(Board.Knights[color]) >= 2) bonus += KnightPairBonus[isPositionOpen ? 1 : 0];
-            if (PieceCount(Board.Bishops[color]) >= 2) bonus += BishopPairBonus[isPositionOpen ? 1 : 0];
+            if (PieceCount(board.Knights[color]) >= 2) bonus += KnightPairBonus[isPositionOpen ? 1 : 0];
+            if (PieceCount(board.Bishops[color]) >= 2) bonus += BishopPairBonus[isPositionOpen ? 1 : 0];
             return bonus;
         }
     }
 
     /// <summary>Compute the added score of all pieces of the specified type and color.</summary>
-    private static uint EvaluatePieces(int pieceType, int color, int opponentColor)
+    private static uint EvaluatePieces(Board board, int pieceType, int color, int opponentColor)
     {
         // Pawn and king evaluation is done separately.
         if (pieceType == Pawn || pieceType == King) return 0;
 
         uint score = 0;
         
-        ulong pieces = Board.Pieces[pieceType][color];
+        ulong pieces = board.Pieces[pieceType][color];
         while (pieces != 0)
         {
             // Isolate the first piece.
@@ -275,7 +275,7 @@ public class Evaluation
 
             // All of the squares attacked by this piece (including friendly pieces).
             // Note: Stockfish adds x-ray attacks of bishops and rooks, as well as the full line from the piece to the king if the piece is blocking an attack (should investigate since a pinned piece is always already attacking the king).
-            ulong attackedSquares = Board.AttacksFrom(squareIndex, pieceType, Board.AllOccupiedSquares);
+            ulong attackedSquares = board.AttacksFrom(squareIndex, pieceType, board.AllOccupiedSquares);
 
             // Add a bonus based on how many squares are attacked by this piece inside the mobility area.
             score += MobilityBonus[pieceType][PieceCount(attackedSquares & MobilityArea[color])];
@@ -291,7 +291,7 @@ public class Evaluation
 
 
                 ulong squaresBehindPawns = color == 0 ?
-                    Board.Pawns[color] >> 8 : Board.Pawns[color] << 8;
+                    board.Pawns[color] >> 8 : board.Pawns[color] << 8;
 
                 // A minor piece directly behind a pawn should be given a bonus.
                 if ((square & squaresBehindPawns) != 0)
@@ -303,7 +303,7 @@ public class Evaluation
                 ulong sameColorSquares = (square & Mask.LightSquares) != 0 ? Mask.LightSquares : Mask.DarkSquares;
 
                 // Penalty for each pawn on a square of the same color as this bishop.
-                score += (uint)(ColorWeaknessPenalty * PieceCount(Board.Pawns[color] & sameColorSquares));
+                score += (uint)(ColorWeaknessPenalty * PieceCount(board.Pawns[color] & sameColorSquares));
             }
         }
 
@@ -311,11 +311,11 @@ public class Evaluation
     }
 
     /// <summary>Evaluate the given player's pawn structure.</summary>
-    private static uint EvaluatePawnStructure(int color, int opponentColor)
+    private static uint EvaluatePawnStructure(Board board, int color, int opponentColor)
     {
         uint score = 0;
 
-        ulong pieces = Board.Pieces[Pawn][color];
+        ulong pieces = board.Pieces[Pawn][color];
         while (pieces != 0)
         {
             // Isolate the first pawn.
@@ -323,8 +323,8 @@ public class Evaluation
             pieces &= pieces - 1;
 
             // Keep track of the pawn structure (instead of using 'pieces', where each analysed piece is removed).
-            ulong pawns = Board.Pieces[Pawn][color];
-            ulong opponentPawns = Board.Pieces[Pawn][opponentColor];
+            ulong pawns = board.Pieces[Pawn][color];
+            ulong opponentPawns = board.Pieces[Pawn][opponentColor];
 
             int file = Board.GetFile(squareIndex);
 
@@ -350,7 +350,7 @@ public class Evaluation
             // and its stop square is attacked by an enemy pawn,
             // it is considered a "backward pawn".
             if ((pawns & Board.BackwardProtectors[color, squareIndex]) == 0 &&
-                (Board.StopSquare[color, squareIndex] & Board.PawnAttackedSquares[opponentColor]) != 0)
+                (Board.StopSquare[color, squareIndex] & board.PawnAttackedSquares[opponentColor]) != 0)
                 score += BackwardPawnPenalty;
         }
 
@@ -361,14 +361,14 @@ public class Evaluation
     /// <summary>Compute the material of the specified player in the current position.</summary>
     /// <remarks>The material score should be updated on every move. 
     /// This function should only be called on board initialization.</remarks>
-    public static uint ComputeMaterial(int colorIndex)
+    public static uint ComputeMaterial(Board board, int colorIndex)
     {
         uint material = 0;
-        material += (uint)PieceCount(Board.Pawns[colorIndex]) * PieceValues[Pawn];
-        material += (uint)PieceCount(Board.Knights[colorIndex]) * PieceValues[Knight];
-        material += (uint)PieceCount(Board.Bishops[colorIndex]) * PieceValues[Bishop];
-        material += (uint)PieceCount(Board.Rooks[colorIndex]) * PieceValues[Rook];
-        material += (uint)PieceCount(Board.Queens[colorIndex]) * PieceValues[Queen];
+        material += (uint)PieceCount(board.Pawns[colorIndex]) * PieceValues[Pawn];
+        material += (uint)PieceCount(board.Knights[colorIndex]) * PieceValues[Knight];
+        material += (uint)PieceCount(board.Bishops[colorIndex]) * PieceValues[Bishop];
+        material += (uint)PieceCount(board.Rooks[colorIndex]) * PieceValues[Rook];
+        material += (uint)PieceCount(board.Queens[colorIndex]) * PieceValues[Queen];
         return material;
     }
 }
@@ -378,16 +378,16 @@ public class PieceSquareTables
 {
     /// <summary>Evaluate the total score of all pieces of the given color.</summary>
     /// <remarks>Should only be used on board initialization.</remarks>
-    public static uint EvaluateAllPsqt(int turnIndex)
+    public static uint EvaluateAllPsqt(Board board, int turnIndex)
     {
         uint score = 0;
         bool isWhite = turnIndex == 0;
-        score += EvaluatePsqtScore(Pawn, Board.Pawns[turnIndex], isWhite);
-        score += EvaluatePsqtScore(Rook, Board.Rooks[turnIndex], isWhite);
-        score += EvaluatePsqtScore(Knight, Board.Knights[turnIndex], isWhite);
-        score += EvaluatePsqtScore(Bishop, Board.Bishops[turnIndex], isWhite);
-        score += EvaluatePsqtScore(Queen, Board.Queens[turnIndex], isWhite);
-        score += EvaluatePsqtScore(King, Board.Kings[turnIndex], isWhite);
+        score += EvaluatePsqtScore(Pawn, board.Pawns[turnIndex], isWhite);
+        score += EvaluatePsqtScore(Rook, board.Rooks[turnIndex], isWhite);
+        score += EvaluatePsqtScore(Knight, board.Knights[turnIndex], isWhite);
+        score += EvaluatePsqtScore(Bishop, board.Bishops[turnIndex], isWhite);
+        score += EvaluatePsqtScore(Queen, board.Queens[turnIndex], isWhite);
+        score += EvaluatePsqtScore(King, board.Kings[turnIndex], isWhite);
         return score;
     }
 
