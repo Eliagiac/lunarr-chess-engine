@@ -127,6 +127,31 @@ public class Engine
     private static bool t_isMainSearchThread = false;
 
 
+#if DEBUG
+    private static bool s_writeLogs = true;
+    private static string s_log = "";
+
+    private static string LogPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "log.txt");
+
+    private static void EraseLog()
+    {
+        if (!s_writeLogs) return;
+
+        StreamWriter writer = new(LogPath);
+        writer.Close();
+    }
+
+    private static void WriteLog(string log)
+    {
+        if (!s_writeLogs) return;
+
+        StreamWriter writer = new(LogPath, true);
+        writer.WriteLine(log);
+        writer.Close();
+    }
+#endif
+
+
     /// <summary>Type of limitation applied to the search.</summary>
     public enum SearchLimit
     {
@@ -309,6 +334,10 @@ public class Engine
     /// <param name="isMainSearchThread">UI search updates will only be sent if isMainThread is true.</param>
     private static void StartSearching(Board board)
     {
+#if DEBUG
+        EraseLog();
+#endif
+
         ThreadInfo threadInfo = new();
 
         t_board = board;
@@ -356,8 +385,20 @@ public class Engine
                     Node root = new();
                     ref int score = ref root.Score;
 
+#if DEBUG
+                    WriteLog($"depth {depth}");
+                    WriteLog("");
+#endif
+
                     score = Search(root, depth - failedHighCounter, alpha, beta, out threadInfo.MainLine);
                     bool isUpperbound = score <= alpha;
+
+#if DEBUG
+                    WriteLog("");
+                    WriteLog($"score {score}, nodes {t_totalSearchNodes}");
+                    WriteLog("");
+                    WriteLog("");
+#endif
 
                     // If the score is outside the bounds, the search failed and a new search with wider bounds will be performed.
                     bool searchFailed = false;
@@ -576,6 +617,10 @@ public class Engine
         // hoping for a beta-cutoff to occur as soon as possible.
         OrderMoves(moves, ply);
 
+#if DEBUG
+        WriteLog($"movelist at depth {depth}, ply {ply}, nodes {t_totalSearchNodes}, fen {GetCurrentFen(t_board)} with alpha {alpha}, beta {beta}, eval {evaluation}, ttMove {ttMove}: {string.Join(", ", moves)}");
+#endif
+
 
         // The new depth may receive depth extensions, so by separating it from
         // the initial depth we can keep using that to make decisions on pruning.
@@ -665,6 +710,10 @@ public class Engine
             if (usedLmr && lmrDepth < depth && score > alpha)
                 score = -Search(newNode, depth - 1, -beta, -alpha, out nextLine);
 
+
+#if DEBUG
+            WriteLog($"depth {depth}, ply {ply}, move {i}: alpha {alpha}, beta {beta}, nodes {t_totalSearchNodes}, score {score} (fen {GetCurrentFen(t_board)})");
+#endif
 
             // Unmake the move on the board.
             // This must be done before moving onto the next move.
@@ -1150,6 +1199,10 @@ public class Engine
             score = -QuiescenceSearch(newNode, -beta, -alpha, out Line nextLine);
 
 
+#if DEBUG
+            WriteLog($"quiesce, ply {ply}, move {i}: alpha {alpha}, beta {beta}, nodes {t_totalSearchNodes}, score {score} (fen {GetCurrentFen(t_board)})");
+#endif
+
             t_board.UnmakeMove(move);
 
 
@@ -1257,6 +1310,10 @@ public class Engine
 
         // If the same move is available in a different position, it will be prioritized.
         StoreKillerMove(move, ply);
+
+#if DEBUG
+        WriteLog($"new killer: {move} (piece type: {move.PieceType}); history: {t_historyHeuristics[t_board.Friendly][FirstSquareIndex(move.StartSquare), FirstSquareIndex(move.TargetSquare)]}");
+#endif
     }
 
 
