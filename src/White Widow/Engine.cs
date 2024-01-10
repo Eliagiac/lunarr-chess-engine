@@ -618,7 +618,7 @@ public class Engine
         OrderMoves(moves, ply);
 
 #if DEBUG
-        WriteLog($"movelist at depth {depth}, ply {ply}, nodes {t_totalSearchNodes}, fen {GetCurrentFen(t_board)}: {string.Join(", ", moves)}");
+        WriteLog($"movelist at depth {depth}, ply {ply}, nodes {t_totalSearchNodes}, fen {GetCurrentFen(t_board)} with alpha {alpha}, beta {beta}, eval {evaluation}, ttMove {ttMove}: {string.Join(", ", moves)}");
 #endif
 
 
@@ -1304,10 +1304,6 @@ public class Engine
             t_killerMoves[1, ply] = t_killerMoves[0, ply];
 
         t_killerMoves[0, ply] = move;
-
-#if DEBUG
-        WriteLog($"new killer: {move}");
-#endif
     }
 
     private static void UpdateQuietMoveStats(Move move, int depth, int ply)
@@ -1317,6 +1313,10 @@ public class Engine
 
         // If the same move is available in a different position, it will be prioritized.
         StoreKillerMove(move, ply);
+
+#if DEBUG
+        WriteLog($"new killer: {move} (piece type: {t_board.PieceType(move.StartSquareIndex)}); history: {t_historyHeuristics[t_board.Friendly][FirstSquareIndex(move.StartSquare), FirstSquareIndex(move.TargetSquare)]}");
+#endif
     }
 
 
