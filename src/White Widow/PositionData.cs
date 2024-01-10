@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 /// Also stores the type of the piece captured on the last turn, 
 /// since this is not stored in the move itself.
 /// </summary>
-public struct PositionData
+public struct GameState
 {
     public readonly ulong ZobristKey;
     public readonly int CapturedPieceType;
@@ -18,7 +18,7 @@ public struct PositionData
     public readonly ulong EnPassantSquare;
     public readonly ulong EnPassantTarget;
 
-    public PositionData(ulong zobristKey, int capturedPieceType, ulong castlingRights, ulong enPassantSquare, ulong enPassantTarget)
+    public GameState(ulong zobristKey, int capturedPieceType, ulong castlingRights, ulong enPassantSquare, ulong enPassantTarget)
     {
         ZobristKey = zobristKey;
         CapturedPieceType = capturedPieceType;

@@ -20,7 +20,6 @@ namespace Utilities
         public static Board ConvertFromFen(Board board, string fen)
         {
             board.Init();
-            board.PositionHistory = new();
 
             string[] sections = fen.Split(' ');
 
@@ -87,7 +86,8 @@ namespace Utilities
             board.MaterialScore[0] = Evaluation.ComputeMaterial(board, 0);
             board.MaterialScore[1] = Evaluation.ComputeMaterial(board, 1);
 
-            board.PositionHistory.Push(board.CurrentPositionData());
+            board.GameStateHistory.Push(board.CurrentGameState());
+            board.PositionKeyHistory.Push(board.ZobristKey);
 
             return board;
         }

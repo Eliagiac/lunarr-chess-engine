@@ -169,10 +169,22 @@ public class Board
     public static ulong[] SecondShieldingPawns;
 
 
-    // Contains the history of positions reached up to this point, including their zobrist key,
-    // castling rights and possible en passant target. Used to detect draws by repetition and
-    // unmake moves that changed the castling rights or en passant data.
-    public Stack<PositionData> PositionHistory;
+    /// <summary>
+    /// Contains the history of positions reached up to this point, including their zobrist key,
+    /// castling rights and possible en passant target. 
+    /// </summary>
+    /// <remarks>
+    /// Updated when making or unmaking a move or null move; used to unmake moves and null moves.
+    /// </remarks>
+    public Stack<GameState> GameStateHistory;
+
+    /// <summary>
+    /// Contains the history of positions (zobrist keys) reached up to this point, used for detecting draws by repetition.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="GameStateHistory"/>, it's not updated when making or unmaking a null move.
+    /// </remarks>
+    public Stack<ulong> PositionKeyHistory;
 
 
     public uint[] PsqtScore;
@@ -192,7 +204,8 @@ public class Board
             [Rook] = new ulong[2],
             [Queen] = new ulong[2],
         };
-        PositionHistory = new();
+        GameStateHistory = new();
+        PositionKeyHistory = new();
         PsqtScore = new uint[2];
         MaterialScore = new uint[2];
 
@@ -307,7 +320,7 @@ public class Board
         }
     }
 
-    public PositionData CurrentPositionData() => 
+    public GameState CurrentGameState() => 
         new(ZobristKey, CapturedPieceType, CastlingRights, EnPassantSquare, EnPassantTarget);
 
     public void MakeMove(Move move, out int pieceType, out int capturedPieceType)
@@ -413,7 +426,8 @@ public class Board
 
         IsCheckDataOutdated = true;
 
-        PositionHistory.Push(CurrentPositionData());
+        GameStateHistory.Push(CurrentGameState());
+        PositionKeyHistory.Push(ZobristKey);
 
 
         void MakePawnMove()
@@ -464,8 +478,8 @@ public class Board
 
     public void UnmakeMove(Move move)
     {
-        PositionData currentPosition = PositionHistory.Pop();
-        PositionData previousPosition = PositionHistory.Peek();
+        GameState currentPosition = GameStateHistory.Pop();
+        GameState previousPosition = GameStateHistory.Peek();
 
         int moveFlag = move.Flag;
         bool isEnPassant = moveFlag == EnPassantCaptureFlag;
@@ -562,6 +576,8 @@ public class Board
         CapturedPieceType = previousPosition.CapturedPieceType;
 
         TT.CalculateCurrentEntryIndex(this);
+
+        PositionKeyHistory.Pop();
 
         // NOTE: If the check data was up to date before making the move, unmaking it would restore the correct data.
         // A possible optimization is to check for this to avoid potentially having to recalculate it unnecessaraly,
@@ -684,15 +700,17 @@ public class Board
 
         TT.CalculateCurrentEntryIndex(this);
 
-        PositionHistory.Push(CurrentPositionData());
+        GameStateHistory.Push(CurrentGameState());
+
+        // NOTE: Null moves should not be added to PositionKeyHistory.
 
         IsCheckDataOutdated = true;
     }
 
     public void UnmakeNullMove()
     {
-        PositionData currentPosition = PositionHistory.Pop();
-        PositionData previousPosition = PositionHistory.Peek();
+        GameState currentPosition = GameStateHistory.Pop();
+        GameState previousPosition = GameStateHistory.Peek();
 
         // Remove old en passant square (none).
         ZobristKey ^= EnPassantFileKeys[0];
@@ -1267,7 +1285,8 @@ public class Board
             /* EnPassantTargetBackup == other.EnPassantTargetBackup && */
             CastlingRights == other.CastlingRights &&
             ZobristKey == other.ZobristKey &&
-            Enumerable.SequenceEqual(PositionHistory, other.PositionHistory) &&
+            Enumerable.SequenceEqual(GameStateHistory, other.GameStateHistory) &&
+            Enumerable.SequenceEqual(PositionKeyHistory, other.PositionKeyHistory) &&
             Enumerable.SequenceEqual(PsqtScore, other.PsqtScore) &&
             Enumerable.SequenceEqual(MaterialScore, other.MaterialScore) &&
             Fen.GetCurrentFen(this) == Fen.GetCurrentFen(other);
@@ -1298,7 +1317,8 @@ public class Board
             CastlingRights = CastlingRights,
             ZobristKey = ZobristKey,
             /* The stack is constructed twice because the order would be reversed. */
-            PositionHistory = new(new Stack<PositionData>(PositionHistory)),
+            GameStateHistory = new(new Stack<GameState>(GameStateHistory)),
+            PositionKeyHistory = new(new Stack<ulong>(PositionKeyHistory)),
             PsqtScore = PsqtScore.Select(e => e).ToArray(),
             MaterialScore = MaterialScore.Select(e => e).ToArray()
         };
@@ -1332,7 +1352,8 @@ public class Board
         if (!(EnPassantTarget == other.EnPassantTarget)) differences.Add("En Passant Target");
         if (!(CastlingRights == other.CastlingRights)) differences.Add("Castling Rights");
         if (!(ZobristKey == other.ZobristKey)) differences.Add("Zobrist Key");
-        if (!Enumerable.SequenceEqual(PositionHistory, other.PositionHistory)) differences.Add("Position History");
+        if (!Enumerable.SequenceEqual(GameStateHistory, other.GameStateHistory)) differences.Add("Game State History");
+        if (!Enumerable.SequenceEqual(PositionKeyHistory, other.PositionKeyHistory)) differences.Add("Position Key History");
         if (!Enumerable.SequenceEqual(PsqtScore, other.PsqtScore)) differences.Add("Psqt Score");
         if (!Enumerable.SequenceEqual(MaterialScore, other.MaterialScore)) differences.Add("Material Score");
         if (!(Fen.GetCurrentFen(this) == Fen.GetCurrentFen(other))) differences.Add("Fen String");
