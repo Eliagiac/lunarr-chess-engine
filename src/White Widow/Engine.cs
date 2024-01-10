@@ -388,10 +388,12 @@ public class Engine
 #if DEBUG
                     WriteLog($"depth {depth}");
                     WriteLog("");
+#endif
 
                     score = Search(root, depth - failedHighCounter, alpha, beta, out threadInfo.MainLine);
                     bool isUpperbound = score <= alpha;
 
+#if DEBUG
                     WriteLog("");
                     WriteLog($"score {score}, nodes {t_totalSearchNodes}");
                     WriteLog("");
@@ -832,7 +834,7 @@ public class Engine
 
 
         // Store killer move in case the best move found is quiet, even if it didn't cause a beta-cutoff.
-        if (!bestMoveIsCapture && !(pvLine?.Move == null)) UpdateQuietMoveStats((Move)pvLine.Move, depth, ply);
+        if (!bestMoveIsCapture && !pvLine.Move.IsNullMove()) UpdateQuietMoveStats(pvLine.Move, depth, ply);
 
         // Once all legal moves have been searched, save the best score found in the transposition table and return it.
         TT.StoreEvaluation(t_board, depth, ply, alpha, evaluationType, pvLine, staticEvaluation);
