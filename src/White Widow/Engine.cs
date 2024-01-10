@@ -5,6 +5,8 @@ using static System.Math;
 using static Piece;
 using static Evaluation;
 using static Engine;
+using static Move;
+using System.Text;
 
 /// <summary>The <see cref="Engine"/> class contains the main features of the engine.</summary>
 public class Engine
@@ -129,13 +131,15 @@ public class Engine
 
 #if DEBUG
     private static bool s_writeLogs = true;
-    private static string s_log = "";
+    private static StringBuilder s_log = new();
 
     private static string LogPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "log.txt");
 
     private static void EraseLog()
     {
         if (!s_writeLogs) return;
+
+        s_log = new();
 
         StreamWriter writer = new(LogPath);
         writer.Close();
@@ -145,8 +149,13 @@ public class Engine
     {
         if (!s_writeLogs) return;
 
+        s_log.Append(log + "\n");
+    }
+
+    private static void SaveLog()
+    {
         StreamWriter writer = new(LogPath, true);
-        writer.WriteLine(log);
+        writer.WriteLine(s_log);
         writer.Close();
     }
 #endif
@@ -324,6 +333,10 @@ public class Engine
     {
         s_abortSearchTimer?.Cancel();
         WasSearchAborted = false;
+
+#if DEBUG
+        SaveLog();
+#endif
 
         UCI.Bestmove(MainLine?.Move?.ToString() ?? "");
     }
