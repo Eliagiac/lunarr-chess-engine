@@ -584,7 +584,7 @@ public class Engine
         // When close to the horizon, if it's unlikely that alpha will be raised, most moves are skipped.
         // For more details: https://www.chessprogramming.org/Futility_Pruning.
         bool useFutilityPruning = UseFutilityPruning(ref evaluation);
-
+        
 
         // Null Move Pruning:
         // Explained here: https://www.chessprogramming.org/Null_Move_Pruning.
@@ -1069,7 +1069,7 @@ public class Engine
         {
             // If no move is stored in the transposition table for this position,
             // perform a reduced depth search and update the transposition values.
-            if (!rootNode && !ttMove.IsNullMove() &&
+            if (!rootNode && ttMove.IsNullMove() &&
                 depth > InternalIterativeDeepeningDepthReduction)
             {
                 ref int score = ref node.Score;
