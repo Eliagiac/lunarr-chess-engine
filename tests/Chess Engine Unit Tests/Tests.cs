@@ -466,17 +466,60 @@ namespace Chess_Engine_Unit_Tests
         public void MakeAndUnmakeRandomMoves_UpTo3000Moves_5Times() =>
             MakeAndUnmakeRandomMoves(3000, 5);
 
+        [TestMethod]
+        public void MakeAndUnmakeNullMove_After0Moves_100Times() =>
+            MakeAndUnmakeNullMove(0, 100);
 
-        private void MakeAndUnmakeRandomMoves(int moveCount, int repeat)
+        [TestMethod]
+        public void MakeAndUnmakeNullMove_After1Moves_10000Times() =>
+            MakeAndUnmakeNullMove(1, 10000);
+
+        [TestMethod]
+        public void MakeAndUnmakeNullMove_After2Moves_5000Times() =>
+            MakeAndUnmakeNullMove(2, 5000);
+
+        [TestMethod]
+        public void MakeAndUnmakeNullMove_After3Moves_2000Times() =>
+            MakeAndUnmakeNullMove(3, 2000);
+
+        [TestMethod]
+        public void MakeAndUnmakeNullMove_After5Moves_1000Times() =>
+            MakeAndUnmakeNullMove(5, 1000);
+
+        [TestMethod]
+        public void MakeAndUnmakeNullMove_0MovesBefore_1MoveAfter_10000Times() =>
+            MakeAndUnmakeNullMove(0, 10000, 1);
+
+        [TestMethod]
+        public void MakeAndUnmakeNullMove_0MovesBefore_2MovesAfter_10000Times() =>
+            MakeAndUnmakeNullMove(0, 10000, 2);
+
+        [TestMethod]
+        public void MakeAndUnmakeNullMove_5MovesBefore_1MoveAfter_10000Times() =>
+            MakeAndUnmakeNullMove(5, 10000, 1);
+
+        [TestMethod]
+        public void MakeAndUnmakeNullMove_5MovesBefore_2MoveAfter_10000Times() =>
+            MakeAndUnmakeNullMove(5, 10000, 2);
+
+        [TestMethod]
+        public void MakeAndUnmakeNullMove_5MovesBefore_5MovesAfter_10000Times() =>
+            MakeAndUnmakeNullMove(5, 10000, 5);
+
+
+        private bool MakeAndUnmakeRandomMoves(int moveCount, int repeat, Board? board = null)
         {
             Random rng = new();
 
             for (int n = 0; n < repeat; n++)
             {
-                string randomPosition = AllPositions[rng.Next(AllPositions.Count)];
+                if (board == null)
+                {
+                    board = new();
+                    string randomPosition = AllPositions[rng.Next(AllPositions.Count)];
 
-                Board board = new();
-                ConvertFromFen(board, randomPosition);
+                    ConvertFromFen(board, randomPosition);
+                }
 
                 Board initialBoard = board.Clone();
                 Stack<Board> boardHistory = new();
@@ -525,6 +568,50 @@ namespace Chess_Engine_Unit_Tests
                 }
 
                 Assert.IsTrue(isEqual);
+                if (!isEqual) return false;
+            }
+
+            return true;
+        }
+
+        private void MakeAndUnmakeNullMove(int previousMovesCount, int repeat, int movesAfter = 0)
+        {
+            Random rng = new();
+
+            for (int n = 0; n < repeat; n++)
+            {
+                string randomPosition = AllPositions[rng.Next(AllPositions.Count)];
+
+                Board board = new();
+                ConvertFromFen(board, randomPosition);
+
+                Stack<Move> movesStack = new();
+                for (int i = 0; i < previousMovesCount; i++)
+                {
+                    List<Move> allLegalMoves = board.GenerateAllLegalMoves();
+                    if (allLegalMoves.Count == 0) break;
+
+                    int randomMoveIndex = rng.Next(allLegalMoves.Count);
+                    Move randomMove = allLegalMoves[randomMoveIndex];
+
+                    board.MakeMove(randomMove, out int _, out int _);
+                    movesStack.Push(randomMove);
+                }
+
+                Board boardBefore = board.Clone();
+
+                board.MakeNullMove();
+                board.UnmakeNullMove();
+
+                bool isEqual = board.Equals(boardBefore);
+                if (!isEqual)
+                {
+                    Console.WriteLine("Final: " + string.Join(", ", board.FindDifferences(boardBefore)));
+                }
+
+                Assert.IsTrue(isEqual);
+
+                if (movesAfter != 0) Assert.IsTrue(MakeAndUnmakeRandomMoves(movesAfter, 1, board ));
             }
         }
     }

@@ -934,8 +934,7 @@ public class Engine
             if (!rootNode && !inCheck && useNullMovePruning && 
                 evaluation >= beta && evaluation >= staticEvaluation)
             {
-                NullMove move = new();
-                t_board.MakeNullMove(move);
+                t_board.MakeNullMove();
 
 
                 Node newNode = node.AddNewChild();
@@ -949,7 +948,7 @@ public class Engine
                 score = -Search(newNode, depth - depthReduction, -beta, -beta + 1, out Line _, useNullMovePruning: false);
 
 
-                t_board.UnmakeNullMove(move);
+                t_board.UnmakeNullMove();
 
                 if (WasSearchAborted) return false;
                 if (score >= beta)

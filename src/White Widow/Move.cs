@@ -105,12 +105,6 @@ public struct Move
     }
 }
 
-public class NullMove
-{
-    public ulong EnPassantSquareBackup;
-    public ulong EnPassantTargetBackup;
-}
-
 // Used for move generation.
 public enum MoveType
 {

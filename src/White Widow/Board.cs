@@ -662,10 +662,9 @@ public class Board
     }
 
 
-    public void MakeNullMove(NullMove move)
+    public void MakeNullMove()
     {
-        move.EnPassantSquareBackup = EnPassantSquare;
-        move.EnPassantTargetBackup = EnPassantTarget;
+        CapturedPieceType = None;
 
         // Remove old en passant square.
         ZobristKey ^= EnPassantFileKeys[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
@@ -673,8 +672,10 @@ public class Board
         EnPassantSquare = 0;
         EnPassantTarget = 0;
 
-        // Add new en passant square.
+        // Add new en passant square (none).
         ZobristKey ^= EnPassantFileKeys[0];
+
+        // NOTE: Making a null move doesn't change the castling rights.
 
         ZobristKey ^= BlackToMoveKey;
 
@@ -682,25 +683,38 @@ public class Board
         Opponent ^= 1;
 
         TT.CalculateCurrentEntryIndex(this);
+
+        PositionHistory.Push(CurrentPositionData());
+
+        IsCheckDataOutdated = true;
     }
 
-    public void UnmakeNullMove(NullMove move)
+    public void UnmakeNullMove()
     {
-        // Remove old en passant square.
+        PositionData currentPosition = PositionHistory.Pop();
+        PositionData previousPosition = PositionHistory.Peek();
+
+        // Remove old en passant square (none).
         ZobristKey ^= EnPassantFileKeys[0];
 
-        EnPassantSquare = move.EnPassantSquareBackup;
-        EnPassantTarget = move.EnPassantTargetBackup;
+        // Reset en passant data.
+        EnPassantSquare = previousPosition.EnPassantSquare;
+        EnPassantTarget = previousPosition.EnPassantTarget;
 
         // Add new en passant square.
         ZobristKey ^= EnPassantFileKeys[EnPassantSquare != 0 ? GetFile(FirstSquareIndex(EnPassantSquare)) + 1 : 0];
 
+        CapturedPieceType = previousPosition.CapturedPieceType;
+        CastlingRights = previousPosition.CastlingRights;
+
         ZobristKey ^= BlackToMoveKey;
 
         Friendly ^= 1;
         Opponent ^= 1;
 
         TT.CalculateCurrentEntryIndex(this);
+
+        IsCheckDataOutdated = true;
     }
 
 
@@ -1242,10 +1256,10 @@ public class Board
             Enumerable.SequenceEqual(SlidingPieces, other.SlidingPieces) &&
             AllSlidingPieces == other.AllSlidingPieces &&
             Enumerable.SequenceEqual(KingPosition, other.KingPosition) &&
-            (CheckingPieces == other.CheckingPieces || IsCheckDataOutdated) &&
-            (Enumerable.SequenceEqual(IsKingInCheck, other.IsKingInCheck) || IsCheckDataOutdated) &&
+            (CheckingPieces == other.CheckingPieces || (IsCheckDataOutdated || other.IsCheckDataOutdated)) &&
+            (Enumerable.SequenceEqual(IsKingInCheck, other.IsKingInCheck) || (IsCheckDataOutdated || other.IsCheckDataOutdated)) &&
             /* IsCheckDataOutdated == other.IsCheckDataOutdated && */
-            (Enumerable.SequenceEqual(Pins, other.Pins) || IsCheckDataOutdated) &&
+            (Enumerable.SequenceEqual(Pins, other.Pins) || (IsCheckDataOutdated || other.IsCheckDataOutdated)) &&
             Enumerable.SequenceEqual(PawnAttackedSquares, other.PawnAttackedSquares) &&
             EnPassantSquare == other.EnPassantSquare &&
             EnPassantTarget == other.EnPassantTarget &&
@@ -1283,7 +1297,8 @@ public class Board
             EnPassantTargetBackup = EnPassantTargetBackup,
             CastlingRights = CastlingRights,
             ZobristKey = ZobristKey,
-            PositionHistory = new(PositionHistory),
+            /* The stack is constructed twice because the order would be reversed. */
+            PositionHistory = new(new Stack<PositionData>(PositionHistory)),
             PsqtScore = PsqtScore.Select(e => e).ToArray(),
             MaterialScore = MaterialScore.Select(e => e).ToArray()
         };
