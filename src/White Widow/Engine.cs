@@ -1196,6 +1196,9 @@ public class Engine
 
         OrderMoves(moves, -1, ttMove);
 
+#if DEBUG
+        WriteLog($"movelist in quescence, ply {ply}, nodes {t_totalSearchNodes}, fen {GetCurrentFen(t_board)} with alpha {alpha}, beta {beta}, eval {evaluation}, ttMove {ttMove}: {string.Join(", ", moves)}");
+#endif
 
         EvaluationType evaluationType = EvaluationType.UpperBound;
 
