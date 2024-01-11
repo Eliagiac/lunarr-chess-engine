@@ -545,14 +545,14 @@ public class Engine
         // Was this position searched before?
         bool ttHit;
 
-        // Lookup transposition table entry. Should be accessed only if ttHit is true.
-        TTEntry ttEntry = TT.GetStoredEntry(t_board, out ttHit);
+        // Lookup transposition table entry. Null if ttHit is false.
+        TTEntry? ttEntry = TT.GetStoredEntry(t_board, out ttHit);
 
         // Lookup transposition evaluation.
         int ttEval = TT.GetStoredEvaluation(ply, alpha, beta);
 
         // Store the best move found when this position was previously searched.
-        Line? ttLine = ttHit ? ttEntry.Line : null;
+        Line? ttLine = ttEntry?.Line;
         Move ttMove = ttLine?.Move ?? NullMove();
         bool ttMoveIsCapture = ttMove.IsCapture(t_board);
         #endregion
@@ -627,7 +627,7 @@ public class Engine
 
         // Rearrange the moves list to reach better moves earlier,
         // hoping for a beta-cutoff to occur as soon as possible.
-        OrderMoves(moves, ply);
+        OrderMoves(moves, ply, ttMove);
 
 #if DEBUG
         WriteLog($"movelist at depth {depth}, ply {ply}, nodes {t_totalSearchNodes}, fen {GetCurrentFen(t_board)} with alpha {alpha}, beta {beta}, eval {evaluation}, ttMove {ttMove}: {string.Join(", ", moves)}");
@@ -875,7 +875,7 @@ public class Engine
         {
             pvLine = null;
 
-            if (!rootNode && ttHit && ttEntry.Depth >= depth && ttEval != Null)
+            if (!rootNode && ttHit && ttEntry?.Depth >= depth && ttEval != Null)
             {
                 // Update quiet move stats.
                 if (!ttMove.IsNullMove() /* BUG: ttMove is sometimes null even though ttHit is true. Somewhere in the code entries are being saved without a best move. Not sure whether or not this should ever be done. */&&
@@ -889,7 +889,7 @@ public class Engine
                     }
                 }
 
-                pvLine = TT.GetStoredLine();
+                pvLine = ttEntry?.Line!;
                 return true;
             }
 
@@ -905,8 +905,8 @@ public class Engine
             // If this position was already evaluated, use the stored value.
             else if (ttHit)
             {
-                if (ttEntry.StaticEvaluation != Null)
-                    staticEvaluation = ttEntry.StaticEvaluation;
+                if (ttEntry?.StaticEvaluation != Null)
+                    staticEvaluation = ttEntry?.StaticEvaluation ?? Null;
 
                 else staticEvaluation = Evaluate(t_board, out int _);
 
@@ -1038,7 +1038,7 @@ public class Engine
             {
                 // Note: should only generate moves with SEE score > probCutBeta - staticEvaluation.
                 var moves = t_board.GenerateAllLegalMoves(capturesOnly: true);
-                OrderMoves(moves, -1);
+                OrderMoves(moves, -1, ttMove);
 
                 for (int i = 0; i < moves.Count; i++)
                 {
@@ -1090,9 +1090,9 @@ public class Engine
                 ttEntry = TT.GetStoredEntry(t_board, out ttHit);
                 ttEval = TT.GetStoredEvaluation(ply, alpha, beta);
 
-                ttLine = ttHit ? ttEntry.Line : null;
+                ttLine = ttEntry?.Line;
                 ttMove = ttLine?.Move ?? NullMove();
-                ttMoveIsCapture= ttMove.IsCapture(t_board);
+                ttMoveIsCapture = ttMove.IsCapture(t_board);
             }
         }
 
@@ -1132,13 +1132,13 @@ public class Engine
         bool ttHit;
 
         // Store transposition table entry. To be accessed only if ttHit is true.
-        TTEntry ttEntry = TT.GetStoredEntry(t_board, out ttHit);
+        TTEntry? ttEntry = TT.GetStoredEntry(t_board, out ttHit);
 
         // Lookup transposition evaluation. If the lookup fails, ttEval == LookupFailed.
         int ttEval = TT.GetStoredEvaluation(ply, alpha, beta);
 
         // Store the best move found when this position was previously searched.
-        Line ttLine = ttHit ? ttEntry.Line : null;
+        Line? ttLine = ttEntry?.Line;
         Move ttMove = ttLine?.Move ?? NullMove();
         bool ttMoveIsCapture = ttMove.IsCapture(t_board);
         #endregion
@@ -1194,7 +1194,7 @@ public class Engine
         // Note: checking for checkmate or stalemate here is not
         // possible because not all legal moves were generated.
 
-        OrderMoves(moves, -1);
+        OrderMoves(moves, -1, ttMove);
 
 
         EvaluationType evaluationType = EvaluationType.UpperBound;
@@ -1253,7 +1253,7 @@ public class Engine
 
             if (ttHit && ttEval != Null)
             {
-                pvLine = TT.GetStoredLine();
+                pvLine = ttEntry?.Line!;
                 return true;
             }
 
@@ -1278,8 +1278,8 @@ public class Engine
             // If this position was already evaluated, use the stored value.
             else if (ttHit)
             {
-                if (ttEntry.StaticEvaluation != Null)
-                    staticEvaluation = ttEntry.StaticEvaluation;
+                if (ttEntry?.StaticEvaluation != Null)
+                    staticEvaluation = ttEntry?.StaticEvaluation ?? Null;
 
                 else staticEvaluation = Evaluate(t_board, out int _);
 
@@ -1338,17 +1338,14 @@ public class Engine
     /// to get an early beta-cutoff (<see href="https://www.chessprogramming.org/Beta-Cutoff"/>)
     /// </summary>
     /// <param name="ply">Current ply in the search tree. Used to compare killer moves.</param>
-    private static void OrderMoves(List<Move> moves, int ply)
+    /// <param name="ttMove">
+    /// If this position was searched before, ttMove stores the best move that was previously found. <br />
+    /// This move should be given the top priority. If the position wasn't searched before, it'll be a null move.
+    /// </param>
+    private static void OrderMoves(List<Move> moves, int ply, Move ttMove)
     {
         // Save time by returning early if there aren't multiple moves to sort.
         if (moves.Count < 2) return;
-
-        // If this position was searched before,
-        // ttMove stores the best move that was previously found.
-        // This move should be given the top priority.
-        // Note: may be null in case the position wasn't searched before.
-        Move ttMove = TT.GetStoredMove();
-
 
         List<int> scores = new();
         foreach (Move move in moves)
