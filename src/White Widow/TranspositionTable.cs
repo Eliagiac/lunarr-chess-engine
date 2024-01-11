@@ -53,16 +53,19 @@ public class TT
         set => s_entries[t_currentEntryIndex] = value;
     }
 
-    public static Move GetStoredMove() => CurrentEntry.Line?.Move;
-
-    public static Line GetStoredLine() => CurrentEntry.Line;
-
-	public static TTEntry GetStoredEntry(Board board, out bool ttHit)
+	public static TTEntry? GetStoredEntry(Board board, out bool ttHit)
 	{
-		if (CurrentEntry.Key == board.ZobristKey) ttHit = true;
-		else ttHit = false;
+        if (CurrentEntry.Key == board.ZobristKey)
+        {
+            ttHit = true;
+            return CurrentEntry;
+        }
 
-		return CurrentEntry;
+        else
+        {
+            ttHit = false;
+            return null;
+        }
     }
 
     /// <summary>Get the stored evaluation of the current position.</summary>
