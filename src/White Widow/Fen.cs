@@ -99,7 +99,7 @@ namespace Utilities
             board.MaterialScore[1] = Evaluation.ComputeMaterial(board, 1);
 
             board.GameStateHistory.Push(board.CurrentGameState());
-            board.PositionKeyHistory.Push(board.ZobristKey);
+            board.RepetitionTable.PopulateWithCurrentHistory(board);
 
             return board;
         }

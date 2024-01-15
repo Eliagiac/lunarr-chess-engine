@@ -184,7 +184,7 @@ public class Board
     /// <remarks>
     /// Unlike <see cref="GameStateHistory"/>, it's not updated when making or unmaking a null move.
     /// </remarks>
-    public Stack<ulong> PositionKeyHistory;
+    public RepetitionTable RepetitionTable;
 
 
     public uint[] PsqtScore;
@@ -208,7 +208,7 @@ public class Board
             [Queen] = new ulong[2],
         };
         GameStateHistory = new();
-        PositionKeyHistory = new();
+        RepetitionTable = new();
         PsqtScore = new uint[2];
         MaterialScore = new uint[2];
         PlyCount = 0;
@@ -439,7 +439,7 @@ public class Board
         IsCheckDataOutdated = true;
 
         GameStateHistory.Push(CurrentGameState());
-        PositionKeyHistory.Push(ZobristKey);
+        RepetitionTable.Push(ZobristKey);
 
 
         void MakePawnMove()
@@ -594,7 +594,7 @@ public class Board
 
         TT.CalculateCurrentEntryIndex(this);
 
-        PositionKeyHistory.Pop();
+        RepetitionTable.Pop();
 
         // NOTE: If the check data was up to date before making the move, unmaking it would restore the correct data.
         // A possible optimization is to check for this to avoid potentially having to recalculate it unnecessaraly,
@@ -1311,7 +1311,7 @@ public class Board
             CastlingRights == other.CastlingRights &&
             ZobristKey == other.ZobristKey &&
             Enumerable.SequenceEqual(GameStateHistory, other.GameStateHistory) &&
-            Enumerable.SequenceEqual(PositionKeyHistory, other.PositionKeyHistory) &&
+            RepetitionTable.Equals(other.RepetitionTable) &&
             Enumerable.SequenceEqual(PsqtScore, other.PsqtScore) &&
             Enumerable.SequenceEqual(MaterialScore, other.MaterialScore) &&
             Fen.GetCurrentFen(this) == Fen.GetCurrentFen(other);
@@ -1343,7 +1343,7 @@ public class Board
             ZobristKey = ZobristKey,
             /* The stack is constructed twice because the order would be reversed. */
             GameStateHistory = new(new Stack<GameState>(GameStateHistory)),
-            PositionKeyHistory = new(new Stack<ulong>(PositionKeyHistory)),
+            RepetitionTable = new(RepetitionTable),
             PsqtScore = PsqtScore.Select(e => e).ToArray(),
             MaterialScore = MaterialScore.Select(e => e).ToArray()
         };
@@ -1378,7 +1378,7 @@ public class Board
         if (!(CastlingRights == other.CastlingRights)) differences.Add("Castling Rights");
         if (!(ZobristKey == other.ZobristKey)) differences.Add("Zobrist Key");
         if (!Enumerable.SequenceEqual(GameStateHistory, other.GameStateHistory)) differences.Add("Game State History");
-        if (!Enumerable.SequenceEqual(PositionKeyHistory, other.PositionKeyHistory)) differences.Add("Position Key History");
+        if (!RepetitionTable.Equals(other.RepetitionTable)) differences.Add("Position Key History");
         if (!Enumerable.SequenceEqual(PsqtScore, other.PsqtScore)) differences.Add("Psqt Score");
         if (!Enumerable.SequenceEqual(MaterialScore, other.MaterialScore)) differences.Add("Material Score");
         if (!(Fen.GetCurrentFen(this) == Fen.GetCurrentFen(other))) differences.Add("Fen String");

@@ -1448,7 +1448,7 @@ public class Engine
 
     /// <summary>If a position is reached three times, it's a draw.</summary>
     /// <remarks>The current implementation returns true even if the position was only reached twice.</remarks>
-    public static bool IsDrawByRepetition() => t_board.PositionKeyHistory.Count(other => other == t_board.ZobristKey) >= 2;
+    public static bool IsDrawByRepetition() => t_board.RepetitionTable.Contains(t_board);
 
 
     /// <summary>If there is not enough material on the board for either player to checkate the opponent, it's a draw.</summary>
