@@ -73,7 +73,7 @@ namespace Chess_Engine_Unit_Tests
             PrecomputedMoveData.GenerateDirectionalMasks();
             PrecomputedMoveData.ComputeMagicBitboards();
 
-            TT.Resize(8);
+            Cuckoo.Init();
         }
 
 
@@ -317,7 +317,7 @@ namespace Chess_Engine_Unit_Tests
             PrecomputedMoveData.GenerateDirectionalMasks();
             PrecomputedMoveData.ComputeMagicBitboards();
 
-            TT.Resize(8);
+            Cuckoo.Init();
         }
 
 
@@ -419,7 +419,7 @@ namespace Chess_Engine_Unit_Tests
             PrecomputedMoveData.GenerateDirectionalMasks();
             PrecomputedMoveData.ComputeMagicBitboards();
 
-            TT.Resize(8);
+            Cuckoo.Init();
         }
 
         [TestMethod]
@@ -613,6 +613,52 @@ namespace Chess_Engine_Unit_Tests
 
                 if (movesAfter != 0) Assert.IsTrue(MakeAndUnmakeRandomMoves(movesAfter, 1, board ));
             }
+        }
+    }
+
+    [TestClass]
+    public class HasUpcomingRepetitionTests
+    {
+        static HasUpcomingRepetitionTests()
+        {
+            PrecomputedMoveData.ComputeMoveData();
+            PrecomputedMoveData.GenerateDirectionalMasks();
+            PrecomputedMoveData.ComputeMagicBitboards();
+
+            Cuckoo.Init();
+        }
+
+        [TestMethod]
+        public void HasUpcomingRepetition_Position1_True() =>
+            Assert.IsTrue(HasUpcomingRepetition(AllPositions[0], "b1c3 b8c6 c3b1"));
+
+        [TestMethod]
+        public void HasUpcomingRepetition_Position1_False() =>
+            Assert.IsFalse(HasUpcomingRepetition(AllPositions[0], "b1c3 b8c6 g1f3"));
+
+        [TestMethod]
+        public void HasUpcomingRepetition_Position2_True() =>
+            Assert.IsTrue(HasUpcomingRepetition(AllPositions[1], "f3f6 g7h6 f6g5 h6g7"));
+
+        [TestMethod]
+        public void HasUpcomingRepetition_Position2_False() =>
+            Assert.IsFalse(HasUpcomingRepetition(AllPositions[1], "f3f6 g7h6 f6g5"));
+
+        private bool HasUpcomingRepetition(string fen, string moves)
+        {
+            Board board = new();
+            ConvertFromFen(board, fen);
+
+            string[] movesArray = moves.Split(' ');
+            foreach (string move in movesArray)
+            {
+                int startIndex = (int)Enum.Parse(typeof(Square), move.Substring(0, 2));
+                int targetIndex = (int)Enum.Parse(typeof(Square), move.Substring(2, 2));
+                int promotionType = move.Length == 5 ? Array.IndexOf(new[] { "", "p", "n", "b", "r", "q", "k" }, move.Substring(4, 1)) : 0;
+                board.MakeMove(new(startIndex, targetIndex, promotionType), out int _, out int _);
+            }
+
+            return board.RepetitionTable.HasUpcomingRepetition(board);
         }
     }
 }

@@ -29,11 +29,6 @@ public struct Move
     /// </remarks>
     public readonly ushort MoveValue;
 
-    /// <summary>
-    /// A table containing 
-    /// </summary>
-    private static ulong[] ReversibleMoveKeys;
-
     public int StartSquareIndex => MoveValue & StartSquareMask;
     public int TargetSquareIndex => (MoveValue & TargetSquareMask) >> 6;
 
@@ -79,10 +74,17 @@ public struct Move
     public Move(ushort moveValue) => MoveValue = moveValue;
 
 
-    // Note: might be more readable to use (Move)move!
-    // Note: could consider using an extension method instead.
-    //public static Move NotNull(Move? move) => move.Value;
+    /// <summary>
+    /// Check if a move is valid for the given piece by intersecting the attack bitboard of the piece with the target.
+    /// </summary>
+    public static bool IsValid(int pieceType, int startSquareIndex, int targetSquareIndex) =>
+        (Board.AttacksFrom(startSquareIndex, pieceType, 0) & (1UL << targetSquareIndex)) != 0;
 
+    /// <summary>
+    /// Check if a move is valid for the given piece and reversible. Returns false if the piece is a pawn.
+    /// </summary>
+    public static bool IsValidAndReversible(int pieceType, int startSquareIndex, int targetSquareIndex) =>
+        pieceType != Pawn && IsValid(pieceType, startSquareIndex, targetSquareIndex);
 
     public bool Equals(Move? other) => MoveValue == (other?.MoveValue ?? 0);
 

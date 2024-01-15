@@ -37,12 +37,12 @@ public class PrecomputedMoveData
     {
         Moves = new()
         {
-            [Piece.King] = new ulong[64, 1],
             [Piece.Pawn] = new ulong[64, 6],
             [Piece.Knight] = new ulong[64, 1],
             [Piece.Bishop] = new ulong[64, 4],
             [Piece.Rook] = new ulong[64, 4],
-            [Piece.Queen] = new ulong[64, 8]
+            [Piece.Queen] = new ulong[64, 8],
+            [Piece.King] = new ulong[64, 1]
         };
 
         for (int i = 0; i < 64; i++)

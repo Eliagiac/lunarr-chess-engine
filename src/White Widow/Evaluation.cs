@@ -275,7 +275,7 @@ public class Evaluation
 
             // All of the squares attacked by this piece (including friendly pieces).
             // Note: Stockfish adds x-ray attacks of bishops and rooks, as well as the full line from the piece to the king if the piece is blocking an attack (should investigate since a pinned piece is always already attacking the king).
-            ulong attackedSquares = board.AttacksFrom(squareIndex, pieceType, board.AllOccupiedSquares);
+            ulong attackedSquares = Board.AttacksFrom(squareIndex, pieceType, board.AllOccupiedSquares);
 
             // Add a bonus based on how many squares are attacked by this piece inside the mobility area.
             score += MobilityBonus[pieceType][PieceCount(attackedSquares & MobilityArea[color])];

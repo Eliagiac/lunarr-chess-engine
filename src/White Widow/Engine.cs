@@ -5,7 +5,6 @@ using static System.Math;
 using static Piece;
 using static Evaluation;
 using static Move;
-using System.Text;
 
 /// <summary>The <see cref="Engine"/> class contains the main features of the engine.</summary>
 public class Engine
@@ -516,6 +515,17 @@ public class Engine
 
 
         if (WasSearchAborted) return Null;
+
+        if (!rootNode &&
+            t_board.FiftyMovePlyCount >= 3 &&
+            alpha < Draw &&
+            HasUpcomingRepetition())
+        {
+            //alpha = Draw;
+        
+            //if (alpha >= beta) 
+            //    return alpha;
+        }
 
         // Check for a draw, but never return early at the root.
         if (!rootNode && IsDrawByRepetition()) return Draw;
@@ -1445,6 +1455,8 @@ public class Engine
 
     public static int MatedIn(int ply) => -Checkmate + ply;
 
+
+    public static bool HasUpcomingRepetition() => t_board.RepetitionTable.HasUpcomingRepetition(t_board);
 
     /// <summary>If a position is reached three times, it's a draw.</summary>
     /// <remarks>The current implementation returns true even if the position was only reached twice.</remarks>

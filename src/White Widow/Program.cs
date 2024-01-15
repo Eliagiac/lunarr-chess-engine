@@ -9,6 +9,8 @@ PrecomputedMoveData.ComputeMoveData();
 PrecomputedMoveData.GenerateDirectionalMasks();
 PrecomputedMoveData.ComputeMagicBitboards();
 
+Cuckoo.Init();
+
 TT.Resize(64);
 
 

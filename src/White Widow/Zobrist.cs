@@ -68,7 +68,6 @@ namespace Utilities
 
 		static Zobrist()
 		{
-
 			var randomNumbers = ReadRandomNumbers();
 
 			for (int squareIndex = 0; squareIndex < 64; squareIndex++)

@@ -1146,13 +1146,14 @@ public class Board
     }
 
     /// <summary>Bitboard of all the squares attacked by the specified piece, including enemy and friendly captures.</summary>
-    public ulong AttacksFrom(int squareIndex, int pieceType, ulong occupiedSquares)
+    public static ulong AttacksFrom(int squareIndex, int pieceType, ulong occupiedSquares)
     {
         return
             pieceType == Knight ? PrecomputedMoveData.Moves[Knight][squareIndex, 0] :
             pieceType == Bishop ? MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) :
             pieceType == Rook ? MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) :
-            pieceType == Queen ? MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) | MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) : 0;
+            pieceType == Queen ? MagicBitboard.GetAttacks(Rook, squareIndex, occupiedSquares) | MagicBitboard.GetAttacks(Bishop, squareIndex, occupiedSquares) :
+            pieceType == King ? PrecomputedMoveData.Moves[King][squareIndex, 0] : 0;
     }
 
     /// <summary>
