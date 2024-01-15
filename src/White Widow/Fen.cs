@@ -64,12 +64,24 @@ namespace Utilities
 
             if (sections.Length > 3)
             {
-                string enPassantFileName = sections[3][0].ToString();
+                string enPassantFileName = sections[3];
                 if ("abcdefgh".Contains(enPassantFileName))
                 {
                     board.EnPassantSquare = (Mask.PawnsRank << "abcdefgh".IndexOf(enPassantFileName)) & (board.Friendly == 1 ? Mask.WhitePawnsRank : Mask.BlackPawnsRank);
                     board.EnPassantTarget = (Mask.DoublePawnsRank << "abcdefgh".IndexOf(enPassantFileName)) & (board.Friendly == 1 ? Mask.WhiteDoublePawnsRank : Mask.BlackDoublePawnsRank);
                 }
+            }
+
+            if (sections.Length > 4)
+            {
+                int.TryParse(sections[4], out board.FiftyMovePlyCount);
+            }
+
+            if (sections.Length > 5)
+            {
+                int moveCount;
+                int.TryParse(sections[5], out moveCount);
+                board.PlyCount = ((moveCount - 1) * 2) + (board.Friendly == 0 ? 0 : 1);
             }
 
             board.UpdateSquares();

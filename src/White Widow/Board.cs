@@ -191,6 +191,9 @@ public class Board
 
     public uint[] MaterialScore;
 
+    public int PlyCount;
+    public int FiftyMovePlyCount;
+
 
     public void Init()
     {
@@ -208,6 +211,8 @@ public class Board
         PositionKeyHistory = new();
         PsqtScore = new uint[2];
         MaterialScore = new uint[2];
+        PlyCount = 0;
+        FiftyMovePlyCount = 0;
 
 
         Fills = new ulong[2, 64];
@@ -321,10 +326,13 @@ public class Board
     }
 
     public GameState CurrentGameState() => 
-        new(ZobristKey, CapturedPieceType, CastlingRights, EnPassantSquare, EnPassantTarget);
+        new(ZobristKey, CapturedPieceType, CastlingRights, EnPassantSquare, EnPassantTarget, FiftyMovePlyCount);
 
     public void MakeMove(Move move, out int pieceType, out int capturedPieceType)
     {
+        PlyCount++;
+        FiftyMovePlyCount++;
+
         int moveFlag = move.Flag;
         bool isEnPassant = moveFlag == EnPassantCaptureFlag;
 
@@ -344,7 +352,11 @@ public class Board
         RemovePiece(startSquare, startSquareIndex, pieceType, Friendly);
 
         // Remove any captured piece. En passant is handled later, so if the target square is empty skip this step.
-        if (capturedPieceType != None && (AllOccupiedSquares & move.TargetSquare) != 0) RemovePiece(targetSquare, targetSquareIndex, capturedPieceType, Opponent);
+        if (capturedPieceType != None && (AllOccupiedSquares & move.TargetSquare) != 0)
+        {
+            FiftyMovePlyCount = 0;
+            RemovePiece(targetSquare, targetSquareIndex, capturedPieceType, Opponent);
+        }
 
         // Place moved piece on the target square (unless promoting).
         AddPiece(targetSquare, targetSquareIndex, pieceTypeOrPromotion, Friendly);
@@ -432,6 +444,8 @@ public class Board
 
         void MakePawnMove()
         {
+            FiftyMovePlyCount = 0;
+
             bool isDoublePawnPush = moveFlag == PawnDoublePushFlag;
 
             // En passant.
@@ -575,6 +589,9 @@ public class Board
 
         CapturedPieceType = previousPosition.CapturedPieceType;
 
+        PlyCount--;
+        FiftyMovePlyCount = previousPosition.FiftyMovePlyCount;
+
         TT.CalculateCurrentEntryIndex(this);
 
         PositionKeyHistory.Pop();
@@ -680,6 +697,11 @@ public class Board
 
     public void MakeNullMove()
     {
+        PlyCount++;
+
+        // A null move is irreversible.
+        FiftyMovePlyCount = 0;
+
         CapturedPieceType = None;
 
         // Remove old en passant square.
@@ -729,6 +751,9 @@ public class Board
 
         Friendly ^= 1;
         Opponent ^= 1;
+
+        PlyCount--;
+        FiftyMovePlyCount = previousPosition.FiftyMovePlyCount;
 
         TT.CalculateCurrentEntryIndex(this);
 

@@ -3,6 +3,18 @@ using static Piece;
 
 public struct Move
 {
+    public const ushort StartSquareMask = 0b0000000000111111;
+    public const ushort TargetSquareMask = 0b0000111111000000;
+    public const ushort FlagMask = 0b1111000000000000;
+
+    public const ushort EnPassantCaptureFlag = 1;
+    public const ushort CastlingFlag = 2;
+    public const ushort PawnDoublePushFlag = 3;
+    public const ushort PromotionToQueenFlag = 4;
+    public const ushort PromotionToKnightFlag = 5;
+    public const ushort PromotionToBishopFlag = 6;
+    public const ushort PromotionToRookFlag = 7;
+
     /// <summary>
     /// The 16-bit value containing the move's start square, target square and flag.
     /// </summary>
@@ -17,19 +29,10 @@ public struct Move
     /// </remarks>
     public readonly ushort MoveValue;
 
-
-    public const ushort StartSquareMask = 0b0000000000111111;
-    public const ushort TargetSquareMask = 0b0000111111000000;
-    public const ushort FlagMask = 0b1111000000000000;
-
-    public const ushort EnPassantCaptureFlag = 1;
-    public const ushort CastlingFlag = 2;
-    public const ushort PawnDoublePushFlag = 3;
-    public const ushort PromotionToQueenFlag = 4;
-    public const ushort PromotionToKnightFlag = 5;
-    public const ushort PromotionToBishopFlag = 6;
-    public const ushort PromotionToRookFlag = 7;
-
+    /// <summary>
+    /// A table containing 
+    /// </summary>
+    private static ulong[] ReversibleMoveKeys;
 
     public int StartSquareIndex => MoveValue & StartSquareMask;
     public int TargetSquareIndex => (MoveValue & TargetSquareMask) >> 6;

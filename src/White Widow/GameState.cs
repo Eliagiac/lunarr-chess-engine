@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-/// <summary>
+﻿/// <summary>
 /// A snapshot of the current position containg its zobrist key, 
 /// castling rights and possible en passant target if any.
 /// Also stores the type of the piece captured on the last turn, 
@@ -17,13 +11,15 @@ public struct GameState
     public readonly ulong CastlingRights;
     public readonly ulong EnPassantSquare;
     public readonly ulong EnPassantTarget;
+    public readonly int FiftyMovePlyCount;
 
-    public GameState(ulong zobristKey, int capturedPieceType, ulong castlingRights, ulong enPassantSquare, ulong enPassantTarget)
+    public GameState(ulong zobristKey, int capturedPieceType, ulong castlingRights, ulong enPassantSquare, ulong enPassantTarget, int fiftyMovePlyCount)
     {
         ZobristKey = zobristKey;
         CapturedPieceType = capturedPieceType;
         CastlingRights = castlingRights;
         EnPassantSquare = enPassantSquare;
         EnPassantTarget = enPassantTarget;
+        FiftyMovePlyCount = fiftyMovePlyCount;
     }
 }
