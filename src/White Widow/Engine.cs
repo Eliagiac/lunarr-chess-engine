@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using static Utilities.Bitboard;
 using static Utilities.Fen;
 using static System.Math;
@@ -35,7 +36,7 @@ public class Engine
 
 
     /// <summary>Minimum move index to use late move reductions, depending on total move count.</summary>
-    private static readonly int[] s_lateMoveThresholds = 
+    private static readonly int[] s_lateMoveThresholds =
         Enumerable.Range(0, 300).Select(totalMoveCount => (int)(
         (totalMoveCount + LateMoveReductionsMinimumThreshold) - (totalMoveCount * LateMoveReductionsPercentage))).ToArray();
 
@@ -73,7 +74,7 @@ public class Engine
         }
         ).ToArray()).ToArray();
 
-    
+
     /// <summary><see cref="Stopwatch"/> that keeps track of the total time taken by the current search.</summary>
     /// <remarks>Note that it is not reset on different iterations of iterative deepening.</remarks>
     private static readonly Stopwatch s_searchStopwatch = new();
@@ -101,7 +102,7 @@ public class Engine
     /// <summary>Killer moves are quiet moves that caused a beta cutoff, indexed by <c>[KillerMoveIndex, Ply]</c>.<br />
     /// If the same move is found in another position at the same ply, it will be prioritized.</summary>
     /// <remarks>2 killer moves are stored at each ply. Storing more would increase the complexity of adding a new move.</remarks>
-    [ThreadStatic] 
+    [ThreadStatic]
     private static Move[,] t_killerMoves = new Move[2, MaxPly];
 
     /// <summary>Bonus based on the success of a move in other positions.</summary>
@@ -238,7 +239,7 @@ public class Engine
 
     /// <summary>Set the amount of root moves that will each receive a separate evaluation.</summary>
     public static void SetMultiPVCount(int multiPVCount) => s_multiPvCount = multiPVCount;
-    
+
     /// <summary>Set the amount of threads that will be searching at the same time.</summary>
     public static void SetThreadCount(int threadCount) => s_threadCount = threadCount;
 
@@ -320,7 +321,7 @@ public class Engine
         }
 
         s_abortSearchTimer = new();
-        if (s_useTimeLimit) 
+        if (s_useTimeLimit)
             Task.Delay(s_timeLimit, s_abortSearchTimer.Token).ContinueWith((t) => AbortSearch());
     }
 
@@ -401,7 +402,7 @@ public class Engine
                     WriteLog("");
 #endif
 
-                    score = Search(root, depth - failedHighCounter, alpha, beta, out threadInfo.MainLine);
+                    score = Search(root, depth - failedHighCounter, alpha, beta, out threadInfo.MainLine, useNullMovePruning: true);
                     bool isUpperbound = score <= alpha;
 
 #if DEBUG
@@ -462,7 +463,7 @@ public class Engine
                         time: s_searchStopwatch.ElapsedMilliseconds,
                         pv: MainLine.ToString());
 
-                        s_excludedRootMoves.Add(MainLine?.Move ?? NullMove());
+                    s_excludedRootMoves.Add(MainLine?.Move ?? NullMove());
                 }
 
                 else break;
@@ -503,7 +504,7 @@ public class Engine
     /// the search will fail-low and the actual score may be lower.</param>
     /// <param name="beta">The upper bound of the evaluation. If a value greater or equal to beta 
     /// is found, the search will fail-high and the actual score may be higher.</param>
-    private static int Search(Node node, int depth, int alpha, int beta, out Line pvLine, bool useNullMovePruning = true, ulong previousCapture = 0, bool useMultiCut = true)
+    private static int Search(Node node, int depth, int alpha, int beta, out Line pvLine, bool useNullMovePruning, ulong previousCapture = 0, bool useMultiCut = true)
     {
         int ply = node.Ply;
 
@@ -522,8 +523,8 @@ public class Engine
             HasUpcomingRepetition())
         {
             alpha = Draw;
-        
-            if (alpha >= beta) 
+
+            if (alpha >= beta)
                 return alpha;
         }
 
@@ -606,7 +607,7 @@ public class Engine
         // When close to the horizon, if it's unlikely that alpha will be raised, most moves are skipped.
         // For more details: https://www.chessprogramming.org/Futility_Pruning.
         bool useFutilityPruning = UseFutilityPruning(ref evaluation);
-        
+
 
         // Null Move Pruning:
         // Explained here: https://www.chessprogramming.org/Null_Move_Pruning.
@@ -728,12 +729,12 @@ public class Engine
             // Permorm a search on the new position with a depth reduced by R.
             // The bounds need to be inverted (alpha = -beta, beta = -alpha), because what was previously the ceiling is now the score to beat, and viceversa.
             // The score needs to be negated, because the evaluation in the point of view of the opponent is opposite to ours.
-            score = -Search(newNode, lmrDepth, -beta, -alpha, out Line nextLine);
+            score = -Search(newNode, lmrDepth, -beta, -alpha, out Line nextLine, useNullMovePruning);
 
             // In case late move reductions were used and the score exceeded alpha,
             // a re-search at full depth is needed to verify the score.
             if (usedLmr && lmrDepth < depth && score > alpha)
-                score = -Search(newNode, depth - 1, -beta, -alpha, out nextLine);
+                score = -Search(newNode, depth - 1, -beta, -alpha, out nextLine, useNullMovePruning);
 
 
 #if DEBUG
@@ -893,7 +894,7 @@ public class Engine
                 {
                     if (ttEval >= beta)
                     {
-                    t_historyHeuristics[t_board.Friendly][ttMove.StartSquareIndex, ttMove.TargetSquareIndex] += depth * depth;
+                        t_historyHeuristics[t_board.Friendly][ttMove.StartSquareIndex, ttMove.TargetSquareIndex] += depth * depth;
 
                         StoreKillerMove(ttMove, ply);
                     }
@@ -1002,7 +1003,7 @@ public class Engine
             nullMovePruningScore = Null;
 
             // Values and implementation are from Stockfish.
-            if (!rootNode && !inCheck && useNullMovePruning && 
+            if (!rootNode && !inCheck && useNullMovePruning &&
                 evaluation >= beta && evaluation >= staticEvaluation)
             {
                 t_board.MakeNullMove();
@@ -1064,7 +1065,7 @@ public class Engine
                     // If the qsearch held, perform the regular search.
                     if (probCutScore >= probCutBeta)
                     {
-                        probCutScore = -Search(newNode, depth - ProbCutDepthReduction, -probCutBeta, -probCutBeta + 1, out probCutLine);
+                        probCutScore = -Search(newNode, depth - ProbCutDepthReduction, -probCutBeta, -probCutBeta + 1, out probCutLine, useNullMovePruning);
                     }
 
                     t_board.UnmakeMove(move);
@@ -1095,7 +1096,7 @@ public class Engine
                 depth > InternalIterativeDeepeningDepthReduction)
             {
                 ref int score = ref node.Score;
-                score = Search(node, depth - InternalIterativeDeepeningDepthReduction, alpha, beta, out Line _);
+                score = Search(node, depth - InternalIterativeDeepeningDepthReduction, alpha, beta, out Line _, useNullMovePruning);
 
                 ttEntry = TT.GetStoredEntry(t_board, out ttHit);
                 ttEval = TT.GetStoredEvaluation(ply, alpha, beta);
@@ -1431,7 +1432,7 @@ public class Engine
         t_killerMoves = new Move[2, MaxPly];
         t_historyHeuristics = new[] { new int[64, 64], new int[64, 64] };
     }
-    
+
 
     /// <summary>Returns true if the given score is a forced checkmate (positive or negative).</summary>
     public static bool IsMateScore(int score)
@@ -1564,7 +1565,7 @@ public class Engine
     private static int LateMovePruningThreshold(int depth, bool improving)
     {
         // Values from Stockfish: https://github.com/official-stockfish/Stockfish/blob/master/src/search.cpp#L78-L81.
-        
+
         if (improving) return 3 + depth * depth;
         else return (3 + depth * depth) / 2;
     }
@@ -1675,7 +1676,7 @@ public class Node
 
     /// <summary>The value returned by Evaluate() on the position of this node.</summary>
     public int StaticEvaluation;
-    
+
     /// <summary>An evaluation estimate of the position. Often more accurate than the static evaluation.</summary>
     public int Evaluation;
 
