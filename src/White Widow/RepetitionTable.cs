@@ -43,9 +43,9 @@ public class RepetitionTable
 
     public bool Contains(Board board)
     {
-        if (board.FiftyMovePlyCount < 4) return false;
+        if (board.PlyCountReversible < 4) return false;
 
-        for (int i = _currentPositionIndex - 4; i >= _currentPositionIndex - board.FiftyMovePlyCount; i -= 2)
+        for (int i = _currentPositionIndex - 4; i >= _currentPositionIndex - board.PlyCountReversible; i -= 2)
         {
             if (PositionKeyHistory[i] == board.ZobristKey) return true;
         }

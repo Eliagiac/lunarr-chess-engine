@@ -191,7 +191,22 @@ public class Board
 
     public uint[] MaterialScore;
 
+    /// <summary>
+    /// The total amount of plies played in the whole game.
+    /// </summary>
     public int PlyCount;
+
+    /// <summary>
+    /// The number of plies since the last irreversible move (pawn move, capture or null move).
+    /// </summary>
+    public int PlyCountReversible;
+
+    /// <summary>
+    /// The number of plies since the last capture or pawn move.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="PlyCountReversible"/>, null moves do not reset this counter.
+    /// </remarks>
     public int FiftyMovePlyCount;
 
 
@@ -212,6 +227,7 @@ public class Board
         PsqtScore = new uint[2];
         MaterialScore = new uint[2];
         PlyCount = 0;
+        PlyCountReversible = 0;
         FiftyMovePlyCount = 0;
 
 
@@ -326,11 +342,12 @@ public class Board
     }
 
     public GameState CurrentGameState() => 
-        new(ZobristKey, CapturedPieceType, CastlingRights, EnPassantSquare, EnPassantTarget, FiftyMovePlyCount);
+        new(ZobristKey, CapturedPieceType, CastlingRights, EnPassantSquare, EnPassantTarget, PlyCountReversible, FiftyMovePlyCount);
 
     public void MakeMove(Move move, out int pieceType, out int capturedPieceType)
     {
         PlyCount++;
+        PlyCountReversible++;
         FiftyMovePlyCount++;
 
         int moveFlag = move.Flag;
@@ -354,6 +371,7 @@ public class Board
         // Remove any captured piece. En passant is handled later, so if the target square is empty skip this step.
         if (capturedPieceType != None && (AllOccupiedSquares & move.TargetSquare) != 0)
         {
+            PlyCountReversible = 0;
             FiftyMovePlyCount = 0;
             RemovePiece(targetSquare, targetSquareIndex, capturedPieceType, Opponent);
         }
@@ -444,6 +462,7 @@ public class Board
 
         void MakePawnMove()
         {
+            PlyCountReversible = 0;
             FiftyMovePlyCount = 0;
 
             bool isDoublePawnPush = moveFlag == PawnDoublePushFlag;
@@ -590,6 +609,7 @@ public class Board
         CapturedPieceType = previousPosition.CapturedPieceType;
 
         PlyCount--;
+        PlyCountReversible = previousPosition.PlyCountReversible;
         FiftyMovePlyCount = previousPosition.FiftyMovePlyCount;
 
         TT.CalculateCurrentEntryIndex(this);
@@ -698,9 +718,10 @@ public class Board
     public void MakeNullMove()
     {
         PlyCount++;
+        FiftyMovePlyCount++;
 
-        // A null move is irreversible.
-        FiftyMovePlyCount = 0;
+        // Null moves are irreversible.
+        PlyCountReversible = 0;
 
         CapturedPieceType = None;
 
@@ -723,8 +744,7 @@ public class Board
         TT.CalculateCurrentEntryIndex(this);
 
         GameStateHistory.Push(CurrentGameState());
-
-        // NOTE: Null moves should not be added to PositionKeyHistory.
+        RepetitionTable.Push(ZobristKey);
 
         IsCheckDataOutdated = true;
     }
@@ -753,9 +773,13 @@ public class Board
         Opponent ^= 1;
 
         PlyCount--;
-        FiftyMovePlyCount = previousPosition.FiftyMovePlyCount;
+        FiftyMovePlyCount--;
+
+        PlyCountReversible = previousPosition.PlyCountReversible;
 
         TT.CalculateCurrentEntryIndex(this);
+
+        RepetitionTable.Pop();
 
         IsCheckDataOutdated = true;
     }

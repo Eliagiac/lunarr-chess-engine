@@ -521,10 +521,10 @@ public class Engine
             alpha < Draw &&
             HasUpcomingRepetition())
         {
-            //alpha = Draw;
+            alpha = Draw;
         
-            //if (alpha >= beta) 
-            //    return alpha;
+            if (alpha >= beta) 
+                return alpha;
         }
 
         // Check for a draw, but never return early at the root.

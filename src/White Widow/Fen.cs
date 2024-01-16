@@ -74,6 +74,7 @@ namespace Utilities
 
             if (sections.Length > 4)
             {
+                int.TryParse(sections[4], out board.PlyCountReversible);
                 int.TryParse(sections[4], out board.FiftyMovePlyCount);
             }
 

@@ -11,15 +11,17 @@ public struct GameState
     public readonly ulong CastlingRights;
     public readonly ulong EnPassantSquare;
     public readonly ulong EnPassantTarget;
+    public readonly int PlyCountReversible;
     public readonly int FiftyMovePlyCount;
 
-    public GameState(ulong zobristKey, int capturedPieceType, ulong castlingRights, ulong enPassantSquare, ulong enPassantTarget, int fiftyMovePlyCount)
+    public GameState(ulong zobristKey, int capturedPieceType, ulong castlingRights, ulong enPassantSquare, ulong enPassantTarget, int plyCountReversible, int fiftyMovePlyCount)
     {
         ZobristKey = zobristKey;
         CapturedPieceType = capturedPieceType;
         CastlingRights = castlingRights;
         EnPassantSquare = enPassantSquare;
         EnPassantTarget = enPassantTarget;
+        PlyCountReversible = plyCountReversible;
         FiftyMovePlyCount = fiftyMovePlyCount;
     }
 }

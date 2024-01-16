@@ -12,7 +12,7 @@ namespace Chess_Engine_Unit_Tests
         {
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -",
             "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -",
-            "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w",
+            "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -",
             "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq -",
             "r2q1rk1/pP1p2pp/Q4n2/bbp1p3/Np6/1B3NBn/pPPP1PPP/R3K2R b KQ -",
             "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ -",
@@ -630,21 +630,25 @@ namespace Chess_Engine_Unit_Tests
 
         [TestMethod]
         public void HasUpcomingRepetition_Position1_True() =>
-            Assert.IsTrue(HasUpcomingRepetition(AllPositions[0], "b1c3 b8c6 c3b1"));
-
+            HasUpcomingRepetition(AllPositions[0], "b1c3 b8c6 c3b1", "c6b8");
+        
         [TestMethod]
         public void HasUpcomingRepetition_Position1_False() =>
-            Assert.IsFalse(HasUpcomingRepetition(AllPositions[0], "b1c3 b8c6 g1f3"));
-
+            HasUpcomingRepetition(AllPositions[0], "b1c3 b8c6 g1f3", "g8f6");
+        
         [TestMethod]
         public void HasUpcomingRepetition_Position2_True() =>
-            Assert.IsTrue(HasUpcomingRepetition(AllPositions[1], "f3f6 g7h6 f6g5 h6g7"));
+            HasUpcomingRepetition(AllPositions[1], "f3f6 g7h6 f6g5 h6g7", "g5f6");
+        
+        [TestMethod]
+        public void HasUpcomingRepetition_Position2_v1_False() =>
+            HasUpcomingRepetition(AllPositions[1], "f3f6 g7h6 e5g4 h8g8 g4e5", "h6g7");
 
         [TestMethod]
-        public void HasUpcomingRepetition_Position2_False() =>
-            Assert.IsFalse(HasUpcomingRepetition(AllPositions[1], "f3f6 g7h6 f6g5"));
+        public void HasUpcomingRepetition_Position2_v2_True() =>
+            HasUpcomingRepetition(AllPositions[1], "a2a4 b4a3 b2a3 b6c4 c3a4 a6b5 a4b6 a8b8 b6a4 b8a8 a4b6", "a8b8");
 
-        private bool HasUpcomingRepetition(string fen, string moves)
+        private void HasUpcomingRepetition(string fen, string moves, string finalMove)
         {
             Board board = new();
             ConvertFromFen(board, fen);
@@ -652,13 +656,26 @@ namespace Chess_Engine_Unit_Tests
             string[] movesArray = moves.Split(' ');
             foreach (string move in movesArray)
             {
-                int startIndex = (int)Enum.Parse(typeof(Square), move.Substring(0, 2));
-                int targetIndex = (int)Enum.Parse(typeof(Square), move.Substring(2, 2));
-                int promotionType = move.Length == 5 ? Array.IndexOf(new[] { "", "p", "n", "b", "r", "q", "k" }, move.Substring(4, 1)) : 0;
-                board.MakeMove(new(startIndex, targetIndex, promotionType), out int _, out int _);
+                board.MakeMove(ParseMove(move), out int _, out int _);
             }
 
-            return board.RepetitionTable.HasUpcomingRepetition(board);
+            bool isRepetitionBefore = board.RepetitionTable.Contains(board);
+            Assert.IsFalse(isRepetitionBefore);
+
+            bool hasUpcomingRepetition = board.RepetitionTable.HasUpcomingRepetition(board);
+
+            board.MakeMove(ParseMove(finalMove), out int _, out int _);
+            bool isRepetition = board.RepetitionTable.Contains(board);
+
+            Assert.AreEqual(hasUpcomingRepetition, isRepetition);
+        }
+
+        private Move ParseMove(string move)
+        {
+            int startIndex = (int)Enum.Parse(typeof(Square), move.Substring(0, 2));
+            int targetIndex = (int)Enum.Parse(typeof(Square), move.Substring(2, 2));
+            int promotionType = move.Length == 5 ? Array.IndexOf(new[] { "", "p", "n", "b", "r", "q", "k" }, move.Substring(4, 1)) : 0;
+            return new(startIndex, targetIndex, promotionType);
         }
     }
 }
