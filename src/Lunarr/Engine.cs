@@ -6,7 +6,7 @@ using static System.Math;
 using static Piece;
 using static Evaluation;
 using static Move;
-using System.Text;
+
 
 /// <summary>The <see cref="Engine"/> class contains the main features of the engine.</summary>
 public class Engine

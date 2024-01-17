@@ -3,8 +3,6 @@ using static Utilities.Fen;
 using static Engine;
 
 
-Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
-
 PrecomputedMoveData.ComputeMoveData();
 PrecomputedMoveData.GenerateDirectionalMasks();
 PrecomputedMoveData.ComputeMagicBitboards();
