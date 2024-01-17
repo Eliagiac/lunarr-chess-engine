@@ -64,11 +64,13 @@ public class RepetitionTable
     /// </remarks>
     public bool HasUpcomingRepetition(Board board)
     {
-        if (board.FiftyMovePlyCount < 3) return false;
+        // Note: it is important to exclude positions before a null move,
+        // since the cuckoo move hashes don't consider the current turn.
+        if (board.PlyCountReversible < 3) return false;
 
         ulong currentPositionKey = PositionKeyHistory[_currentPositionIndex];
 
-        for (int ply = 3; ply <= board.FiftyMovePlyCount; ply++)
+        for (int ply = 3; ply <= board.PlyCountReversible; ply += 2)
         {
             ulong previousPositionKey = PositionKeyHistory[_currentPositionIndex - ply];
 
@@ -89,7 +91,7 @@ public class RepetitionTable
 
                 // For the move to be legal there must not be pieces between the start and
                 // target square, other than the moving piece and any captured piece.
-                if (PieceCount(PrecomputedMoveData.Line[startSquareIndex, targetSquareIndex] & board.AllOccupiedSquares) <= 2)
+                if ((PrecomputedMoveData.LineBetween[startSquareIndex, targetSquareIndex] & board.AllOccupiedSquares) == 0)
                     return true;
             }
         }

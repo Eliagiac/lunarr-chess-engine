@@ -11,9 +11,14 @@ public class PrecomputedMoveData
     public static Dictionary<int, ulong[,]> XRay;
 
     /// <summary>
-    /// Bitboards containing all squares between two squares in a straight line, either on the same rank or file, or on the same diagonal.
+    /// Bitboards containing all squares between two squares (including the two squares) in a straight line, either on the same rank or file, or on the same diagonal.
     /// </summary>
     public static ulong[,] Line;
+
+    /// <summary>
+    /// Bitboards containing all squares between two squares (excluding the two squares) in a straight line, either on the same rank or file, or on the same diagonal.
+    /// </summary>
+    public static ulong[,] LineBetween;
 
     /// <summary>
     /// Bitboards containing all squares between two squares in a straight line, which is then countinued to the edges of the board.
@@ -126,6 +131,7 @@ public class PrecomputedMoveData
     public static void GenerateDirectionalMasks()
     {
         Line = new ulong[64, 64];
+        LineBetween = new ulong[64, 64];
         LineToEdges = new ulong[64, 64];
         XRay = new()
         {
@@ -146,6 +152,7 @@ public class PrecomputedMoveData
                     ulong line = (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - BishopDirections[diagonalDirection].direction] : 0);
 
                     Line[square, target] |= line;
+                    LineBetween[square, target] |= line & ~((1UL << square) | (1UL << target));
                     XRay[Piece.Bishop][square, target] |= line;
                     XRay[Piece.Queen][square, target] |= line;
 
@@ -164,6 +171,7 @@ public class PrecomputedMoveData
                     ulong line = (1UL << square) | (1UL << target) | (distance > 1 ? Line[square, target - RookDirections[orthogonalDirection].direction] : 0);
 
                     Line[square, target] |= line;
+                    LineBetween[square, target] |= line & ~((1UL << square) | (1UL << target));
                     XRay[Piece.Rook][square, target] |= line;
                     XRay[Piece.Queen][square, target] |= line;
 
