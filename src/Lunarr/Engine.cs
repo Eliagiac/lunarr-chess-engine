@@ -519,9 +519,7 @@ public class Engine
         if (WasSearchAborted) return Null;
 
         // Check for a draw, but never return early at the root.
-        if (!rootNode && IsDrawByRepetition()) return Draw;
-
-        if (!rootNode && IsDrawByInsufficientMaterial()) return Draw;
+        if (!rootNode && IsDraw()) return Draw;
 
 
         // Return the static evaluation immediately if the max ply was reached.
@@ -1446,6 +1444,20 @@ public class Engine
 
     public static int MatedIn(int ply) => -Checkmate + ply;
 
+
+    public static bool IsDraw() =>
+        IsDrawByRepetition() || IsDrawByFiftyMoveRule() || IsDrawByInsufficientMaterial();
+
+    /// <summary>
+    /// After 50 moves (100 ply) if there were no captures or pawn moves the game is a draw, unless the last move delivered checkmate.
+    /// </summary>
+    /// <remarks>
+    /// Since verifying a checkmate would involve generating all legal moves (which is expensive), 
+    /// <see cref="Board.IsInCheck"/> is used instead. This means some draws will not be seen immediately
+    /// </remarks>
+    public static bool IsDrawByFiftyMoveRule() => 
+        t_board.FiftyMovePlyCount > 99 &&
+        (t_board.FiftyMovePlyCount != 100 || !t_board.IsInCheck(t_board.Friendly));
 
     /// <summary>If a position is reached three times, it's a draw.</summary>
     /// <remarks>The current implementation returns true even if the position was only reached twice.</remarks>

@@ -698,9 +698,7 @@ public class Board
     public void MakeNullMove()
     {
         PlyCount++;
-
-        // A null move is irreversible.
-        FiftyMovePlyCount = 0;
+        FiftyMovePlyCount++;
 
         CapturedPieceType = None;
 
@@ -753,7 +751,7 @@ public class Board
         Opponent ^= 1;
 
         PlyCount--;
-        FiftyMovePlyCount = previousPosition.FiftyMovePlyCount;
+        FiftyMovePlyCount--;
 
         TT.CalculateCurrentEntryIndex(this);
 
