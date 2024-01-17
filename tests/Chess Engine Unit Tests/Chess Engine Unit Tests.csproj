@@ -17,8 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="White Widow">
-      <HintPath>..\..\src\White Widow\bin\Release\net8.0\White Widow.dll</HintPath>
+    <Reference Include="Lunarr">
+      <HintPath>..\..\src\Lunarr\bin\Release\net8.0\Lunarr.dll</HintPath>
     </Reference>
   </ItemGroup>
 
