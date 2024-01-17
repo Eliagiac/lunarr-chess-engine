@@ -1,9 +1,9 @@
-# White Widow
+# Lunarr
 
 Chess engine written in C#, compliant with the UCI protocol.
 
-There's a few options to play against White Widow:
-- Challenge the bot on Lichess: https://lichess.org/@/WhiteWidowBot.
+There's a few options to play against Lunarr:
+- ~~Challenge the bot on Lichess: https://lichess.org/@/WhiteWidowBot.~~
 - Run the excecutable file found in [Releases](https://github.com/Eliagiac/white-widow/releases), using a chess GUI such as [Arena](http://www.playwitharena.de/).
 
 ## Board Representation and Move Generation
