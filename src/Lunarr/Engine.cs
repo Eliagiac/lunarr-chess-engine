@@ -1447,6 +1447,17 @@ public class Engine
     public static int MatedIn(int ply) => -Checkmate + ply;
 
 
+    /// <summary>
+    /// After 50 moves (100 ply) if there were no captures or pawn moves the game is a draw, unless the last move delivered checkmate.
+    /// </summary>
+    /// <remarks>
+    /// Since verifying a checkmate would involve generating all legal moves (which is expensive), 
+    /// <see cref="Board.IsInCheck"/> is used instead. This means some draws will not be seen immediately
+    /// </remarks>
+    public static bool IsDrawByFiftyMoveRule() => 
+        t_board.FiftyMovePlyCount > 99 &&
+        (t_board.FiftyMovePlyCount != 100 || !t_board.IsInCheck(t_board.Friendly));
+
     /// <summary>If a position is reached three times, it's a draw.</summary>
     /// <remarks>The current implementation returns true even if the position was only reached twice.</remarks>
     public static bool IsDrawByRepetition() => t_board.PositionKeyHistory.Count(other => other == t_board.ZobristKey) >= 2;
