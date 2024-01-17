@@ -54,3 +54,13 @@ Some of the evaluation features include:
   - [Backward Pawns](https://www.chessprogramming.org/Backward_Pawn)
 - [Basic King Safety](https://www.chessprogramming.org/King_Safety)
 - [Bishop and Knight Pairs](https://www.chessprogramming.org/Bishop_Pair)
+
+## Sources
+
+- [Chess Programming Wiki](https://www.chessprogramming.org/Main_Page)
+- [Sebastian Lague's](https://github.com/SebLague) [Chess Programming series](https://www.youtube.com/watch?v=_vqlIPDR2TU&list=PLFt_AvWsXl0cvHyu32ajwh2qU1i6hl77c&pp=iAQB)
+- [Sebastian Lague's Chess Coding Adventure](https://github.com/SebLague/Chess-Coding-Adventure)
+- [Code Monkey King's](https://github.com/maksimKorzh) [WukongJS YouTube series](https://www.youtube.com/watch?v=uA22IJSiEyc&list=PLmN0neTso3JyHz4YvcQrfS7pd9pC_BFBc&pp=iAQB)
+- [Code Monkey King's WukongJS](https://github.com/maksimKorzh/wukongJS)
+- [Stockfish](https://github.com/official-stockfish/Stockfish)
+- [Marcel Vanthoor's "Creating the Rustic chess engine"](https://rustic-chess.org/front_matter/title.html)
