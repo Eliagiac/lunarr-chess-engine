@@ -519,9 +519,7 @@ public class Engine
         if (WasSearchAborted) return Null;
 
         // Check for a draw, but never return early at the root.
-        if (!rootNode && IsDrawByRepetition()) return Draw;
-
-        if (!rootNode && IsDrawByInsufficientMaterial()) return Draw;
+        if (!rootNode && IsDraw()) return Draw;
 
 
         // Return the static evaluation immediately if the max ply was reached.
@@ -1446,6 +1444,9 @@ public class Engine
 
     public static int MatedIn(int ply) => -Checkmate + ply;
 
+
+    public static bool IsDraw() =>
+        IsDrawByRepetition() || IsDrawByFiftyMoveRule() || IsDrawByInsufficientMaterial();
 
     /// <summary>
     /// After 50 moves (100 ply) if there were no captures or pawn moves the game is a draw, unless the last move delivered checkmate.
