@@ -27,6 +27,7 @@ namespace Utilities
 
         public static ulong ParallelBitExtract(ulong bitboard, ulong mask)
         {
+            if (!Bmi2.X64.IsSupported) Console.WriteLine("BMI2 not supported!");
             return Bmi2.X64.ParallelBitExtract(bitboard, mask);
         }
 

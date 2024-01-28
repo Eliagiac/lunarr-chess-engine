@@ -3,11 +3,16 @@ using static Utilities.Fen;
 using static Engine;
 
 
+Console.Write("Computing move data... ");
 PrecomputedMoveData.ComputeMoveData();
 PrecomputedMoveData.GenerateDirectionalMasks();
 PrecomputedMoveData.ComputeMagicBitboards();
+Console.WriteLine(" done");
 
+
+Console.Write("Initializing transposition table... ");
 TT.Resize(64);
+Console.WriteLine(" done");
 
 
 // The board variable will keep a reference to the main thread's board.
@@ -247,6 +252,7 @@ while (true)
             break;
 
         case "quit":
+            Console.WriteLine("Exiting...");
             return;
 
         case "print":
@@ -270,5 +276,16 @@ while (true)
             //Console.WriteLine($"White: {Board.OccupiedSquares[0]}");
             //Console.WriteLine($"Black: {Board.OccupiedSquares[1]}");
             break;
+
+        default:
+            Console.WriteLine("Invalid command!");
+            break;
     }
+}
+
+Console.WriteLine("Exited main loop. Type \"quit\" to exit the program.");
+
+while (true)
+{
+    if (Console.ReadLine() == "quit") return;
 }
