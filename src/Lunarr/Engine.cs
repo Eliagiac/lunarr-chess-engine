@@ -445,6 +445,7 @@ public class Engine
                             evaluationType: isUpperbound ? "upperbound" : "lowerbound",
                             nodes: t_totalSearchNodes,
                             nps: (int)Round(t_totalSearchNodes / (s_searchStopwatch.ElapsedMilliseconds / 1000f)),
+                            hashfull: TT.HashFull(), 
                             time: s_searchStopwatch.ElapsedMilliseconds,
                             pv: MainLine.ToString());
                 }
@@ -461,6 +462,7 @@ public class Engine
                         evaluationType: "",
                         nodes: t_totalSearchNodes,
                         nps: (int)Round(t_totalSearchNodes / (double)s_searchStopwatch.ElapsedMilliseconds * 1000),
+                        hashfull: TT.HashFull(),
                         time: s_searchStopwatch.ElapsedMilliseconds,
                         pv: MainLine.ToString());
 

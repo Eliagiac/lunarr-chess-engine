@@ -8,7 +8,7 @@ class UCI
     /// <summary>
     /// Update the UI with new search data.
     /// </summary>
-    public static void PV(int depth, int seldepth, int multipv, int evaluation, string evaluationType, int nodes, int nps, long time, string pv)
+    public static void PV(int depth, int seldepth, int multipv, int evaluation, string evaluationType, int nodes, int nps, int hashfull, long time, string pv)
     {
         Console.WriteLine($"info " +
             $"depth {depth} " +
@@ -21,6 +21,7 @@ class UCI
             (evaluationType != "" ? $"{evaluationType} " : "") + 
             $"nodes {nodes} " +
             $"nps {nps} " +
+            $"hashfull {hashfull} " +
             $"time {time} " +
             $"pv {pv}");
     }

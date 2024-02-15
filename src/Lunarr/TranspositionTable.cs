@@ -14,7 +14,7 @@ public class TT
     private static readonly ulong EntriesInOneMegabyte = (1024 * 1024) / (ulong)Marshal.SizeOf<TTEntry>();
 
 
-    /// <summary>The size of the <see cref="Entries"/> array.</summary>
+    /// <summary>The size of the <see cref="s_entries"/> array.</summary>
     /// <remarks>The default size is 8MB.</remarks>
     private static ulong s_tableSize = 8 * EntriesInOneMegabyte;
 
@@ -22,7 +22,7 @@ public class TT
     /// indexed based on the <see cref="Board.ZobristKey"/> of the position.</summary>
     private static TTEntry[] s_entries = new TTEntry[s_tableSize];
 
-    /// <summary>The index of the current position in the <see cref="Entries"/> array based on the <see cref="Board.ZobristKey"/>.</summary>
+    /// <summary>The index of the current position in the <see cref="s_entries"/> array based on the <see cref="Board.ZobristKey"/>.</summary>
     /// <remarks>Must be updated any time the position changes using <see cref="CalculateCurrentEntryIndex"/>.</remarks>
     [ThreadStatic]
     private static ulong t_currentEntryIndex;
@@ -30,7 +30,7 @@ public class TT
 
     /// <summary>Generate a new transposition table of the specified size (in megabytes).</summary>
     /// <remarks>The <see cref="Resize"/> function must be called on every thread.</remarks>
-    /// <param name="sizeInMegabytes">The size of the <see cref="Entries"/> array in megabytes.</param>
+    /// <param name="sizeInMegabytes">The size of the <see cref="s_entries"/> array in megabytes.</param>
     public static void Resize(int sizeInMegabytes)
     {
         s_tableSize = (ulong)sizeInMegabytes * EntriesInOneMegabyte;
@@ -38,16 +38,24 @@ public class TT
         s_entries = new TTEntry[s_tableSize];
     }
 
-    /// <summary>Reset the <see cref="Entries"/> array.</summary>
+    /// <summary>Reset the <see cref="s_entries"/> array.</summary>
     public static void Clear() =>
         s_entries = new TTEntry[s_tableSize];
 
-    /// <summary>Update the <see cref="CurrentEntryIndex"/> based on the position on the board.</summary>
+    /// <summary>Update the <see cref="t_currentEntryIndex"/> based on the position on the board.</summary>
     public static void CalculateCurrentEntryIndex(Board board) =>
         t_currentEntryIndex = MultiplyHigh64Bits(board.ZobristKey, s_tableSize);
 
+    /// <summary>Transposition table space used permill.</summary>
+    public static int HashFull()
+    {
+        double nonEmptyEntriesCount = s_entries.Count(entry => entry.Key != 0);
 
-    /// <summary>The entry at the <see cref="CurrentEntryIndex"/>.</summary>
+        return (int)Math.Round(nonEmptyEntriesCount / s_entries.Length * 1000, 3);
+    }
+
+
+    /// <summary>The entry at the <see cref="t_currentEntryIndex"/>.</summary>
     private static TTEntry CurrentEntry
     {
         get => s_entries[t_currentEntryIndex];
