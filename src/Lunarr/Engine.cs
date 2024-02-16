@@ -25,6 +25,12 @@ public class Engine
     /// <summary>The evaluation of a drawn position or stalemate.</summary>
     public const int Draw = 0;
 
+    /// <summary>
+    /// Determines wether the whole search tree should be stored, 
+    /// or if nodes should be destroyed once no longer useful.
+    /// </summary>
+    public const bool SaveSearchTree = false;
+
     private const int MaxPly = 64;
 
     private const int LateMoveReductionsMinimumThreshold = 1;
@@ -1723,7 +1729,7 @@ public class Node
     public Node AddNewChild()
     {
         Node child = new(this);
-        Children.Add(child);
+        if (Engine.SaveSearchTree) Children.Add(child);
         return child;
     }
 
