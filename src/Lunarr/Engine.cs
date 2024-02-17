@@ -326,7 +326,7 @@ public class Engine
         for (int i = 0; i < s_threadCount; i++)
         {
             // Clone the initial board by creating a new board and applying its fen string to it.
-            Task.Factory.StartNew(() => StartSearching(ConvertFromFen(new(), GetCurrentFen(initialBoard))));
+            Task.Factory.StartNew(() => StartSearching(initialBoard.Clone()));
         }
 
         s_abortSearchTimer = new();
