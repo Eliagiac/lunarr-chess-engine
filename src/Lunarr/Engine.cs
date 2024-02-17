@@ -11,7 +11,7 @@ using static Move;
 /// <summary>The <see cref="Engine"/> class contains the main features of the engine.</summary>
 public class Engine
 {
-    public const string VersionNumber = "2.1.0";
+    public const string VersionNumber = "2.1.1";
 
     /// <summary>Represents a value that is either not usable or incorrect.</summary>
     public const int Null = 32002;
