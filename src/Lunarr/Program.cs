@@ -225,7 +225,7 @@ while (true)
             break;
 
         case "uci":
-            Console.WriteLine("id name Lunarr 2.0.1");
+            Console.WriteLine($"id name Lunarr {VersionNumber}");
             Console.WriteLine("id author Elia Giaccardi");
             Console.WriteLine("option name Hash type spin default 64 min 1 max 33554432");
             Console.WriteLine("option name Move Overhead type spin default 10 min 0 max 5000");
