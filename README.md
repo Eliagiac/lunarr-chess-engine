@@ -1,6 +1,6 @@
 # Lunarr
 
-Chess engine written in C#, compliant with the UCI protocol.
+Chess engine written in C#, compliant with the UCI protocol. Version [2.0.1](https://github.com/Eliagiac/lunarr-chess-engine/releases/tag/v2.0.1) of the engine achieved an Elo rating of 1899 on the CCRL Blitz rating list.
 
 There's a few options to play against Lunarr:
 - ~~Challenge the bot on Lichess: https://lichess.org/@/WhiteWidowBot.~~
